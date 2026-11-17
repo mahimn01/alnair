@@ -6,8 +6,11 @@
 #   ./install.sh --bin DIR           where the commands go (default ~/.local/bin)
 #   ./install.sh --skip-python-deps  don't pip install the optional research extras
 #   ./install.sh --force             replace an existing alnair file that isn't a symlink
+#   ./install.sh --skip-codex        don't add Alnair's MCP servers to ~/.codex/config.toml
 #
 # It never writes ~/.claude/settings.json, ~/.claude.json or anything else under ~/.claude.
+# When Codex is installed it adds two MCP servers to ~/.codex/config.toml, between marker comments,
+# after saving a backup next to it. Nothing else in that file changes.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -15,6 +18,7 @@ BIN="$HOME/.local/bin"
 VAULT=""
 PY_DEPS=1
 FORCE=0
+CODEX_SETUP=1
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -22,7 +26,8 @@ while [ $# -gt 0 ]; do
     --bin) BIN="${2:?--bin needs a directory}"; shift 2 ;;
     --skip-python-deps) PY_DEPS=0; shift ;;
     --force) FORCE=1; shift ;;
-    -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --skip-codex) CODEX_SETUP=0; shift ;;
+    -h|--help) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "install.sh: unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -33,7 +38,7 @@ warn() { printf 'warning: %s\n' "$*" >&2; }
 case "$(uname -s)" in
   Darwin) OS=mac ;;
   Linux) OS=linux ;;
-  *) echo "install.sh supports macOS and Linux. On Windows use install.ps1 on the alnair-windows-port branch." >&2; exit 1 ;;
+  *) echo "install.sh supports macOS and Linux. On Windows, try install.ps1 (experimental)." >&2; exit 1 ;;
 esac
 
 # Python 3.10 or newer runs the launcher and the memory tools.
@@ -44,8 +49,9 @@ if ! "$PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; t
 fi
 command -v node >/dev/null 2>&1 || warn "node not found. The model router runs on Node; install Node 20 or newer before starting a session."
 if [ ! -x "$HOME/.local/bin/claude" ]; then
-  warn "Claude Code isn't at ~/.local/bin/claude. Install it with Anthropic's native installer and sign in once with 'claude' before using alnair."
+  warn "Claude Code isn't at ~/.local/bin/claude. Install it with Anthropic's native installer and sign in once with 'claude' before using alnair (not needed for alnair --model gpt)."
 fi
+command -v codex >/dev/null 2>&1 || say "Codex CLI not found, so GPT models are off. To add them: brew install --cask codex (or npm install -g @openai/codex), codex login, then rerun ./install.sh."
 [ "$OS" = linux ] && warn "Linux hasn't been tested yet. The lab's optional Keychain account switching is macOS only."
 
 # Private state folders. Existing contents are left alone.
@@ -65,6 +71,7 @@ if [ ! -f "$CONFIG" ]; then
     say "# RESEARCH_HOME=~/.clp/research"
     say "# ALNAIR_TZ=America/Toronto"
     say "# RESEARCH_MAILTO=you@example.com"
+    say "# ALNAIR_GPT_MODEL=gpt-6.2-astra"
     say "# ALNAIR_LAB_ROOT=$REPO/lab"
   } > "$CONFIG"
   chmod 600 "$CONFIG"
@@ -107,5 +114,16 @@ case ":$PATH:" in
 esac
 
 "$BIN/alnair" --help >/dev/null
-say "Done. Try: alnair doctor, then alnair in a project folder."
-say "Optional: alnair install-app builds the Mac app (needs Rust and Node)."
+
+# Codex (GPT models): add Alnair's memory and research MCP servers to ~/.codex/config.toml.
+if [ "$CODEX_SETUP" = 1 ] && command -v codex >/dev/null 2>&1; then
+  if out="$("$BIN/alnair" codex-setup)"; then
+    case "$out" in
+      *'"changed": true'*) say "Added Alnair's MCP servers to ${CODEX_HOME:-$HOME/.codex}/config.toml (backup saved next to it)." ;;
+      *) say "Codex config already has Alnair's MCP servers." ;;
+    esac
+  else
+    warn "Couldn't update the Codex config; alnair --model gpt still passes the servers for its own sessions."
+  fi
+fi
+say "Done. Try: alnair doctor, then alnair in a project folder (or alnair --model gpt for GPT through Codex)."

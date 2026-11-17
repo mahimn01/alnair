@@ -202,3 +202,55 @@ def test_skip_empty_overwrite(vsn, vault_env, tmp_path: Path):
     body2 = Path(r1["path"]).read_text(encoding="utf-8")
     assert "keep this prompt" in body2
     assert hashlib.sha256(pre.read_bytes()).hexdigest() == pre_hash
+
+
+def write_codex_rollout(path: Path, session_id: str) -> None:
+    def item(typ, payload):
+        return {"timestamp": "2026-11-17T23:00:00Z", "type": typ, "payload": payload}
+    lines = [
+        item("session_meta", {"id": session_id, "cwd": "/tmp/codex-proj", "cli_version": "0.169.0"}),
+        item("turn_context", {"cwd": "/tmp/codex-proj", "model": "gpt-6.2-astra", "turn_id": "t1"}),
+        item("response_item", {"type": "message", "role": "developer", "content": [{"type": "input_text", "text": "dev note"}]}),
+        item("response_item", {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "<environment_context>cwd</environment_context>"}]}),
+        item("response_item", {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Port the session note to Codex"}]}),
+        item("response_item", {"type": "custom_tool_call", "name": "apply_patch", "call_id": "c1",
+                               "input": "*** Begin Patch\n*** Update File: src/note.py\n@@\n-a\n+b\n*** Add File: tests/test_note.py\n+x\n*** End Patch"}),
+        item("response_item", {"type": "message", "role": "assistant",
+                               "content": [{"type": "output_text", "text": "Decision: parse rollout files.\nToken sk-SECRETSECRET123456"}]}),
+        item("event_msg", {"type": "token_count", "info": {}}),
+        item("response_item", {"type": "custom_tool_call", "name": "exec", "call_id": "c2",
+                               "input": "await tools.apply_patch(\"*** Begin Patch\\n*** Update File: src/escaped.py\\n*** End Patch\")"}),
+        item("event_msg", {"type": "item_completed", "item": {"type": "FileChange", "id": "f1",
+                                                              "changes": {"/tmp/codex-proj/README.md": {"type": "update"}}}}),
+        "not json",
+    ]
+    path.write_text("\n".join(x if isinstance(x, str) else json.dumps(x) for x in lines) + "\n", encoding="utf-8")
+
+
+def test_codex_rollout_becomes_a_codex_session_note(vsn, vault_env, tmp_path: Path, capsys, monkeypatch):
+    vault, store, pre, pre_hash = vault_env
+    monkeypatch.delenv("CLAUDE_MEM_SESSION_ID", raising=False)
+    rollout = tmp_path / "rollout-2026-11-17T18-00-00-019f.jsonl"
+    write_codex_rollout(rollout, "019f-codex-session")
+    parsed = vsn.parse_transcript(rollout)
+    assert parsed["backend"] == "codex" and parsed["model"] == "gpt-6.2-astra"
+    assert parsed["prompts"] == ["Port the session note to Codex"]
+    assert parsed["files_changed"] == ["src/note.py", "tests/test_note.py", "src/escaped.py", "/tmp/codex-proj/README.md"]
+    payload = tmp_path / "hook.json"
+    payload.write_text(json.dumps({"session_id": "019f-codex-session", "transcript_path": str(rollout), "cwd": "/tmp/codex-proj",
+                                   "hook_event_name": "Stop", "model": "gpt-6.2-astra"}))
+    assert vsn.main(["--payload-file", str(payload), "--vault", str(vault), "--store", str(store), "--no-refresh", "--codex"]) == 0
+    assert capsys.readouterr().out.strip() == "{}"
+    notes = list((vault / "Claude Sessions").glob("*.md"))
+    assert len(notes) == 1
+    body = notes[0].read_text()
+    assert "# Codex Session" in body and "tags: [codex-session, alnair]" in body and "`gpt-6.2-astra`" in body
+    assert "Port the session note to Codex" in body and "environment_context" not in body
+    assert "sk-SECRETSECRET123456" not in body
+    assert hashlib.sha256(pre.read_bytes()).hexdigest() == pre_hash
+
+
+def test_codex_mode_prints_json_even_when_it_fails(vsn, tmp_path: Path, capsys, monkeypatch):
+    monkeypatch.delenv("CLAUDE_MEM_SESSION_ID", raising=False)
+    assert vsn.main(["--vault", str(tmp_path / "v"), "--store", str(tmp_path / "s"), "--no-refresh", "--codex"]) == 0
+    assert capsys.readouterr().out.strip() == "{}"

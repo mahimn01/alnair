@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Alnair: isolated Claude Code with lab shell + CLP memory (unlimited verified chat).
+"""Alnair: interactive Claude Code (lab shell) or Codex (GPT), both with CLP memory (unlimited verified chat).
 
 Lab stays the shell (isolation, routing, 300k autocompact, statusline, accounts via the lab
 tree only). CLP is the memory layer (lookup/read/verify + session ledger under ~/.clp).
@@ -10,7 +10,8 @@ this repo — lab.py is imported from its absolute path at runtime.
   alnair "task"      start with this prompt
   alnair demo        lab demo project + CLP fixture corpus in the run
   alnair doctor      offline readiness report
-  alnair install-app install/rebuild ~/Applications/Alnair.app
+  alnair --model gpt interactive Codex session on GPT (default gpt-6.2-astra, ChatGPT login)
+  alnair codex-setup add Alnair's MCP servers to ~/.codex/config.toml (backs it up first)
   alnair --dry-run   print argv; write only a temp preview
   alnair --resume latest resume last lab-owned run with CLP tools again
   --store DIR                clp store other than ~/.clp
@@ -114,13 +115,15 @@ ASK = [
     "Bash(*context_ledger.daily.cli*ask*)",
 ]
 MEM_GUIDE = """\
-This session is claude-mem: Claude Lab shell (routing, 300k autocompact, isolation) plus CLP memory.
+This session is Alnair (claude-mem): Claude Lab shell (routing, 300k autocompact, isolation) plus CLP memory.
 The window is a cache; disk is address-verified memory under ~/.clp (corpus + sessions/<id>).
 For any memory-dependent reply follow the clp-memory skill:
   mcp__clp__session_lookup → mcp__clp__lookup → read addresses → draft ANSWER+claims → mcp__clp__verify
   → mcp__clp__session_append durable facts so compaction and --resume do not forget them.
 Never present a verify refusal as fact. mcp__clp__ask spends the API key — only when the user
 asks for the paper's L4 harness by name. bili is off; unlimited memory is the session ledger + vault, not a proxy.
+Models: /lab-model auto|sonnet|opus|fable switches Claude models. For OpenAI GPT through Codex, the user exits and runs
+`alnair --model gpt` (same memory and research tools; the session ledger is shared).
 """
 
 RESEARCH_GUIDE = """\
@@ -159,6 +162,16 @@ def load_lab():
     spec = importlib.util.spec_from_loader(loader.name, loader)
     mod = importlib.util.module_from_spec(spec)
     loader.exec_module(mod)
+    return mod
+
+
+def load_codex():
+    """claude-mem/bin/codex_backend.py (the Codex/GPT backend)."""
+    path = MEM_ROOT / "bin" / "codex_backend.py"
+    spec = importlib.util.spec_from_file_location("alnair_codex_backend", path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
     return mod
 
 
@@ -414,13 +427,17 @@ def doctor() -> dict:
         report["claude"] = {"path": claude, "version": (ver.stdout or ver.stderr).strip() if ver else None}
     except Exception as exc:  # noqa: BLE001
         report["claude"] = {"error": str(exc)}
+    try:
+        report["codex"] = load_codex().status(REPO, tool_python())
+    except Exception as exc:  # noqa: BLE001
+        report["codex"] = {"error": str(exc)}
     report["launcher_on_path"] = {
         "link": str(LINK),
         "points_here": LINK.exists() and LINK.resolve() == Path(__file__).resolve(),
     }
     report["writes"] = [str(STATE), str(HOME / ".local/state/claude-lab/runs"), str(HOME / ".clp/sessions")]
     report["never_writes"] = [str(p) for p in PROTECTED + PROTECTED_DIRS]
-    report["note"] = "doctor started no Claude session and made no API call."
+    report["note"] = "doctor started no Claude session or Codex session and made no API call."
     return report
 
 
@@ -499,6 +516,54 @@ def with_remote_control(argv: list[str], name: str | None) -> list[str]:
     return [argv[0], "--remote-control", *([name] if name else []), *argv[1:]]
 
 
+def run_codex(opt, passthrough: list[str]) -> int:
+    """Interactive Codex session with Alnair's memory, research tools and session notes."""
+    if opt.remote_control is not None:
+        raise ValueError("--remote-control is a Claude Code feature; Codex has its own `codex remote-control`.")
+    if opt.permission_mode:
+        raise ValueError("--permission-mode is a Claude Code option; pass Codex options after --, e.g. -- -s workspace-write")
+    if opt.print_mode or opt.output_format:
+        raise ValueError("Alnair runs Codex interactively only.")
+    cb = load_codex()
+    model, effort, checked = cb.resolve_model(opt.gpt_model, opt.effort)
+    project = opt.project.expanduser().resolve()
+    research = not (opt.no_research or research_disabled_env())
+    store = opt.store.expanduser().resolve() if opt.store else (Path(os.environ["CLP_STORE"]).expanduser() if os.environ.get("CLP_STORE") else None)
+    run_id = str(uuid.uuid4())
+    run = STATE / run_id
+    python = tool_python()
+    env_updates = {
+        "CLAUDE_MEM_SESSION_ID": run_id,
+        "CLAUDE_CLP_ROOT": str(CLP_ROOT),
+        "CLAUDE_CLP_PYTHON": python,
+        "CLAUDE_CLP_RUN_DIR": str(run),
+        "CLAUDE_MEM_ROOT": str(MEM_ROOT),
+        "CLAUDE_MEM_VAULT": os.environ["CLAUDE_MEM_VAULT"],
+        "ALNAIR_VAULT": str(VAULT),
+        "ALNAIR_BACKEND": "codex",
+    }
+    if store is not None:
+        env_updates["CLP_STORE"] = str(store)
+    if opt.research_home:
+        env_updates["RESEARCH_HOME"] = str(opt.research_home.expanduser().resolve())
+    argv_ = cb.launch(REPO, python, model=model, effort=effort, project=project, prompt=opt.task,
+                      resume=opt.resume, extra=passthrough, research=research)
+    env = cb.session_env(dict(os.environ), env_updates)
+    if opt.dry_run:
+        shown = [("developer_instructions=[alnair developer note]" if a.startswith("developer_instructions=") else a) for a in argv_]
+        print(json.dumps({"backend": "codex", "model": model, "modelCheck": checked, "effort": effort or "Codex default",
+                          "project": str(project), "sessionId": run_id, "research": research, "argv": shown,
+                          "note": "No Codex session or model request was started."}, indent=2))
+        return 0
+    meta = {"schema": 1, "backend": "codex", "runId": run_id, "runDir": str(run), "project": str(project), "model": model,
+            "effort": effort, "createdAt": datetime.now(timezone.utc).isoformat(), "clpRoot": str(CLP_ROOT)}
+    dump(STATE / run_id / "mem.json", meta)
+    ensure_session_ledger(run_id, str(project), run, store)
+    print(f"Alnair · Codex · {model} · run: {run}", flush=True)
+    os.execve(argv_[0], argv_, env)
+    return 0
+
+
 def research_opts(opt, resume: bool = False) -> dict:
     """finalize_run keywords from the command line. A resume keeps the run's own setting unless a flag overrides it."""
     home = opt.research_home.expanduser().resolve() if opt.research_home else None
@@ -512,18 +577,22 @@ def main(argv: list[str] | None = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
     catalog_lab.reject_headless_args(raw)
     catalog_lab.sync_models()
-    p = argparse.ArgumentParser(prog="alnair", description="Alnair: interactive Claude harness + verified CLP memory.")
-    p.add_argument("task", nargs="?", default="", help='"doctor", "demo", or a starting prompt')
+    p = argparse.ArgumentParser(prog="alnair", description="Alnair: an interactive terminal harness for Claude Code and Codex (GPT), with verified CLP memory.")
+    p.add_argument("task", nargs="?", default="", help='"doctor", "demo", "codex-setup", "fable-check", "update", or a starting prompt')
     p.add_argument("--project", type=Path, default=Path.cwd())
     p.add_argument("--store", type=Path, help="clp store other than ~/.clp")
     p.add_argument("--resume", nargs="?", const="latest", help="resume lab run id/path or 'latest'")
     p.add_argument("--dry-run", action="store_true")
-    p.add_argument("--gui", action="store_true", help="install the Tauri generative-UI app (with install-app)")
     p.add_argument("--enable", action="store_true", help="manual interactive Fable override (fable-check)")
     p.add_argument("--disable", action="store_true")
     p.add_argument("--auto", dest="auto_evidence", action="store_true")
     p.add_argument("--mode", choices=("balanced", "deep"), default="balanced")
-    p.add_argument("--model", choices=catalog_lab.model_choices(), default="auto")
+    p.add_argument("--model", choices=[*catalog_lab.model_choices(), "gpt"], default="auto",
+                   help="Claude routing (auto) or a Claude model; gpt starts Codex instead")
+    p.add_argument("--backend", choices=("claude", "codex"), help="codex is the same as --model gpt")
+    p.add_argument("--gpt-model", metavar="ID", help="Codex model id (default $ALNAIR_GPT_MODEL or gpt-6.2-astra)")
+    p.add_argument("--effort", choices=("low", "medium", "high", "xhigh", "max", "ultra"), help="Codex reasoning effort")
+    p.add_argument("--remove", action="store_true", help="with codex-setup: take Alnair's block out of config.toml")
     p.add_argument("--full-tools", action="store_true")
     p.add_argument("--no-research", action="store_true", help="leave the research plugin out (controlled comparisons)")
     p.add_argument("--research-home", type=Path, help="research store other than ~/.clp/research")
@@ -550,14 +619,21 @@ def main(argv: list[str] | None = None) -> int:
     if any(x == '--model' or x.startswith('--model=') for x in passthrough):
         raise ValueError('Use the launcher --model option before --; model passthrough would bypass routing.')
     opt.claude_args = passthrough
+    codex = opt.backend == "codex" or opt.model == "gpt" or bool(opt.gpt_model)
+    if opt.backend == "claude" and (opt.model == "gpt" or opt.gpt_model):
+        raise ValueError("--backend claude can't run a GPT model; drop --backend or use --model gpt")
+    if not codex and opt.effort:
+        raise ValueError("--effort applies to the Codex backend; for Claude use /lab-model or /effort in the session")
 
-    if opt.task == "install-app":
-        if opt.gui:
-            return subprocess.run([sys.executable, str(REPO / "alnair-app/scripts/install.py"), *(["--dry-run"] if opt.dry_run else [])], check=False).returncode
-        spec = importlib.util.spec_from_file_location("alnair_app_install", MEM_ROOT / "app/install.py")
-        app = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(app)
-        return app.main(["install", *(["--dry-run"] if opt.dry_run else [])])
+    if opt.task == "codex-setup":
+        cb = load_codex()
+        result = cb.remove_config() if opt.remove else cb.setup_config(REPO, tool_python(), dry_run=opt.dry_run)
+        print(json.dumps(result, indent=2))
+        return 0
+    if codex and opt.task == "demo":
+        raise ValueError("the demo runs on Claude; start it with plain alnair demo")
+    if codex and opt.task not in {"doctor", "update", "fable-check"}:
+        return run_codex(opt, passthrough)
 
     if opt.task == "doctor":
         print(json.dumps(doctor(), indent=2))

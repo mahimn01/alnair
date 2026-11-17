@@ -30,6 +30,10 @@ def _mock_native_claude_metadata(monkeypatch):
     from pathlib import Path
     real_run = subprocess.run
     def guarded_run(args, *a, **kw):
+        if isinstance(args, (list, tuple)) and args and Path(str(args[0])).name == "codex":
+            if list(args[1:]) == ["--version"]:
+                return subprocess.CompletedProcess(args, 0, "codex-cli 0.169.0\n", "")
+            raise AssertionError("Unit tests must not launch Codex")
         if isinstance(args, (list, tuple)) and args and Path(str(args[0])).name == "claude":
             if list(args[1:]) == ["--version"]:
                 return subprocess.CompletedProcess(args, 0, "2.1.321 (Claude Code)\n", "")
@@ -39,3 +43,36 @@ def _mock_native_claude_metadata(monkeypatch):
         return real_run(args, *a, **kw)
     monkeypatch.setattr(subprocess, "run", guarded_run)
     yield
+
+
+CODEX_MODELS = {"fetched_at": "2026-11-17T00:00:00Z", "client_version": "0.169.0", "models": [
+    {"slug": "gpt-6.2-sol", "display_name": "GPT-6.2-Sol", "visibility": "list",
+     "supported_reasoning_levels": [{"effort": e} for e in ("low", "medium", "high", "xhigh", "max", "ultra")]},
+    {"slug": "gpt-6.2-astra", "display_name": "GPT-6.2-Astra", "visibility": "list",
+     "supported_reasoning_levels": [{"effort": e} for e in ("low", "medium", "high", "xhigh", "max", "ultra")]},
+    {"slug": "gpt-6-luna", "display_name": "GPT-6-Luna", "visibility": "list",
+     "supported_reasoning_levels": [{"effort": e} for e in ("low", "medium", "high", "xhigh", "max")]},
+    {"slug": "codex-auto-review", "display_name": "Codex Auto Review", "visibility": "hide", "supported_reasoning_levels": []},
+]}
+
+
+@pytest.fixture(autouse=True)
+def _codex_sandbox(monkeypatch, tmp_path_factory):
+    """A private CODEX_HOME with a model list, and a stub `codex` on PATH that refuses to run.
+    Tests never touch ~/.codex and never start Codex."""
+    import json
+    home = tmp_path_factory.mktemp("codex-home")
+    (home / "models_cache.json").write_text(json.dumps(CODEX_MODELS))
+    bin_dir = tmp_path_factory.mktemp("codex-bin")
+    stub = bin_dir / "codex"
+    stub.write_text("#!/bin/sh\necho 'stub codex: not for running' >&2\nexit 1\n")
+    stub.chmod(0o755)
+    monkeypatch.setenv("CODEX_HOME", str(home))
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
+    monkeypatch.delenv("ALNAIR_GPT_MODEL", raising=False)
+    monkeypatch.delenv("CODEX_API_KEY", raising=False)
+
+    def no_exec(*a, **kw):
+        raise AssertionError("Unit tests must not exec a session")
+    monkeypatch.setattr(os, "execve", no_exec)
+    yield home

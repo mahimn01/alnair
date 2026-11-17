@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Write/update one Obsidian vault session note from a Claude Code transcript.
+"""Write/update one Obsidian vault session note from a Claude Code or Codex transcript.
 
-Invoked by claude-lab-clp session-layer hooks (Stop / SessionEnd / PreCompact) and
-by the claude-clp plugin. Offline, deterministic, no API calls. Fail soft: log under
+Invoked by claude-lab-clp session-layer hooks (Stop / SessionEnd / PreCompact), by the
+claude-clp plugin, and by the Codex hooks alnair adds for --model gpt sessions (--codex). Offline, deterministic, no API calls. Fail soft: log under
 ~/.clp/logs and exit 0 so the session is never blocked.
 
 Never edits, renames, or deletes any vault note it did not create for this session.
@@ -148,7 +148,123 @@ def _text_from_content(content) -> str:
     return str(content)
 
 
+CODEX_TYPES = {"session_meta", "response_item", "event_msg", "turn_context", "compacted", "world_state", "token_usage_record"}
+PATCH_FILE = re.compile(r"^\*\*\* (?:Add|Update|Delete) File: (.+)$", re.M)
+
+
+def _codex_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(str(b.get("text") or "") for b in content
+                         if isinstance(b, dict) and b.get("type") in {"input_text", "output_text", "text"})
+    return ""
+
+
+def _is_codex_context(text: str) -> bool:
+    """Codex puts environment and instruction blocks in user-role messages; they aren't prompts."""
+    head = text.lstrip()[:200]
+    return head.startswith("<") or head.startswith("# AGENTS.md") or head.startswith("# Instructions")
+
+
+def parse_codex_transcript(transcript_path: Path) -> dict:
+    """The same summary as parse_transcript, from a Codex rollout JSONL. The format isn't a stable interface,
+    so unknown lines are skipped rather than failing."""
+    prompts: list[str] = []
+    assistants: list[str] = []
+    ev_prompts: list[str] = []
+    ev_assistants: list[str] = []
+    findings: list[str] = []
+    files_changed: list[str] = []
+    cwd = session = model = None
+    with transcript_path.open(encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(obj, dict):
+                continue
+            typ, payload = obj.get("type"), obj.get("payload") if isinstance(obj.get("payload"), dict) else {}
+            if typ == "session_meta":
+                session = session or payload.get("id") or payload.get("session_id")
+                cwd = cwd or payload.get("cwd")
+            elif typ == "turn_context":
+                model = payload.get("model") or model
+                cwd = cwd or payload.get("cwd")
+            elif typ == "response_item" and payload.get("type") == "message":
+                text = _codex_text(payload.get("content")).strip()
+                if not text:
+                    continue
+                if payload.get("role") == "user" and not _is_codex_context(text):
+                    prompts.append(text[:MAX_PROMPT_CHARS])
+                elif payload.get("role") == "assistant":
+                    assistants.append(text[:MAX_ASSISTANT_CHARS])
+            elif typ == "response_item" and payload.get("type") in {"custom_tool_call", "function_call"}:
+                raw = payload.get("input") if payload.get("type") == "custom_tool_call" else payload.get("arguments")
+                if isinstance(raw, str) and "*** " in raw:
+                    for path in PATCH_FILE.findall(raw.replace("\\n", "\n")):
+                        path = path.strip()
+                        if path and path not in files_changed:
+                            files_changed.append(path)
+            elif typ == "event_msg" and payload.get("type") == "item_completed" and isinstance(payload.get("item"), dict) \
+                    and payload["item"].get("type") == "FileChange" and isinstance(payload["item"].get("changes"), dict):
+                for path in payload["item"]["changes"]:
+                    if isinstance(path, str) and path not in files_changed:
+                        files_changed.append(path)
+            elif typ == "event_msg" and payload.get("type") in {"user_message", "agent_message"}:
+                text = str(payload.get("message") or "").strip()
+                if text:
+                    (ev_prompts if payload["type"] == "user_message" else ev_assistants).append(text[:MAX_PROMPT_CHARS if payload["type"] == "user_message" else MAX_ASSISTANT_CHARS])
+    prompts = prompts or [p for p in ev_prompts if not _is_codex_context(p)]
+    assistants = assistants or ev_assistants
+    for text in assistants:
+        for ln in text.splitlines():
+            st = ln.strip()
+            if st.startswith(("- ", "* ", "# ", "ANSWER:", "Decision:", "Finding:", "Changed:", "Created:", "Updated:")):
+                findings.append(st[:MAX_FINDING_CHARS])
+    return {
+        "prompts": prompts[-MAX_PROMPTS:],
+        "assistants": assistants[-12:],
+        "findings": findings[-MAX_FINDINGS:],
+        "files_changed": files_changed[:MAX_FILES],
+        "cwd": cwd,
+        "session_id": session,
+        "model": model,
+        "backend": "codex",
+        "error": None,
+    }
+
+
+def is_codex_transcript(transcript_path: Path) -> bool:
+    try:
+        with transcript_path.open(encoding="utf-8", errors="replace") as fh:
+            for _ in range(5):
+                line = fh.readline()
+                if not line:
+                    break
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(obj, dict) and obj.get("type") in CODEX_TYPES and isinstance(obj.get("payload"), dict):
+                    return True
+    except OSError:
+        return False
+    return False
+
+
 def parse_transcript(transcript_path: Path) -> dict:
+    if transcript_path.is_file() and is_codex_transcript(transcript_path):
+        try:
+            return parse_codex_transcript(transcript_path)
+        except OSError as exc:
+            return {"prompts": [], "assistants": [], "findings": [], "files_changed": [], "cwd": None,
+                    "session_id": None, "backend": "codex", "error": str(exc)}
+    return parse_claude_transcript(transcript_path)
+
+
+def parse_claude_transcript(transcript_path: Path) -> dict:
     prompts: list[str] = []
     assistants: list[str] = []
     findings: list[str] = []
@@ -341,19 +457,21 @@ def render_note(
         if e not in seen:
             seen.add(e)
             ev_list.append(e)
+    codex = parsed.get("backend") == "codex" or os.environ.get("ALNAIR_BACKEND") == "codex"
     lines = [
         "---",
-        "tags: [claude-session, claude-lab-clp]",
+        "tags: [codex-session, alnair]" if codex else "tags: [claude-session, claude-lab-clp]",
         f"session_id: {session_id}",
         f"created: {created_at}",
         f"updated: {updated_at}",
         f"timezone: {TZ.key}",
-        f"source: claude-lab-clp",
+        "source: alnair-codex" if codex else "source: claude-lab-clp",
         f"hooks: [{', '.join(ev_list)}]",
         "---",
         "",
-        f"# Claude Session · {session_id[:8]}",
+        f"# {'Codex' if codex else 'Claude'} Session · {session_id[:8]}",
         "",
+        *([f"- **Model:** `{parsed['model']}`"] if parsed.get("model") else []),
         f"- **When ({TZ.key}):** {updated_at}",
         f"- **Working dir / project:** `{project or cwd or '(unknown)'}`",
         f"- **Session id:** `{session_id}`",
@@ -604,6 +722,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--store", type=Path)
     p.add_argument("--no-refresh", action="store_true")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--codex", action="store_true",
+                   help="Codex hook mode: always print {} (Codex wants JSON on stdout) and log the result instead")
     opt = p.parse_args(argv)
     payload = None
     try:
@@ -622,14 +742,19 @@ def main(argv: list[str] | None = None) -> int:
             store=opt.store,
             refresh=not opt.no_refresh,
         )
-        if opt.json:
+        if opt.codex:
+            _log(f"codex {result.get('event')} {result.get('path')}", opt.store)
+            print("{}")
+        elif opt.json:
             print(json.dumps(result))
         else:
             print(result["path"])
         return 0
     except Exception as exc:  # noqa: BLE001 — hooks must fail soft
         _log(f"FAIL {exc}\n{traceback.format_exc()}", opt.store)
-        if opt.json:
+        if opt.codex:
+            print("{}")
+        elif opt.json:
             print(json.dumps({"ok": False, "error": str(exc)}))
         else:
             print(f"vault_session_note: {exc}", file=sys.stderr)

@@ -133,3 +133,15 @@ When launched via `claude-lab-clp`, Stop / SessionEnd / PreCompact hooks run
 `bin/vault_session_note.py` and write/update one note under
 `~/Documents/Obsidian Vault/Claude Sessions/` (never edits other vault notes).
 
+`alnair --model gpt` runs the same script from Codex's `Stop`, `PreCompact` and `SessionEnd`
+hooks with `--codex`, which reads Codex rollout transcripts and always prints `{}` because Codex
+wants JSON from a hook. Those notes are tagged `codex-session` and land in the same folder.
+Codex runs a new hook only after you trust it with `/hooks`.
+
+## MCP server for Codex
+
+`bin/clp_mcp.py` serves the offline tools (lookup, read, verify, status, refresh and the
+session ledger tools) over stdio MCP for hosts that can't load the Claude Code plugin. The
+paid `ask` tool is left out. `alnair codex-setup` registers it in `~/.codex/config.toml` as
+`alnair_clp`.
+

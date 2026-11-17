@@ -18,13 +18,12 @@ You don't need to run `install.sh` to work on the code.
 Each package has its own test folder and conftest, so run them one folder at a time:
 
 ```sh
-for d in claude-clp/tests claude-mem/tests claude-mem/rune/tests lab/tests claude-research/tests alnair-app/tests; do
+for d in claude-clp/tests claude-mem/tests claude-mem/rune/tests lab/tests claude-research/tests; do
   .venv/bin/python -m pytest -q "$d" || break
 done
-(cd alnair-app && npm ci && npm test)
 ```
 
-None of the tests start a Claude session or make a paid call. The research tests run against a local mock HTTP server. If you run them from inside an Alnair session, clear the session variables first with `env -u CLAUDE_CLP_ROOT -u CLAUDE_CLP_PYTHON -u CLAUDE_MEM_SESSION_ID -u CLAUDE_CLP_RUN_DIR -u CLAUDE_MEM_ROOT -u CLP_STORE`.
+None of the tests start a Claude or Codex session or make a paid call. A stub `codex` stands in for the real one. The research tests run against a local mock HTTP server. If you run them from inside an Alnair session, clear the session variables first with `env -u CLAUDE_CLP_ROOT -u CLAUDE_CLP_PYTHON -u CLAUDE_MEM_SESSION_ID -u CLAUDE_CLP_RUN_DIR -u CLAUDE_MEM_ROOT -u CLP_STORE`.
 
 CI runs the same tests plus `ruff check --select E9,F63,F7,F82` and `bash -n install.sh`.
 

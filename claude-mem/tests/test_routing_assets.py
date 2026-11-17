@@ -21,3 +21,9 @@ def test_oracle_rejects_wrong_solution(tmp_path,task):
 @pytest.mark.parametrize('script',['run-benchmark.py','grade-benchmark.py'])
 def test_bench_scripts_compile(tmp_path,script):
     py_compile.compile(str(ASSETS/script),cfile=str(tmp_path/'output.pyc'),doraise=True)
+
+
+def test_lab_model_gpt_points_to_the_codex_backend():
+    js = (L.LAB_ROOT / "plugin/hooks/register.js").read_text()
+    assert "if (['gpt','codex'].includes(choice)) return {text:GPT_SWITCH};" in js
+    assert "alnair --model gpt" in js.split("const GPT_SWITCH", 1)[1].split("\n", 1)[0]

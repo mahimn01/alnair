@@ -17,6 +17,8 @@ const SOFT_BUDGET = {workers:4, reviews:2, tokens:2e6};
 const TOKEN_KEYS = ['input_tokens','output_tokens','cache_creation_input_tokens'];
 const EFFORTS = ['low','medium','high','xhigh','max'];
 
+const GPT_SWITCH = 'GPT models run on the Codex backend, which is a separate session: exit and run `alnair --model gpt` (GPT-6.2-Astra by default; `--gpt-model <id>` for another model Codex lists). It uses your ChatGPT login and the same CLP memory, research tools and session notes. Come back with `alnair`.';
+
 export function redact(text) {
   return String(text).replace(/AIza[\w-]{25,}|sk-(?:ant|proj)-[\w-]{15,}|Bearer\s+[\w.-]{20,}/gi, '[REDACTED]');
 }
@@ -229,7 +231,7 @@ export function register(on) {
     await change($, () => {});
     for (const [name, description, argumentHint] of [
       ['lab-status','Show routes, usage counters, and task evidence',''],
-      ['lab-model','Choose the lead model for the next task (add "now" to switch immediately)','auto|sonnet|opus|fable [now]'],
+      ['lab-model','Choose the lead model for the next task (add "now" to switch immediately); gpt explains the Codex backend','auto|sonnet|opus|fable|gpt [now]'],
       ['lab-new','Archive the current task and start a fresh handoff',''],
       ['lab-project','Choose the work folder used for code verification','/absolute/path'],
       ['lab-verify','Run recorded acceptance checks through the normal Bash tool','']
@@ -510,6 +512,7 @@ export function register(on) {
     if (e.command === 'lab-verify') return {text:JSON.stringify((await runVerify($)).result)};
     if (e.command === 'lab-model') {
       const [choice, when = ''] = e.args.trim().split(/\s+/);
+      if (['gpt','codex'].includes(choice)) return {text:GPT_SWITCH};
       if (!['auto',...Object.keys(CATALOG.models)].includes(choice) || !['','now'].includes(when)) return {text:'Use /lab-model auto, sonnet, opus, or fable, optionally followed by "now".'};
       if (choice === 'fable' && !cfg.fableAvailable) return {text:'Fable unavailable; run claude-lab-clp fable-check and start a new session.'};
       if (when === 'now' && (isFable(state.route?.model) || choice === 'fable')) return {text:'Fable transitions require a new session to preserve reasoning and advisor settings.'};

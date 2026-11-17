@@ -140,6 +140,14 @@ test('a lab-model choice waits for the next task unless "now" is given',async ($
   expect(f.efforts[2]).toBe('xhigh');
 });
 
+test('/lab-model gpt explains the Codex backend and changes nothing',async ($,on) => {
+  const f=fixture(on);await start($);
+  const answer=await $.command.run({command:'lab-model',args:'gpt'});
+  expect(answer.text.includes('alnair --model gpt')).toBe(true);
+  await prompt($,'Implement pagination');await step($);
+  expect(f.models).toEqual([SONNET]);
+});
+
 test('clear releases the pinned lead model for the next prompt',async ($,on) => {
   const f=fixture(on,{},{modelOverride:'auto'});await start($);
   await prompt($,'Implement pagination');

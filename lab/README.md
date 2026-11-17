@@ -17,6 +17,7 @@ Commands inside a session:
 ```text
 /lab-status                         routes, usage counters and task evidence
 /lab-model auto|sonnet|opus|fable   lead model for the next task; add "now" to switch immediately
+/lab-model gpt                       how to switch to GPT (a separate Codex session: alnair --model gpt)
 /lab-new                            archive the current task and start fresh
 /lab-project /absolute/path         choose the folder used for code verification
 /lab-verify                         run the recorded acceptance checks
