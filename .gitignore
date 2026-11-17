@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.hypothesis/
+.DS_Store
+node_modules/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+alnair-app/screens/
+alnair-app/dist/

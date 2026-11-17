@@ -1,0 +1,6 @@
+{
+  "name": "research",
+  "version": "0.1.0",
+  "description": "Keyless, rate-limited research toolkit with an address-verified source memory: OpenAlex/Semantic Scholar/arXiv, SEC EDGAR, patents, Wayback, GitHub (gh), any public page; lookup/read/verify over ~/.clp/research. Loaded by claude-lab-clp alongside clp; disable with --no-research.",
+  "author": {"name": "Mahimn Patel"}
+}

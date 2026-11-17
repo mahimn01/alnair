@@ -1,0 +1,194 @@
+[
+  {
+    "label": "easy",
+    "prompt": "Say hello"
+  },
+  {
+    "label": "easy",
+    "prompt": "What is 2 + 2?"
+  },
+  {
+    "label": "easy",
+    "prompt": "Rename a variable"
+  },
+  {
+    "label": "easy",
+    "prompt": "Fix a typo in README"
+  },
+  {
+    "label": "easy",
+    "prompt": "Summarize this paragraph"
+  },
+  {
+    "label": "easy",
+    "prompt": "Format this JSON"
+  },
+  {
+    "label": "easy",
+    "prompt": "List files in this folder"
+  },
+  {
+    "label": "easy",
+    "prompt": "Explain a for loop"
+  },
+  {
+    "label": "easy",
+    "prompt": "Write a hello world function"
+  },
+  {
+    "label": "easy",
+    "prompt": "Translate hello into French"
+  },
+  {
+    "label": "easy",
+    "prompt": "Change the button color"
+  },
+  {
+    "label": "easy",
+    "prompt": "Show the current date"
+  },
+  {
+    "label": "medium",
+    "prompt": "Implement pagination in the existing API"
+  },
+  {
+    "label": "medium",
+    "prompt": "Add a unit test for a parser"
+  },
+  {
+    "label": "medium",
+    "prompt": "Refactor this function without changing behavior"
+  },
+  {
+    "label": "medium",
+    "prompt": "Build a small CSV importer"
+  },
+  {
+    "label": "medium",
+    "prompt": "Add error handling to this endpoint"
+  },
+  {
+    "label": "medium",
+    "prompt": "Improve the CLI help"
+  },
+  {
+    "label": "medium",
+    "prompt": "Document the installation steps"
+  },
+  {
+    "label": "medium",
+    "prompt": "Add a cache to this HTTP handler"
+  },
+  {
+    "label": "medium",
+    "prompt": "Migrate this small config to JSON"
+  },
+  {
+    "label": "medium",
+    "prompt": "Fix this CSS layout"
+  },
+  {
+    "label": "medium",
+    "prompt": "Compare two sorting algorithms"
+  },
+  {
+    "label": "medium",
+    "prompt": "Add input validation to the form"
+  },
+  {
+    "label": "hard",
+    "prompt": "Find the race condition between the workers"
+  },
+  {
+    "label": "hard",
+    "prompt": "Prove this theorem"
+  },
+  {
+    "label": "hard",
+    "prompt": "Audit this security vulnerability"
+  },
+  {
+    "label": "hard",
+    "prompt": "Explain this cryptographic protocol"
+  },
+  {
+    "label": "hard",
+    "prompt": "Find the root cause of this deadlock"
+  },
+  {
+    "label": "hard",
+    "prompt": "Perform an independent review"
+  },
+  {
+    "label": "hard",
+    "prompt": "Design the architecture for a small service"
+  },
+  {
+    "label": "hard",
+    "prompt": "Resolve this ambiguous requirement"
+  },
+  {
+    "label": "hard",
+    "prompt": "Cross-file refactor of authentication"
+  },
+  {
+    "label": "hard",
+    "prompt": "Check a mathematical proof"
+  },
+  {
+    "label": "hard",
+    "prompt": "Investigate hard debugging of a crash"
+  },
+  {
+    "label": "hard",
+    "prompt": "Review current IBKR orders"
+  },
+  {
+    "label": "extreme",
+    "prompt": "Design and verify a distributed database consensus protocol under Byzantine faults"
+  },
+  {
+    "label": "extreme",
+    "prompt": "Prove a novel theorem with a machine-checkable formal proof"
+  },
+  {
+    "label": "extreme",
+    "prompt": "Conduct a multi-month research program across conflicting primary sources"
+  },
+  {
+    "label": "extreme",
+    "prompt": "Plan a long-horizon engineering migration across dozens of services"
+  },
+  {
+    "label": "extreme",
+    "prompt": "Solve this exceptionally difficult mathematical problem with rigorous verification"
+  },
+  {
+    "label": "extreme",
+    "prompt": "Perform deeply complex research synthesis across multiple disciplines"
+  },
+  {
+    "label": "extreme",
+    "prompt": "Build a formally verified optimizing compiler end to end"
+  },
+  {
+    "label": "extreme",
+    "prompt": "Investigate an unsolved research problem with competing hypotheses"
+  },
+  {
+    "label": "extreme",
+    "prompt": "Design a multi-year architecture migration with zero downtime"
+  },
+  {
+    "label": "extreme",
+    "prompt": "Derive a new cryptographic protocol and prove its security"
+  },
+  {
+    "label": "extreme",
+    "prompt": "Execute an extremely difficult engineering task spanning many repositories"
+  },
+  {
+    "label": "extreme",
+    "prompt": "Solve an open problem in mathematics and check every proof step"
+  }
+]

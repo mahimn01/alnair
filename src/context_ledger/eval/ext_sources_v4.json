@@ -1,0 +1,1126 @@
+{
+ "distributions": [
+  {
+   "bytes": 20240,
+   "dist_info": "annotated_types-0.7.0.dist-info",
+   "files": 2,
+   "license": "MIT License",
+   "name": "annotated-types",
+   "sha256": "0677ac194231213495f6a722d152af841f88914c0d94b60c5e9fb9e243554741",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.7.0"
+  },
+  {
+   "bytes": 388304,
+   "dist_info": "anyio-4.9.0.dist-info",
+   "files": 40,
+   "license": "MIT License",
+   "name": "anyio",
+   "sha256": "5b8c2dad3ae4263bc71e4845a9149197e7153894fa0d949f570e5652e930c0eb",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "4.9.0"
+  },
+  {
+   "bytes": 179532,
+   "dist_info": "attrs-25.3.0.dist-info",
+   "files": 19,
+   "license": "MIT",
+   "name": "attrs",
+   "sha256": "6fc3ca4bae665d9c8d27f9fbe3cf9d1e215b3d1919d638d177d8d2cfcd8a06ad",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "25.3.0"
+  },
+  {
+   "bytes": 644708,
+   "dist_info": "beautifulsoup4-4.13.4.dist-info",
+   "files": 32,
+   "license": "MIT License",
+   "name": "beautifulsoup4",
+   "sha256": "529e045da86de1e81566f6e6b723a6fd1df4efea28525ac3bbe9c83fc186bbf8",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "4.13.4"
+  },
+  {
+   "bytes": 36151,
+   "dist_info": "cachetools-6.2.4.dist-info",
+   "files": 5,
+   "license": "MIT",
+   "name": "cachetools",
+   "sha256": "ba03a79de4a6d4b1f9e69e475d86342f87cd69a30b671f1a30b9c78729b06648",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "6.2.4"
+  },
+  {
+   "bytes": 3731,
+   "dist_info": "certifi-2025.7.14.dist-info",
+   "files": 3,
+   "license": "Mozilla Public License 2.0 (MPL 2.0)",
+   "name": "certifi",
+   "sha256": "1b60d6d9acf476944dcdace70ef5b4ff025955157b733ebdf2cbb9b770b8ab66",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "2025.7.14"
+  },
+  {
+   "bytes": 374867,
+   "dist_info": "cffi-1.17.1.dist-info",
+   "files": 22,
+   "license": "MIT License",
+   "name": "cffi",
+   "sha256": "e10b6c14984d0558dc6df27879095f5b900bb39cbb28a5a304f5f20c11331831",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "1.17.1"
+  },
+  {
+   "bytes": 139444,
+   "dist_info": "charset_normalizer-3.4.2.dist-info",
+   "files": 12,
+   "license": "MIT License",
+   "name": "charset-normalizer",
+   "sha256": "cad4132f5797f737fead19aec1f4e0e0bbdc3231aae35de15033464202b31fef",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "3.4.2"
+  },
+  {
+   "bytes": 364106,
+   "dist_info": "click-8.2.1.dist-info",
+   "files": 16,
+   "license": "BSD-3-Clause",
+   "name": "click",
+   "sha256": "5ccc6c51e2416630d837bdd4a6cff7ac9d21d56f8359e75895d60b9999e1d252",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "8.2.1"
+  },
+  {
+   "bytes": 59505,
+   "dist_info": "cloudpickle-3.1.2.dist-info",
+   "files": 3,
+   "license": "BSD License",
+   "name": "cloudpickle",
+   "sha256": "5a54a7868732be307d4c8ef9caeffe0add8658a489e9e637b432b6207e0013ee",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "3.1.2"
+  },
+  {
+   "bytes": 27035,
+   "dist_info": "colorama-0.4.4.dist-info",
+   "files": 6,
+   "license": "BSD License",
+   "name": "colorama",
+   "sha256": "5b5332efc330bdecccde344242e577befabf42fe9795f88d304f3ec21cddbb32",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.4.4"
+  },
+  {
+   "bytes": 120469,
+   "dist_info": "contourpy-1.3.3.dist-info",
+   "files": 17,
+   "license": "BSD License",
+   "name": "contourpy",
+   "sha256": "a903a6ce36b68c7ec7d17e66ee3aadb4664e74e9494645d9f8d3887a18cb5ad4",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "1.3.3"
+  },
+  {
+   "bytes": 215321,
+   "dist_info": "curl_cffi-0.12.0.dist-info",
+   "files": 17,
+   "license": "MIT License",
+   "name": "curl-cffi",
+   "sha256": "946b8171d8f040955ccef640632ee7b1254650e61ea14411e0bb9c2b7ce447c4",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.12.0"
+  },
+  {
+   "bytes": 16709,
+   "dist_info": "cycler-0.12.1.dist-info",
+   "files": 1,
+   "license": "BSD License",
+   "name": "cycler",
+   "sha256": "0286312ef4f5732e9feb077d908e5a17513f73df7396180280972254aa88227c",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "0.12.1"
+  },
+  {
+   "bytes": 50475,
+   "dist_info": "distro-1.9.0.dist-info",
+   "files": 3,
+   "license": "Apache Software License",
+   "name": "distro",
+   "sha256": "2d11e840c2ea507e33e61d59199ec03d704c121801c616e7f045dd2696552f66",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "1.9.0"
+  },
+  {
+   "bytes": 167829,
+   "dist_info": "empyrical-0.5.5.dist-info",
+   "files": 10,
+   "license": "Apache Software License",
+   "name": "empyrical",
+   "sha256": "980037cf81d0e9ba3fa3cfd7a977269e883fa174b70523762dcbacc3d6607a1d",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.5.5"
+  },
+  {
+   "bytes": 101543,
+   "dist_info": "eventkit-1.0.3.dist-info",
+   "files": 22,
+   "license": "BSD License",
+   "name": "eventkit",
+   "sha256": "aec500b9d087b37ed785b0af4f013b22dc610ec6c357bab0cabe9025e5009a5e",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "1.0.3"
+  },
+  {
+   "bytes": 124988,
+   "dist_info": "filelock-3.29.0.dist-info",
+   "files": 14,
+   "license": "MIT",
+   "name": "filelock",
+   "sha256": "4bafd0e629537a28845a1fd46deaa903a0fd58308fd5ce3210e3c7b0cd1722a4",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "3.29.0"
+  },
+  {
+   "bytes": 4332542,
+   "dist_info": "fonttools-4.62.1.dist-info",
+   "files": 333,
+   "license": "MIT",
+   "name": "fonttools",
+   "sha256": "76e191529a9faa87b091733679a62c014e783e043d391c1550649c8e47937d1a",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "4.62.1"
+  },
+  {
+   "bytes": 777832,
+   "dist_info": "google_auth-2.45.0.dist-info",
+   "files": 76,
+   "license": "Apache Software License",
+   "name": "google-auth",
+   "sha256": "2da0cb283e040fb15c6583c946333843fffbf6719c0c1ffb81494647c6babcf2",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "2.45.0"
+  },
+  {
+   "bytes": 1418126,
+   "dist_info": "google_genai-1.56.0.dist-info",
+   "files": 154,
+   "license": "Apache-2.0",
+   "name": "google-genai",
+   "sha256": "964b1c6cb54fca62896fad29bc79103b42e2a99aaea29fbcfbea170be8d88fef",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "1.56.0"
+  },
+  {
+   "bytes": 237019,
+   "dist_info": "greenlet-3.3.2.dist-info",
+   "files": 53,
+   "license": "MIT AND PSF-2.0",
+   "name": "greenlet",
+   "sha256": "0d97970c64cea33400fe40431bd7ebc317df589a17a32dac0adb7c81248973cc",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "3.3.2"
+  },
+  {
+   "bytes": 1319134,
+   "dist_info": "gymnasium-1.3.0.dist-info",
+   "files": 121,
+   "license": "MIT License",
+   "name": "gymnasium",
+   "sha256": "b0fd1083fd48efc8c0ba69375d291c0c6d68073cf181d35eaa3f6f78959cb91a",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "1.3.0"
+  },
+  {
+   "bytes": 93117,
+   "dist_info": "h11-0.16.0.dist-info",
+   "files": 11,
+   "license": "MIT License",
+   "name": "h11",
+   "sha256": "b18dd4fe124c0c7f809a8481d70317e7992e9bd110d2801276c2c87c66ccd90d",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.16.0"
+  },
+  {
+   "bytes": 261935,
+   "dist_info": "httpcore-1.0.9.dist-info",
+   "files": 31,
+   "license": "BSD-3-Clause",
+   "name": "httpcore",
+   "sha256": "fcaa52a314338e0d60aaeca028b870276407eac81455b96a6a00987c5f904df6",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "1.0.9"
+  },
+  {
+   "bytes": 284396,
+   "dist_info": "httpx-0.28.1.dist-info",
+   "files": 23,
+   "license": "BSD License",
+   "name": "httpx",
+   "sha256": "5d3c61b3c58267b8a612fe1658d105ef6e20b6e99e926460b908f39b8805f7ba",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.28.1"
+  },
+  {
+   "bytes": 5685,
+   "dist_info": "httpx_sse-0.4.1.dist-info",
+   "files": 5,
+   "license": "MIT",
+   "name": "httpx-sse",
+   "sha256": "b22878ed5d2cf79dd5491f6c50ba3fea363ccb3669ee8d6bf57c76c0ed3cb9f6",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.4.1"
+  },
+  {
+   "bytes": 294368,
+   "dist_info": "ib_insync-0.9.86.dist-info",
+   "files": 14,
+   "license": "BSD License",
+   "name": "ib-insync",
+   "sha256": "2358ad1e0a0c2485908bc1eea89eb12d33ebb7bc88cf5be4e04c40a134e1ed6e",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.9.86"
+  },
+  {
+   "bytes": 261745,
+   "dist_info": "idna-2.10.dist-info",
+   "files": 8,
+   "license": "BSD License",
+   "name": "idna",
+   "sha256": "820f0964d0e1706a8fe9b0209c06e23b851eaa409f059dd249495b634744f1b0",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "2.10"
+  },
+  {
+   "bytes": 13823,
+   "dist_info": "iniconfig-2.3.0.dist-info",
+   "files": 4,
+   "license": "MIT",
+   "name": "iniconfig",
+   "sha256": "847c7340a2243a7dc7c64fba03e101df49a1e82a871e3f056f344ba409f5661c",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "2.3.0"
+  },
+  {
+   "bytes": 490066,
+   "dist_info": "jinja2-3.1.6.dist-info",
+   "files": 25,
+   "license": "BSD License",
+   "name": "jinja2",
+   "sha256": "2ad00adf103bcdd4f2d855065a2fc6e46c513ef9a468b717c95958804593ca78",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "3.1.6"
+  },
+  {
+   "bytes": 344292,
+   "dist_info": "jsonschema-4.25.0.dist-info",
+   "files": 34,
+   "license": "MIT",
+   "name": "jsonschema",
+   "sha256": "41e453d9d874064842aaef42930e615c57de3daeb259af4f115300abfca16308",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "4.25.0"
+  },
+  {
+   "bytes": 2632,
+   "dist_info": "jsonschema_specifications-2025.4.1.dist-info",
+   "files": 4,
+   "license": "MIT",
+   "name": "jsonschema-specifications",
+   "sha256": "f0279b0c1b26130d87956a0118a431b6bdae3bcc54cc669a77f3612a428c4bb9",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "2025.4.1"
+  },
+  {
+   "bytes": 2255,
+   "dist_info": "kiwisolver-1.4.8.dist-info",
+   "files": 2,
+   "license": "BSD License",
+   "name": "kiwisolver",
+   "sha256": "4f9efdeb5359bf702974ae1dbd0d4e1be5e72fdc9ff861cc11d08f8fc354d76b",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "1.4.8"
+  },
+  {
+   "bytes": 49332,
+   "dist_info": "linkify_it_py-2.0.3.dist-info",
+   "files": 4,
+   "license": "MIT License",
+   "name": "linkify-it-py",
+   "sha256": "d2e4d355407469951bf75c4901fcba4e565b8ff84ebb5ddc1414b79dfc0dd82e",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "2.0.3"
+  },
+  {
+   "bytes": 993150,
+   "dist_info": "lxml-6.0.2.dist-info",
+   "files": 109,
+   "license": "BSD-3-Clause",
+   "name": "lxml",
+   "sha256": "ad641be0756f6e9f0111a2c2057bae43e78621886232988dc8071b7dbbe15e98",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "6.0.2"
+  },
+  {
+   "bytes": 211450,
+   "dist_info": "markdown_it_py-4.0.0.dist-info",
+   "files": 66,
+   "license": "MIT License",
+   "name": "markdown-it-py",
+   "sha256": "7b7772f845aa1b8a3b0d97e814df120bf5dbcb6155676e528d7a8404429bc362",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "4.0.0"
+  },
+  {
+   "bytes": 17785,
+   "dist_info": "markupsafe-3.0.3.dist-info",
+   "files": 3,
+   "license": "BSD-3-Clause",
+   "name": "markupsafe",
+   "sha256": "3a6056911d36219a17e696990affa446c897fcc80b0c799c48bf0aa3ccccafb4",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "3.0.3"
+  },
+  {
+   "bytes": 7481860,
+   "dist_info": "matplotlib-3.10.9.dist-info",
+   "files": 290,
+   "license": "Python Software Foundation License",
+   "name": "matplotlib",
+   "sha256": "aa5f5f98bb67e1a1962e92f96779954e7e1debefba4ee452036bcb95c5563a78",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "3.10.9"
+  },
+  {
+   "bytes": 492979,
+   "dist_info": "mcp-1.12.1.dist-info",
+   "files": 81,
+   "license": "MIT License",
+   "name": "mcp",
+   "sha256": "d17f76e0f0d5ca9b3248be4bc30d7559a8ca0a16811953400d9a9e83a2e72e48",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "1.12.1"
+  },
+  {
+   "bytes": 130396,
+   "dist_info": "mdit_py_plugins-0.5.0.dist-info",
+   "files": 35,
+   "license": "MIT License",
+   "name": "mdit-py-plugins",
+   "sha256": "7ae3e5f00989a941ba67a3a2d6c02110ed486d1fd90abccec422ef1beb975c3e",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.5.0"
+  },
+  {
+   "bytes": 18437,
+   "dist_info": "mdurl-0.1.2.dist-info",
+   "files": 6,
+   "license": "MIT License",
+   "name": "mdurl",
+   "sha256": "f4bc66f5c3ec361263715e778e010e767611604487440fc71f313f98062fa8a9",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.1.2"
+  },
+  {
+   "bytes": 15041,
+   "dist_info": "multitasking-0.0.12.dist-info",
+   "files": 1,
+   "license": "Apache Software License",
+   "name": "multitasking",
+   "sha256": "6ab2c702ce08415e59b080647aee720f5d9ef23aa457bb976821cd8f7cf177fd",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.0.12"
+  },
+  {
+   "bytes": 7320165,
+   "dist_info": "mypy-1.20.2.dist-info",
+   "files": 428,
+   "license": "MIT",
+   "name": "mypy",
+   "sha256": "8094a9f096e4949f3dcf48d00f7c96ec4cb9c2eaca44536632a0b8d3ae9ea02c",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "1.20.2"
+  },
+  {
+   "bytes": 7754,
+   "dist_info": "mypy_extensions-1.1.0.dist-info",
+   "files": 1,
+   "license": "MIT",
+   "name": "mypy-extensions",
+   "sha256": "1d8f24d2854b8a671c922b005f1160d4a83d40af8646e6200610f1bf3cff2bfc",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "1.1.0"
+  },
+  {
+   "bytes": 8815589,
+   "dist_info": "numpy-2.4.3.dist-info",
+   "files": 444,
+   "license": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0",
+   "name": "numpy",
+   "sha256": "88b4ce26abeac6532b8240726697345030bbeb4bb329f732aa5991e31fe3af88",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "2.4.3"
+  },
+  {
+   "bytes": 8295,
+   "dist_info": "outcome-1.3.0.post0.dist-info",
+   "files": 4,
+   "license": "MIT License; Apache Software License",
+   "name": "outcome",
+   "sha256": "e01686ffdbebcea43eeecc5e57ce05ac3f2d1229e0ce816602c0f76840ea0025",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "1.3.0.post0"
+  },
+  {
+   "bytes": 364452,
+   "dist_info": "packaging-26.2.dist-info",
+   "files": 20,
+   "license": "Apache-2.0 OR BSD-2-Clause",
+   "name": "packaging",
+   "sha256": "5a0c4c1958103e9c4255f032cb699457d745b4136a18a5ef0d029ca1ea313ac0",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "26.2"
+  },
+  {
+   "bytes": 20663733,
+   "dist_info": "pandas-3.0.2.dist-info",
+   "files": 1419,
+   "license": "BSD License",
+   "name": "pandas",
+   "sha256": "da1813010e1095b7bf4f8ac7e5f88f2e3bbfe89f14b5d91b4c41fa5518a6358f",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "3.0.2"
+  },
+  {
+   "bytes": 304631,
+   "dist_info": "pandas_datareader-0.10.0.dist-info",
+   "files": 80,
+   "license": "BSD License",
+   "name": "pandas-datareader",
+   "sha256": "7756cb81ef00c335f7659ea68bdc7248dd52c0fa0987fb999e1eec4aa71ea2af",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.10.0"
+  },
+  {
+   "bytes": 129828,
+   "dist_info": "pathspec-1.1.1.dist-info",
+   "files": 31,
+   "license": "Mozilla Public License 2.0 (MPL 2.0)",
+   "name": "pathspec",
+   "sha256": "0930b1a0b3a478def2c979bf6a366d4febb9ed16eacbc93920f2b204b4c19e9e",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "1.1.1"
+  },
+  {
+   "bytes": 740996,
+   "dist_info": "patsy-1.0.2.dist-info",
+   "files": 30,
+   "license": "BSD License",
+   "name": "patsy",
+   "sha256": "078c32017d73b513b466ef4c0bdb20268e920a8943770b81296f7005de4a982a",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "1.0.2"
+  },
+  {
+   "bytes": 540214,
+   "dist_info": "peewee-3.18.2.dist-info",
+   "files": 25,
+   "license": "MIT License",
+   "name": "peewee",
+   "sha256": "27d78c16802dd29aa7f2fe7b259e6cd5a26d34d909f284c66d75ede16eaba47e",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "3.18.2"
+  },
+  {
+   "bytes": 1143036,
+   "dist_info": "pillow-12.1.1.dist-info",
+   "files": 97,
+   "license": "MIT-CMU",
+   "name": "pillow",
+   "sha256": "55b6f758769d9a0f3fe687320a6aa8336f77f769e37f8aa5395492664eef7bac",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "12.1.1"
+  },
+  {
+   "bytes": 4411240,
+   "dist_info": "pip-25.0.dist-info",
+   "files": 384,
+   "license": "MIT License",
+   "name": "pip",
+   "sha256": "727136defd16d92e88cafa63c5b5cf139a925cd70ae755861bbd732ab5838d6c",
+   "site": "/opt/homebrew/lib/python3.13/site-packages",
+   "version": "25.0"
+  },
+  {
+   "bytes": 69315,
+   "dist_info": "platformdirs-4.3.8.dist-info",
+   "files": 8,
+   "license": "MIT",
+   "name": "platformdirs",
+   "sha256": "9a8d06a9286e2f8fb9cb3fd72319f747e4d97552209e3efd562f9f3f26eb28f8",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "4.3.8"
+  },
+  {
+   "bytes": 636313,
+   "dist_info": "playwright-1.58.0.dist-info",
+   "files": 61,
+   "license": "Apache-2.0",
+   "name": "playwright",
+   "sha256": "63e6d188988a215ab2a1a90408afc39b4595ca3f4b3a95d6d5728f0afe356742",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "1.58.0"
+  },
+  {
+   "bytes": 58749,
+   "dist_info": "pluggy-1.6.0.dist-info",
+   "files": 8,
+   "license": "MIT License",
+   "name": "pluggy",
+   "sha256": "53d28fc2030548659cb183584f616a851b5433ce350e6a889d50f31eab610ecc",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "1.6.0"
+  },
+  {
+   "bytes": 1372376,
+   "dist_info": "prompt_toolkit-3.0.52.dist-info",
+   "files": 145,
+   "license": "BSD License",
+   "name": "prompt-toolkit",
+   "sha256": "d54b5bce2d46c4389ace3cdfd383bd83e6d42ded66711d3584c78da81ab64d1f",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "3.0.52"
+  },
+  {
+   "bytes": 907199,
+   "dist_info": "protobuf-6.31.1.dist-info",
+   "files": 54,
+   "license": "3-Clause BSD License",
+   "name": "protobuf",
+   "sha256": "0c69e272a7c57901d5b9f851ae368ee8e527ca93d87b53837d59fec64f7470e7",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "6.31.1"
+  },
+  {
+   "bytes": 367922,
+   "dist_info": "pyasn1-0.6.1.dist-info",
+   "files": 32,
+   "license": "BSD License",
+   "name": "pyasn1",
+   "sha256": "ea24b6b49b2cf7c0c9aea378043641714fa4ffcc3478b874bdc2d8fc8f1dac93",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.6.1"
+  },
+  {
+   "bytes": 718521,
+   "dist_info": "pyasn1_modules-0.4.2.dist-info",
+   "files": 132,
+   "license": "BSD License",
+   "name": "pyasn1-modules",
+   "sha256": "7fcc65dd8d77586e3bf7ec50a180940a966743e79a7648ecba29e3313d30fb53",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.4.2"
+  },
+  {
+   "bytes": 603164,
+   "dist_info": "pycparser-2.22.dist-info",
+   "files": 17,
+   "license": "BSD License",
+   "name": "pycparser",
+   "sha256": "e902fb77e3db51a5fff2db1530cb80a65750f446fa5bc96a7c1b0a1cf10ad7d8",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "2.22"
+  },
+  {
+   "bytes": 1693591,
+   "dist_info": "pydantic-2.11.7.dist-info",
+   "files": 104,
+   "license": "MIT",
+   "name": "pydantic",
+   "sha256": "286cb9a89824869deee554ee9f60935ef95d4a16454ece7728679972cdf76f42",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "2.11.7"
+  },
+  {
+   "bytes": 154058,
+   "dist_info": "pydantic_core-2.33.2.dist-info",
+   "files": 2,
+   "license": "MIT License",
+   "name": "pydantic-core",
+   "sha256": "6ff57a6abe3f157b8072703c4f7e9bcf0b1b2f9d7eb24f207a68a9e501444a2a",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "2.33.2"
+  },
+  {
+   "bytes": 156698,
+   "dist_info": "pydantic_settings-2.10.1.dist-info",
+   "files": 21,
+   "license": "MIT",
+   "name": "pydantic-settings",
+   "sha256": "eb533d26b085c47807c3b26243c8a8b13afcb97ba637824965ec4231c6c7bc09",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "2.10.1"
+  },
+  {
+   "bytes": 34611,
+   "dist_info": "pyee-13.0.1.dist-info",
+   "files": 8,
+   "license": "MIT License",
+   "name": "pyee",
+   "sha256": "72a3519567d231c95ffaa54596745324fb5aa0ab97f6b7fdb0255ee232cc1b63",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "13.0.1"
+  },
+  {
+   "bytes": 4476127,
+   "dist_info": "pygments-2.20.0.dist-info",
+   "files": 339,
+   "license": "BSD-2-Clause",
+   "name": "pygments",
+   "sha256": "c7949aa6975944a1dc0d1d50a957305d591cdd50d5e49f47195eee82a4366c8c",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "2.20.0"
+  },
+  {
+   "bytes": 413034,
+   "dist_info": "pyparsing-3.2.3.dist-info",
+   "files": 13,
+   "license": "MIT License",
+   "name": "pyparsing",
+   "sha256": "e86c9e4767401f1a8e7cbbd153516f6f85f79d44060c7e3a84dcd1b9026e36e8",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "3.2.3"
+  },
+  {
+   "bytes": 35052,
+   "dist_info": "PySocks-1.7.1.dist-info",
+   "files": 2,
+   "license": "BSD",
+   "name": "pysocks",
+   "sha256": "d27a8c0717035f5205d28b6dd0e92a301a9ff8aafdcb14211e52e9819d4f7a81",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "1.7.1"
+  },
+  {
+   "bytes": 1317664,
+   "dist_info": "pytest-9.0.3.dist-info",
+   "files": 74,
+   "license": "MIT",
+   "name": "pytest",
+   "sha256": "2e0c674c90222ceb36f9f5e20314b80070636639ab3c8a43c032e3de534014e8",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "9.0.3"
+  },
+  {
+   "bytes": 271736,
+   "dist_info": "python_dateutil-2.9.0.post0.dist-info",
+   "files": 18,
+   "license": "BSD License; Apache Software License",
+   "name": "python-dateutil",
+   "sha256": "fdf72fa49ecbdc263d4794cc48b5473687811c745928db46e4b897cb18b3fb18",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "2.9.0.post0"
+  },
+  {
+   "bytes": 28944,
+   "dist_info": "python_dotenv-1.1.1.dist-info",
+   "files": 8,
+   "license": "BSD License",
+   "name": "python-dotenv",
+   "sha256": "c93f3ed87c6d848e482cf8bb70084c36825f7d96d9092775cb10a998644680bc",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "1.1.1"
+  },
+  {
+   "bytes": 85658,
+   "dist_info": "python_multipart-0.0.20.dist-info",
+   "files": 8,
+   "license": "Apache-2.0",
+   "name": "python-multipart",
+   "sha256": "25ca15bfd537b814b43e6e107b63207495000230b35f7c6550cbdcf385b4ff57",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.0.20"
+  },
+  {
+   "bytes": 949082,
+   "dist_info": "python_pptx-1.0.2.dist-info",
+   "files": 101,
+   "license": "MIT License",
+   "name": "python-pptx",
+   "sha256": "4daec21b0fbd7b34f3ce3c4f3aaa50a1ac2b33b3b238e74d6aeee0d37d0447d7",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "1.0.2"
+  },
+  {
+   "bytes": 69941,
+   "dist_info": "pytz-2025.2.dist-info",
+   "files": 6,
+   "license": "MIT License",
+   "name": "pytz",
+   "sha256": "4c741ef7a1d472cf27e9dca239c134cbdeaf90c54af36dba3e59e500fb8c2012",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "2025.2"
+  },
+  {
+   "bytes": 218908,
+   "dist_info": "PyYAML-6.0.2.dist-info",
+   "files": 18,
+   "license": "MIT License",
+   "name": "pyyaml",
+   "sha256": "fce02849a62e2059a74a046c45bc676fa9f3b8a315232f3330530a09f088b8fd",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "6.0.2"
+  },
+  {
+   "bytes": 1372,
+   "dist_info": "quantlib-1.42.1.dist-info",
+   "files": 1,
+   "license": "BSD-3-Clause",
+   "name": "quantlib",
+   "sha256": "624bc06f9936b72bc790d196892c13202d452f8c14991be24cc5c426b83884df",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "1.42.1"
+  },
+  {
+   "bytes": 109303,
+   "dist_info": "referencing-0.36.2.dist-info",
+   "files": 13,
+   "license": "MIT",
+   "name": "referencing",
+   "sha256": "9c891ccf89011e022649a9f424145e15fa6eceaf733a5fe2ce7e7d5f84b7bef8",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.36.2"
+  },
+  {
+   "bytes": 188473,
+   "dist_info": "requests-2.32.4.dist-info",
+   "files": 18,
+   "license": "Apache Software License",
+   "name": "requests",
+   "sha256": "4c00ff132a232c0335a4f87a60f5ece20ce79e53e6958a105a21153dbe781bfa",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "2.32.4"
+  },
+  {
+   "bytes": 935017,
+   "dist_info": "rich-14.2.0.dist-info",
+   "files": 78,
+   "license": "MIT License",
+   "name": "rich",
+   "sha256": "d5dc53c68a5f81c0ac4a8f74db4b57aee6ca2744aa5e23ccda3845c8be9242b5",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "14.2.0"
+  },
+  {
+   "bytes": 99,
+   "dist_info": "rpds_py-0.26.0.dist-info",
+   "files": 1,
+   "license": "MIT",
+   "name": "rpds-py",
+   "sha256": "37736b153e5e036a09f45d747fb09fe03090d3e7f50a1b5e33d67f120dcda615",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.26.0"
+  },
+  {
+   "bytes": 85884,
+   "dist_info": "rsa-4.9.1.dist-info",
+   "files": 14,
+   "license": "Apache Software License",
+   "name": "rsa",
+   "sha256": "80274368fa37c3cc5001a48d0719d28ee083bb9b7877f409091310b2f827d442",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "4.9.1"
+  },
+  {
+   "bytes": 3887,
+   "dist_info": "ruff-0.15.12.dist-info",
+   "files": 3,
+   "license": "MIT",
+   "name": "ruff",
+   "sha256": "d1287c7886f53e49e088671f4ad2140d61919bcccca789f214ae11f0d095bef0",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "0.15.12"
+  },
+  {
+   "bytes": 22910291,
+   "dist_info": "scipy-1.17.1.dist-info",
+   "files": 1013,
+   "license": "BSD License",
+   "name": "scipy",
+   "sha256": "5c4edf141c87371ceab9df050ab5c9f30b560dcb3a11314c0c108b4c75d43f5a",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "1.17.1"
+  },
+  {
+   "bytes": 1031041,
+   "dist_info": "seaborn-0.13.2.dist-info",
+   "files": 54,
+   "license": "BSD License",
+   "name": "seaborn",
+   "sha256": "b988356e657b957795194f23cf3d9abef7dde3713a0fc6075fd5ee5447f6447b",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.13.2"
+  },
+  {
+   "bytes": 4463837,
+   "dist_info": "selenium-4.35.0.dist-info",
+   "files": 284,
+   "license": "Apache-2.0",
+   "name": "selenium",
+   "sha256": "09578e075c99b41ba40ede829161fc488bc66d9605a3273e7d2380372c145c1e",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "4.35.0"
+  },
+  {
+   "bytes": 3682085,
+   "dist_info": "setuptools-80.9.0.dist-info",
+   "files": 362,
+   "license": "MIT",
+   "name": "setuptools",
+   "sha256": "71955704d013dbfe339cd33bc3f27d4a74009a71a35fa8e7dfd0309089892a77",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "80.9.0"
+  },
+  {
+   "bytes": 34703,
+   "dist_info": "six-1.17.0.dist-info",
+   "files": 1,
+   "license": "MIT License",
+   "name": "six",
+   "sha256": "b57c70b80f2f27cca3404dafa09d15824cf687040e73cfad270a560f99e181ec",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "1.17.0"
+  },
+  {
+   "bytes": 5325,
+   "dist_info": "sniffio-1.3.1.dist-info",
+   "files": 5,
+   "license": "MIT License; Apache Software License",
+   "name": "sniffio",
+   "sha256": "dae90799b89e242a8ee74004218fee2d56d3d840a1918e142d2b87e39ea333b1",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "1.3.1"
+  },
+  {
+   "bytes": 120999,
+   "dist_info": "sortedcontainers-2.4.0.dist-info",
+   "files": 4,
+   "license": "Apache Software License",
+   "name": "sortedcontainers",
+   "sha256": "654e1e13d485fe62ea8d7b44205dbd71f01b69785b4891ac28e06bc15c6b5756",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "2.4.0"
+  },
+  {
+   "bytes": 136941,
+   "dist_info": "soupsieve-2.7.dist-info",
+   "files": 7,
+   "license": "MIT",
+   "name": "soupsieve",
+   "sha256": "b7bedf5745f0c19f7aa20b77c7def3c7db3de35fb615ccb392274e15baebf5ad",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "2.7"
+  },
+  {
+   "bytes": 12504,
+   "dist_info": "sse_starlette-2.4.1.dist-info",
+   "files": 3,
+   "license": "BSD-3-Clause",
+   "name": "sse-starlette",
+   "sha256": "fc58fbcf6b4f1c87f45d15cf850f4a88332558d78f67f00a3d4dede4c6b49a99",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "2.4.1"
+  },
+  {
+   "bytes": 246998,
+   "dist_info": "starlette-0.47.2.dist-info",
+   "files": 34,
+   "license": "BSD-3-Clause",
+   "name": "starlette",
+   "sha256": "07005aab9f42ad8de6063c475fb56e3cdc9239a398d05ac513f39cf4c17a22b7",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.47.2"
+  },
+  {
+   "bytes": 14557701,
+   "dist_info": "statsmodels-0.14.6.dist-info",
+   "files": 1125,
+   "license": "BSD License",
+   "name": "statsmodels",
+   "sha256": "b030f7f0ba218094154755cc1ff7b5ed7291195b344b87195d4bad0de37cc40c",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.14.6"
+  },
+  {
+   "bytes": 69261,
+   "dist_info": "tenacity-9.1.2.dist-info",
+   "files": 12,
+   "license": "Apache Software License",
+   "name": "tenacity",
+   "sha256": "1b5142639d066763f73e55ab074039ef4b0e88d825436769498e86318fb7575c",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "9.1.2"
+  },
+  {
+   "bytes": 2696207,
+   "dist_info": "textual-7.5.0.dist-info",
+   "files": 246,
+   "license": "MIT License",
+   "name": "textual",
+   "sha256": "e87516abf34c55443babf5712d377439e17cd35bb957cc402cc274a801309b23",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "7.5.0"
+  },
+  {
+   "bytes": 73043241,
+   "dist_info": "torch-2.11.0.dist-info",
+   "files": 12124,
+   "license": "BSD-3-Clause",
+   "name": "torch",
+   "sha256": "c88fd00376d6cbecc9a1ecd067a0a1b408ad27861e0f5083a586537e3a96d440",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "2.11.0"
+  },
+  {
+   "bytes": 1716643,
+   "dist_info": "trio-0.30.0.dist-info",
+   "files": 140,
+   "license": "MIT OR Apache-2.0",
+   "name": "trio",
+   "sha256": "ee8ce83e2d9ff0a9568804dc7664b26f555a9e5c26f7101d22fdd61af99e6d62",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.30.0"
+  },
+  {
+   "bytes": 73397,
+   "dist_info": "trio_websocket-0.12.2.dist-info",
+   "files": 3,
+   "license": "MIT License",
+   "name": "trio-websocket",
+   "sha256": "2d8bd21a23fd776c3b96001eab76ded056b6c353830262682f5e68d403fe6a3e",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.12.2"
+  },
+  {
+   "bytes": 165012,
+   "dist_info": "typing_extensions-4.15.0.dist-info",
+   "files": 1,
+   "license": "PSF-2.0",
+   "name": "typing-extensions",
+   "sha256": "5f8d95ca75f8e8b93312fc0f44f34841731772b35cb3a992120d0c65a1bf8cbf",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "4.15.0"
+  },
+  {
+   "bytes": 39446,
+   "dist_info": "typing_inspection-0.4.1.dist-info",
+   "files": 3,
+   "license": "MIT",
+   "name": "typing-inspection",
+   "sha256": "e699417b05b3782a0380f46a1e612dac54ed8b47cede2100c179f4393ce773a0",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.4.1"
+  },
+  {
+   "bytes": 252,
+   "dist_info": "tzdata-2025.2.dist-info",
+   "files": 22,
+   "license": "Apache Software License",
+   "name": "tzdata",
+   "sha256": "58eb917ca009327365c5a124fc27417a2469849f687bf4503a7660909c07b8de",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "2025.2"
+  },
+  {
+   "bytes": 2709,
+   "dist_info": "uc_micro_py-1.0.3.dist-info",
+   "files": 13,
+   "license": "MIT License",
+   "name": "uc-micro-py",
+   "sha256": "373b7ac3d09bf880581b6d3862fcbb0d3d374a0a359f506ef4181ae560af8864",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "1.0.3"
+  },
+  {
+   "bytes": 409983,
+   "dist_info": "urllib3-2.5.0.dist-info",
+   "files": 36,
+   "license": "MIT",
+   "name": "urllib3",
+   "sha256": "5cf1c763253a79dc76af970a8b5975a45cf641fbd07ad2beab60b44e5a4c6c56",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "2.5.0"
+  },
+  {
+   "bytes": 205328,
+   "dist_info": "uvicorn-0.35.0.dist-info",
+   "files": 39,
+   "license": "BSD-3-Clause",
+   "name": "uvicorn",
+   "sha256": "1c9e0d55c3b7fdfd602b993b916cadae9a2337b7cd98493e6ef323875f32d2c2",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.35.0"
+  },
+  {
+   "bytes": 183250,
+   "dist_info": "websocket_client-1.8.0.dist-info",
+   "files": 25,
+   "license": "Apache Software License",
+   "name": "websocket-client",
+   "sha256": "a22845ce324891a3b91d7e4200b796f89103fd4b45c0d1df56b373ee4c8293cc",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "1.8.0"
+  },
+  {
+   "bytes": 612705,
+   "dist_info": "websockets-15.0.1.dist-info",
+   "files": 48,
+   "license": "BSD License",
+   "name": "websockets",
+   "sha256": "af2a3ada0a8c434c410a01a17377469d1458e80d9a0956235717fd25ad3cb5b2",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "15.0.1"
+  },
+  {
+   "bytes": 205602,
+   "dist_info": "wheel-0.45.1.dist-info",
+   "files": 29,
+   "license": "MIT License",
+   "name": "wheel",
+   "sha256": "91875795a4433ee1374230988713b638eaafd1e4129fe1d00e98a86e383acaf3",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.45.1"
+  },
+  {
+   "bytes": 73211,
+   "dist_info": "wsproto-1.2.0.dist-info",
+   "files": 8,
+   "license": "MIT License",
+   "name": "wsproto",
+   "sha256": "87f94d8d20e8ad2b2ad1f81a79787a370aa57ccf48799fa64ce86ba4f70234e8",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "1.2.0"
+  },
+  {
+   "bytes": 841932,
+   "dist_info": "xlsxwriter-3.2.9.dist-info",
+   "files": 42,
+   "license": "BSD License",
+   "name": "xlsxwriter",
+   "sha256": "8d2a4ef4a063121dfd086894e36cad976f8e7d9f0358c2215741b6213a81ff51",
+   "site": "/opt/homebrew/lib/python3.14/site-packages",
+   "version": "3.2.9"
+  },
+  {
+   "bytes": 458589,
+   "dist_info": "yfinance-0.2.65.dist-info",
+   "files": 31,
+   "license": "Apache Software License",
+   "name": "yfinance",
+   "sha256": "036c48bd06dce0c5a9fbfba8c1d0c2dad8d58e3040a44a0018b7b64be5893554",
+   "site": "/opt/homebrew/lib/python3.11/site-packages",
+   "version": "0.2.65"
+  }
+ ],
+ "python": "3.15",
+ "version": "ext-sources-v4"
+}

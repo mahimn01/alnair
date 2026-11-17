@@ -1,0 +1,44 @@
+{
+  "name": "alnair-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "npm run schema:check && tsc --noEmit && vite build",
+    "test": "vitest run",
+    "tauri": "tauri",
+    "screens": "node scripts/screens.mjs",
+    "schema": "node --experimental-strip-types scripts/schema.mjs",
+    "schema:check": "node --experimental-strip-types scripts/schema.mjs --check",
+    "test:ui": "node scripts/mock-bridge.mjs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@xterm/addon-fit": "^0.10",
+    "@xterm/xterm": "^5.5",
+    "lucide-react": "^0.468",
+    "motion": "^12",
+    "react": "^19",
+    "react-dom": "^19",
+    "react-markdown": "^10",
+    "remark-gfm": "^4",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4",
+    "@tauri-apps/cli": "^2",
+    "@testing-library/jest-dom": "^6",
+    "@testing-library/react": "^16",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5",
+    "jsdom": "^26",
+    "playwright": "^1.56",
+    "prettier": "^3.9.10",
+    "tailwindcss": "^4",
+    "typescript": "^5.9",
+    "vite": "^7",
+    "vitest": "^3"
+  }
+}

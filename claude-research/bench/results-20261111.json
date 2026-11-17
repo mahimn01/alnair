@@ -1,0 +1,3380 @@
+{
+ "meta": {
+  "started": "2026-11-12T01:33:43Z",
+  "plan_sha256": "90c6715fdc5bdf937fbef3b8d038f113c11845bcf10bcfb43152e7a3a4688567",
+  "arms": {
+   "before_today": {
+    "commit": "a75f5cf",
+    "loaded_tools": 26,
+    "loaded_definition_chars": 16712
+   },
+   "after_fixes": {
+    "commit": "c5719cb",
+    "loaded_tools": 27,
+    "loaded_definition_chars": 18575
+   },
+   "revamp": {
+    "commit": "6d9ee38",
+    "loaded_tools": 7,
+    "loaded_definition_chars": 9526
+   }
+  }
+ },
+ "rows": [
+  {
+   "task": "Q01",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "24996056000",
+   "calls": 3,
+   "chars": 5152,
+   "seconds": 1.6,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2184,
+     "seconds": 0.72
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2207,
+     "seconds": 0.66
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 761,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q01",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "24996056000",
+   "calls": 3,
+   "chars": 5152,
+   "seconds": 1.35,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2184,
+     "seconds": 0.46
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2207,
+     "seconds": 0.66
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 761,
+     "seconds": 0.23
+    }
+   ]
+  },
+  {
+   "task": "Q01",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "24996056000",
+   "calls": 3,
+   "chars": 3521,
+   "seconds": 0.9,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 1326,
+     "seconds": 0.44
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 330,
+     "seconds": 0.37
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 1865,
+     "seconds": 0.09
+    }
+   ]
+  },
+  {
+   "task": "Q02",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "1866916000",
+   "calls": 3,
+   "chars": 5222,
+   "seconds": 1.24,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2209,
+     "seconds": 0.37
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2249,
+     "seconds": 0.65
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 764,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q02",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "1866916000",
+   "calls": 3,
+   "chars": 3542,
+   "seconds": 0.75,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 1336,
+     "seconds": 0.27
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 331,
+     "seconds": 0.38
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 1875,
+     "seconds": 0.09
+    }
+   ]
+  },
+  {
+   "task": "Q02",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "1866916000",
+   "calls": 3,
+   "chars": 5222,
+   "seconds": 1.09,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2209,
+     "seconds": 0.23
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2249,
+     "seconds": 0.64
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 764,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q03",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "265595000000",
+   "calls": 3,
+   "chars": 3730,
+   "seconds": 0.89,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 1423,
+     "seconds": 0.41
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 342,
+     "seconds": 0.39
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 1965,
+     "seconds": 0.09
+    }
+   ]
+  },
+  {
+   "task": "Q03",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "265595000000",
+   "calls": 3,
+   "chars": 4758,
+   "seconds": 0.94,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2315,
+     "seconds": 0.22
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 1667,
+     "seconds": 0.5
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 776,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q03",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "265595000000",
+   "calls": 3,
+   "chars": 4758,
+   "seconds": 0.93,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2315,
+     "seconds": 0.22
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 1667,
+     "seconds": 0.5
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 776,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q04",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "55256000000",
+   "calls": 3,
+   "chars": 5213,
+   "seconds": 1.18,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2203,
+     "seconds": 0.3
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2246,
+     "seconds": 0.66
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 764,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q04",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "55256000000",
+   "calls": 3,
+   "chars": 5213,
+   "seconds": 1.09,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2203,
+     "seconds": 0.19
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2246,
+     "seconds": 0.67
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 764,
+     "seconds": 0.23
+    }
+   ]
+  },
+  {
+   "task": "Q04",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "55256000000",
+   "calls": 3,
+   "chars": 3548,
+   "seconds": 0.71,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 1339,
+     "seconds": 0.24
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 332,
+     "seconds": 0.38
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 1877,
+     "seconds": 0.09
+    }
+   ]
+  },
+  {
+   "task": "Q05",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "143015000000",
+   "calls": 3,
+   "chars": 5592,
+   "seconds": 1.18,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2315,
+     "seconds": 0.31
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2501,
+     "seconds": 0.65
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 776,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q05",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "143015000000",
+   "calls": 3,
+   "chars": 3736,
+   "seconds": 0.73,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 1425,
+     "seconds": 0.19
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 343,
+     "seconds": 0.44
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 1968,
+     "seconds": 0.1
+    }
+   ]
+  },
+  {
+   "task": "Q05",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "143015000000",
+   "calls": 3,
+   "chars": 5592,
+   "seconds": 1.14,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2315,
+     "seconds": 0.24
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2501,
+     "seconds": 0.67
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 776,
+     "seconds": 0.23
+    }
+   ]
+  },
+  {
+   "task": "Q06",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "44281000000",
+   "calls": 3,
+   "chars": 3565,
+   "seconds": 0.85,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 1344,
+     "seconds": 0.32
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 336,
+     "seconds": 0.42
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 1885,
+     "seconds": 0.1
+    }
+   ]
+  },
+  {
+   "task": "Q06",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "44281000000",
+   "calls": 3,
+   "chars": 5248,
+   "seconds": 1.16,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2218,
+     "seconds": 0.19
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2261,
+     "seconds": 0.72
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 769,
+     "seconds": 0.25
+    }
+   ]
+  },
+  {
+   "task": "Q06",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "44281000000",
+   "calls": 3,
+   "chars": 5248,
+   "seconds": 1.15,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2218,
+     "seconds": 0.21
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2261,
+     "seconds": 0.7
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 769,
+     "seconds": 0.24
+    }
+   ]
+  },
+  {
+   "task": "Q07",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "arXiv:1706.03762; v1 submitted 2017-06-12",
+   "calls": 4,
+   "chars": 3725,
+   "seconds": 1.12,
+   "log": [
+    {
+     "tool": "scholar_work",
+     "exit": 0,
+     "chars": 1834,
+     "seconds": 0.23
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 520,
+     "seconds": 0.4
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 560,
+     "seconds": 0.24
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 811,
+     "seconds": 0.24
+    }
+   ]
+  },
+  {
+   "task": "Q07",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "arXiv:1706.03762; v1 submitted 2017-06-12",
+   "calls": 4,
+   "chars": 3725,
+   "seconds": 1.11,
+   "log": [
+    {
+     "tool": "scholar_work",
+     "exit": 0,
+     "chars": 1834,
+     "seconds": 0.19
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 520,
+     "seconds": 0.42
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 560,
+     "seconds": 0.25
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 811,
+     "seconds": 0.25
+    }
+   ]
+  },
+  {
+   "task": "Q07",
+   "arm": "revamp",
+   "ok": false,
+   "verified": false,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "arXiv:1706.03762; v1 submitted 2017-06-12",
+   "note": "research_report: REFUSED | 2 verified, 0 derived, 0 reasoned, 0 open conflict(s), 0 not accepted | saved <scratch>",
+   "calls": 3,
+   "chars": 3697,
+   "seconds": 0.7,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 792,
+     "seconds": 0.18
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 463,
+     "seconds": 0.42
+    },
+    {
+     "tool": "research_report",
+     "exit": 1,
+     "chars": 2442,
+     "seconds": 0.1
+    }
+   ]
+  },
+  {
+   "task": "Q08",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "arXiv:1810.04805; submitted 2018-10-11",
+   "calls": 4,
+   "chars": 3869,
+   "seconds": 1.04,
+   "log": [
+    {
+     "tool": "scholar_work",
+     "exit": 0,
+     "chars": 1925,
+     "seconds": 0.17
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 534,
+     "seconds": 0.41
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 574,
+     "seconds": 0.24
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 836,
+     "seconds": 0.23
+    }
+   ]
+  },
+  {
+   "task": "Q08",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "arXiv:1810.04805; submitted 2018-10-11",
+   "calls": 3,
+   "chars": 3358,
+   "seconds": 1.12,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 806,
+     "seconds": 0.25
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 493,
+     "seconds": 0.68
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 2059,
+     "seconds": 0.19
+    }
+   ]
+  },
+  {
+   "task": "Q08",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "arXiv:1810.04805; submitted 2018-10-11",
+   "calls": 4,
+   "chars": 3869,
+   "seconds": 1.04,
+   "log": [
+    {
+     "tool": "scholar_work",
+     "exit": 0,
+     "chars": 1925,
+     "seconds": 0.18
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 534,
+     "seconds": 0.39
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 574,
+     "seconds": 0.24
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 836,
+     "seconds": 0.23
+    }
+   ]
+  },
+  {
+   "task": "Q09",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "arXiv:1512.03385; submitted 2015-12-10",
+   "calls": 3,
+   "chars": 3359,
+   "seconds": 0.69,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 807,
+     "seconds": 0.21
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 493,
+     "seconds": 0.39
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 2059,
+     "seconds": 0.09
+    }
+   ]
+  },
+  {
+   "task": "Q09",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "arXiv:1512.03385; submitted 2015-12-10",
+   "calls": 4,
+   "chars": 3792,
+   "seconds": 1.09,
+   "log": [
+    {
+     "tool": "scholar_work",
+     "exit": 0,
+     "chars": 1844,
+     "seconds": 0.24
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 535,
+     "seconds": 0.4
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 575,
+     "seconds": 0.22
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 838,
+     "seconds": 0.23
+    }
+   ]
+  },
+  {
+   "task": "Q09",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "arXiv:1512.03385; submitted 2015-12-10",
+   "calls": 4,
+   "chars": 3792,
+   "seconds": 1.03,
+   "log": [
+    {
+     "tool": "scholar_work",
+     "exit": 0,
+     "chars": 1844,
+     "seconds": 0.17
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 535,
+     "seconds": 0.39
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 575,
+     "seconds": 0.23
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 838,
+     "seconds": 0.23
+    }
+   ]
+  },
+  {
+   "task": "Q10",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "arXiv:2006.11239; first author Jonathan Ho; submitted 2020-06-19",
+   "calls": 5,
+   "chars": 4482,
+   "seconds": 1.25,
+   "log": [
+    {
+     "tool": "scholar_work",
+     "exit": 0,
+     "chars": 1819,
+     "seconds": 0.16
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 535,
+     "seconds": 0.39
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 575,
+     "seconds": 0.23
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 560,
+     "seconds": 0.23
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 993,
+     "seconds": 0.24
+    }
+   ]
+  },
+  {
+   "task": "Q10",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "arXiv:2006.11239; first author Jonathan Ho; submitted 2020-06-19",
+   "calls": 5,
+   "chars": 4482,
+   "seconds": 1.24,
+   "log": [
+    {
+     "tool": "scholar_work",
+     "exit": 0,
+     "chars": 1819,
+     "seconds": 0.16
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 535,
+     "seconds": 0.39
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 575,
+     "seconds": 0.23
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 560,
+     "seconds": 0.23
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 993,
+     "seconds": 0.23
+    }
+   ]
+  },
+  {
+   "task": "Q10",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "arXiv:2006.11239; first author Jonathan Ho; submitted 2020-06-19",
+   "calls": 3,
+   "chars": 3915,
+   "seconds": 0.82,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 857,
+     "seconds": 0.17
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 628,
+     "seconds": 0.45
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 2430,
+     "seconds": 0.2
+    }
+   ]
+  },
+  {
+   "task": "Q11",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "priority 1997-01-10; inventor Lawrence Page",
+   "calls": 4,
+   "chars": 3857,
+   "seconds": 1.82,
+   "log": [
+    {
+     "tool": "patent_get",
+     "exit": 0,
+     "chars": 1780,
+     "seconds": 0.93
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 633,
+     "seconds": 0.41
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 574,
+     "seconds": 0.25
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 870,
+     "seconds": 0.23
+    }
+   ]
+  },
+  {
+   "task": "Q11",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "priority 1997-01-10; inventor Lawrence Page",
+   "calls": 3,
+   "chars": 3662,
+   "seconds": 1.71,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 1045,
+     "seconds": 1.17
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 467,
+     "seconds": 0.43
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 2150,
+     "seconds": 0.11
+    }
+   ]
+  },
+  {
+   "task": "Q11",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "priority 1997-01-10; inventor Lawrence Page",
+   "calls": 4,
+   "chars": 3201,
+   "seconds": 2.07,
+   "log": [
+    {
+     "tool": "patent_get",
+     "exit": 0,
+     "chars": 1124,
+     "seconds": 1.21
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 633,
+     "seconds": 0.4
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 574,
+     "seconds": 0.23
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 870,
+     "seconds": 0.23
+    }
+   ]
+  },
+  {
+   "task": "Q12",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "priority 1974-11-04; assignee Leland Stanford Junior University",
+   "calls": 3,
+   "chars": 3738,
+   "seconds": 1.07,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 1067,
+     "seconds": 0.56
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 469,
+     "seconds": 0.42
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 2202,
+     "seconds": 0.09
+    }
+   ]
+  },
+  {
+   "task": "Q12",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "priority 1974-11-04; assignee Leland Stanford Junior University",
+   "calls": 4,
+   "chars": 3319,
+   "seconds": 1.58,
+   "log": [
+    {
+     "tool": "patent_get",
+     "exit": 0,
+     "chars": 1182,
+     "seconds": 0.67
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 632,
+     "seconds": 0.44
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 593,
+     "seconds": 0.24
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 912,
+     "seconds": 0.23
+    }
+   ]
+  },
+  {
+   "task": "Q12",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "priority 1974-11-04; assignee Leland Stanford Junior University",
+   "calls": 4,
+   "chars": 4284,
+   "seconds": 1.4,
+   "log": [
+    {
+     "tool": "patent_get",
+     "exit": 0,
+     "chars": 2147,
+     "seconds": 0.56
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 632,
+     "seconds": 0.39
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 593,
+     "seconds": 0.23
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 912,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q13",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "20000918084506",
+   "calls": 3,
+   "chars": 6998,
+   "seconds": 2.0,
+   "log": [
+    {
+     "tool": "wayback_cdx",
+     "exit": 0,
+     "chars": 1242,
+     "seconds": 0.78
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 4989,
+     "seconds": 0.98
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 767,
+     "seconds": 0.24
+    }
+   ]
+  },
+  {
+   "task": "Q13",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "20000918084506",
+   "calls": 3,
+   "chars": 6998,
+   "seconds": 2.32,
+   "log": [
+    {
+     "tool": "wayback_cdx",
+     "exit": 0,
+     "chars": 1242,
+     "seconds": 1.09
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 4989,
+     "seconds": 1.0
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 767,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q13",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "20000918084506",
+   "calls": 3,
+   "chars": 3895,
+   "seconds": 1.13,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 1458,
+     "seconds": 0.64
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 322,
+     "seconds": 0.4
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 2115,
+     "seconds": 0.09
+    }
+   ]
+  },
+  {
+   "task": "Q14",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "19970519093803; not the official MIT page: it names SIPB",
+   "calls": 5,
+   "chars": 10254,
+   "seconds": 3.64,
+   "log": [
+    {
+     "tool": "wayback_cdx",
+     "exit": 0,
+     "chars": 1190,
+     "seconds": 0.98
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 4853,
+     "seconds": 0.96
+    },
+    {
+     "tool": "wayback_fetch",
+     "exit": 0,
+     "chars": 1308,
+     "seconds": 0.79
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 1972,
+     "seconds": 0.68
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 931,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q14",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "19970519093803; not the official MIT page: it names SIPB",
+   "calls": 3,
+   "chars": 5221,
+   "seconds": 2.64,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 2058,
+     "seconds": 2.1
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 450,
+     "seconds": 0.45
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 2713,
+     "seconds": 0.1
+    }
+   ]
+  },
+  {
+   "task": "Q14",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "19970519093803; not the official MIT page: it names SIPB",
+   "calls": 5,
+   "chars": 10254,
+   "seconds": 4.11,
+   "log": [
+    {
+     "tool": "wayback_cdx",
+     "exit": 0,
+     "chars": 1190,
+     "seconds": 0.71
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 4853,
+     "seconds": 0.96
+    },
+    {
+     "tool": "wayback_fetch",
+     "exit": 0,
+     "chars": 1308,
+     "seconds": 1.54
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 1972,
+     "seconds": 0.68
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 931,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q15",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "19981202212015; the page mentions finding jobs and apartments",
+   "calls": 3,
+   "chars": 5367,
+   "seconds": 2.4,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 2046,
+     "seconds": 1.91
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 457,
+     "seconds": 0.4
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 2864,
+     "seconds": 0.09
+    }
+   ]
+  },
+  {
+   "task": "Q15",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "19981202212015; the page mentions finding jobs and apartments",
+   "calls": 5,
+   "chars": 9531,
+   "seconds": 4.62,
+   "log": [
+    {
+     "tool": "wayback_cdx",
+     "exit": 0,
+     "chars": 1246,
+     "seconds": 1.09
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 4993,
+     "seconds": 0.94
+    },
+    {
+     "tool": "wayback_fetch",
+     "exit": 0,
+     "chars": 913,
+     "seconds": 1.83
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 1351,
+     "seconds": 0.54
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 1028,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q15",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "19981202212015; the page mentions finding jobs and apartments",
+   "calls": 5,
+   "chars": 9531,
+   "seconds": 3.57,
+   "log": [
+    {
+     "tool": "wayback_cdx",
+     "exit": 0,
+     "chars": 1246,
+     "seconds": 0.85
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 4993,
+     "seconds": 0.93
+    },
+    {
+     "tool": "wayback_fetch",
+     "exit": 0,
+     "chars": 913,
+     "seconds": 1.04
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 1351,
+     "seconds": 0.52
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 1028,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q16",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "30",
+   "calls": 3,
+   "chars": 2645,
+   "seconds": 1.81,
+   "log": [
+    {
+     "tool": "github_get",
+     "exit": 0,
+     "chars": 1283,
+     "seconds": 1.18
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 689,
+     "seconds": 0.42
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 673,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q16",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "30",
+   "calls": 3,
+   "chars": 2645,
+   "seconds": 1.74,
+   "log": [
+    {
+     "tool": "github_get",
+     "exit": 0,
+     "chars": 1283,
+     "seconds": 1.14
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 689,
+     "seconds": 0.38
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 673,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q16",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "30",
+   "calls": 3,
+   "chars": 2973,
+   "seconds": 1.74,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 869,
+     "seconds": 1.24
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 334,
+     "seconds": 0.4
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 1770,
+     "seconds": 0.09
+    }
+   ]
+  },
+  {
+   "task": "Q17",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "DEFAULT_POOLSIZE = 10; DEFAULT_RETRIES = 0",
+   "calls": 4,
+   "chars": 3437,
+   "seconds": 2.0,
+   "log": [
+    {
+     "tool": "github_get",
+     "exit": 0,
+     "chars": 1249,
+     "seconds": 1.17
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 686,
+     "seconds": 0.4
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 684,
+     "seconds": 0.22
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 818,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q17",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "DEFAULT_POOLSIZE = 10; DEFAULT_RETRIES = 0",
+   "calls": 3,
+   "chars": 3577,
+   "seconds": 1.83,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 889,
+     "seconds": 1.25
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 491,
+     "seconds": 0.47
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 2197,
+     "seconds": 0.1
+    }
+   ]
+  },
+  {
+   "task": "Q17",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "DEFAULT_POOLSIZE = 10; DEFAULT_RETRIES = 0",
+   "calls": 4,
+   "chars": 3437,
+   "seconds": 2.06,
+   "log": [
+    {
+     "tool": "github_get",
+     "exit": 0,
+     "chars": 1249,
+     "seconds": 1.2
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 686,
+     "seconds": 0.41
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 684,
+     "seconds": 0.22
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 818,
+     "seconds": 0.23
+    }
+   ]
+  },
+  {
+   "task": "Q18",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "4093",
+   "calls": 3,
+   "chars": 2985,
+   "seconds": 1.65,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 864,
+     "seconds": 1.16
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 341,
+     "seconds": 0.4
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 1780,
+     "seconds": 0.09
+    }
+   ]
+  },
+  {
+   "task": "Q18",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "4093",
+   "calls": 3,
+   "chars": 2745,
+   "seconds": 1.77,
+   "log": [
+    {
+     "tool": "github_get",
+     "exit": 0,
+     "chars": 1383,
+     "seconds": 1.15
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 688,
+     "seconds": 0.4
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 674,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q18",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "4093",
+   "calls": 3,
+   "chars": 2745,
+   "seconds": 1.72,
+   "log": [
+    {
+     "tool": "github_get",
+     "exit": 0,
+     "chars": 1383,
+     "seconds": 1.11
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 688,
+     "seconds": 0.39
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 674,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q19",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "4839609000",
+   "calls": 4,
+   "chars": 7637,
+   "seconds": 1.35,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2211,
+     "seconds": 0.12
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2207,
+     "seconds": 0.51
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2207,
+     "seconds": 0.5
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 1012,
+     "seconds": 0.23
+    }
+   ]
+  },
+  {
+   "task": "Q19",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "4839609000",
+   "calls": 4,
+   "chars": 7637,
+   "seconds": 1.34,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2211,
+     "seconds": 0.12
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2207,
+     "seconds": 0.49
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2207,
+     "seconds": 0.5
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 1012,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q19",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": true,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "4839609000",
+   "calls": 3,
+   "chars": 4616,
+   "seconds": 0.44,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 1390,
+     "seconds": 0.11
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 638,
+     "seconds": 0.23
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 2588,
+     "seconds": 0.09
+    }
+   ]
+  },
+  {
+   "task": "Q20",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "-4275000000, a decrease of 4275000000",
+   "calls": 4,
+   "chars": 7740,
+   "seconds": 1.35,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2230,
+     "seconds": 0.13
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2246,
+     "seconds": 0.5
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2246,
+     "seconds": 0.5
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 1018,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q20",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": true,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "-4275000000, a decrease of 4275000000",
+   "calls": 3,
+   "chars": 5130,
+   "seconds": 0.45,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 1403,
+     "seconds": 0.13
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 783,
+     "seconds": 0.23
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 2944,
+     "seconds": 0.09
+    }
+   ]
+  },
+  {
+   "task": "Q20",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "-4275000000, a decrease of 4275000000",
+   "calls": 4,
+   "chars": 7740,
+   "seconds": 1.37,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2230,
+     "seconds": 0.12
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2246,
+     "seconds": 0.53
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2246,
+     "seconds": 0.51
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 1018,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q21",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": true,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "486 days",
+   "calls": 3,
+   "chars": 4270,
+   "seconds": 0.45,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 1216,
+     "seconds": 0.12
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 646,
+     "seconds": 0.24
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 2408,
+     "seconds": 0.09
+    }
+   ]
+  },
+  {
+   "task": "Q21",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "486 days",
+   "calls": 5,
+   "chars": 5835,
+   "seconds": 0.88,
+   "log": [
+    {
+     "tool": "scholar_work",
+     "exit": 0,
+     "chars": 1861,
+     "seconds": 0.12
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 560,
+     "seconds": 0.23
+    },
+    {
+     "tool": "scholar_work",
+     "exit": 0,
+     "chars": 1952,
+     "seconds": 0.09
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 574,
+     "seconds": 0.23
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 888,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q21",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "486 days",
+   "calls": 5,
+   "chars": 5835,
+   "seconds": 0.86,
+   "log": [
+    {
+     "tool": "scholar_work",
+     "exit": 0,
+     "chars": 1861,
+     "seconds": 0.12
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 560,
+     "seconds": 0.22
+    },
+    {
+     "tool": "scholar_work",
+     "exit": 0,
+     "chars": 1952,
+     "seconds": 0.08
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 574,
+     "seconds": 0.22
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 888,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q22",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "22 full years",
+   "calls": 5,
+   "chars": 4576,
+   "seconds": 0.88,
+   "log": [
+    {
+     "tool": "patent_get",
+     "exit": 0,
+     "chars": 1209,
+     "seconds": 0.12
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 632,
+     "seconds": 0.22
+    },
+    {
+     "tool": "patent_get",
+     "exit": 0,
+     "chars": 1151,
+     "seconds": 0.09
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 633,
+     "seconds": 0.22
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 951,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q22",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "22 full years",
+   "calls": 5,
+   "chars": 6197,
+   "seconds": 0.9,
+   "log": [
+    {
+     "tool": "patent_get",
+     "exit": 0,
+     "chars": 2174,
+     "seconds": 0.13
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 632,
+     "seconds": 0.22
+    },
+    {
+     "tool": "patent_get",
+     "exit": 0,
+     "chars": 1807,
+     "seconds": 0.1
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 633,
+     "seconds": 0.22
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 951,
+     "seconds": 0.23
+    }
+   ]
+  },
+  {
+   "task": "Q22",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": true,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "22 full years",
+   "calls": 3,
+   "chars": 4594,
+   "seconds": 0.49,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 1358,
+     "seconds": 0.15
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 638,
+     "seconds": 0.25
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 2598,
+     "seconds": 0.09
+    }
+   ]
+  },
+  {
+   "task": "Q23",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "31.0%",
+   "calls": 5,
+   "chars": 10383,
+   "seconds": 1.55,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2245,
+     "seconds": 0.12
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2261,
+     "seconds": 0.54
+    },
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2342,
+     "seconds": 0.1
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2501,
+     "seconds": 0.55
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 1034,
+     "seconds": 0.23
+    }
+   ]
+  },
+  {
+   "task": "Q23",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": true,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "31.0%",
+   "calls": 3,
+   "chars": 5999,
+   "seconds": 0.45,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 2437,
+     "seconds": 0.13
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 658,
+     "seconds": 0.23
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 2904,
+     "seconds": 0.09
+    }
+   ]
+  },
+  {
+   "task": "Q23",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "31.0%",
+   "calls": 5,
+   "chars": 10383,
+   "seconds": 1.47,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2245,
+     "seconds": 0.12
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2261,
+     "seconds": 0.52
+    },
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2342,
+     "seconds": 0.1
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2501,
+     "seconds": 0.51
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 1034,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "Q24",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": true,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "4123",
+   "calls": 3,
+   "chars": 4600,
+   "seconds": 0.49,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 1399,
+     "seconds": 0.14
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 628,
+     "seconds": 0.26
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 2573,
+     "seconds": 0.09
+    }
+   ]
+  },
+  {
+   "task": "Q24",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "4123",
+   "calls": 5,
+   "chars": 4950,
+   "seconds": 2.95,
+   "log": [
+    {
+     "tool": "github_get",
+     "exit": 0,
+     "chars": 1310,
+     "seconds": 1.13
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 689,
+     "seconds": 0.24
+    },
+    {
+     "tool": "github_get",
+     "exit": 0,
+     "chars": 1410,
+     "seconds": 1.1
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 688,
+     "seconds": 0.24
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 853,
+     "seconds": 0.24
+    }
+   ]
+  },
+  {
+   "task": "Q24",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "4123",
+   "calls": 5,
+   "chars": 4950,
+   "seconds": 2.96,
+   "log": [
+    {
+     "tool": "github_get",
+     "exit": 0,
+     "chars": 1310,
+     "seconds": 1.14
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 689,
+     "seconds": 0.23
+    },
+    {
+     "tool": "github_get",
+     "exit": 0,
+     "chars": 1410,
+     "seconds": 1.12
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 688,
+     "seconds": 0.24
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 853,
+     "seconds": 0.23
+    }
+   ]
+  },
+  {
+   "task": "H1",
+   "arm": "before_today",
+   "ok": false,
+   "verified": false,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "note": "court_search: exit 3: UNAVAILABLE[courtlistener]: HTTP 401: access refused or needs authentication Legitimate alternatives: research_fetch on a public court/government page you know ",
+   "calls": 1,
+   "chars": 418,
+   "seconds": 0.3,
+   "log": [
+    {
+     "tool": "court_search",
+     "exit": 3,
+     "chars": 418,
+     "seconds": 0.3
+    }
+   ]
+  },
+  {
+   "task": "H1",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "5 U.S. 137, decided 1803",
+   "calls": 5,
+   "chars": 5784,
+   "seconds": 3.95,
+   "log": [
+    {
+     "tool": "court_search",
+     "exit": 0,
+     "chars": 1368,
+     "seconds": 2.59
+    },
+    {
+     "tool": "court_opinion",
+     "exit": 0,
+     "chars": 2418,
+     "seconds": 0.52
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 622,
+     "seconds": 0.4
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 554,
+     "seconds": 0.22
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 822,
+     "seconds": 0.22
+    }
+   ]
+  },
+  {
+   "task": "H1",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "5 U.S. 137, decided 1803",
+   "calls": 4,
+   "chars": 4916,
+   "seconds": 3.59,
+   "log": [
+    {
+     "tool": "research_search",
+     "exit": 0,
+     "chars": 1540,
+     "seconds": 2.55
+    },
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 864,
+     "seconds": 0.54
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 439,
+     "seconds": 0.41
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 2073,
+     "seconds": 0.09
+    }
+   ]
+  },
+  {
+   "task": "H2",
+   "arm": "after_fixes",
+   "ok": false,
+   "verified": false,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "note": "patent_search: exit 0: <untrusted-source source=\"search://ppubs?q=method%20for%20node%20ranking%20in%20a%20linked%20database\"> USPTO PATENT PUBLIC SEARCH q='method for node ranking in",
+   "calls": 1,
+   "chars": 2540,
+   "seconds": 5.69,
+   "log": [
+    {
+     "tool": "patent_search",
+     "exit": 0,
+     "chars": 2540,
+     "seconds": 5.69
+    }
+   ]
+  },
+  {
+   "task": "H2",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "US6285999B1, priority 1997-01-10",
+   "calls": 4,
+   "chars": 4322,
+   "seconds": 3.17,
+   "log": [
+    {
+     "tool": "research_search",
+     "exit": 0,
+     "chars": 1287,
+     "seconds": 2.55
+    },
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 905,
+     "seconds": 0.1
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 334,
+     "seconds": 0.43
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 1796,
+     "seconds": 0.09
+    }
+   ]
+  },
+  {
+   "task": "H2",
+   "arm": "before_today",
+   "ok": false,
+   "verified": false,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "note": "patent_search: exit 3: UNAVAILABLE[patent_search]: no keyless patent search endpoint is reachable (patentsview: network: could not resolve search.patentsview.org: [Errno 8] nodename n",
+   "calls": 1,
+   "chars": 510,
+   "seconds": 0.12,
+   "log": [
+    {
+     "tool": "patent_search",
+     "exit": 3,
+     "chars": 510,
+     "seconds": 0.12
+    }
+   ]
+  },
+  {
+   "task": "H3",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": true,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "24.0%",
+   "calls": 3,
+   "chars": 4644,
+   "seconds": 0.48,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 1390,
+     "seconds": 0.12
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 653,
+     "seconds": 0.26
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 2601,
+     "seconds": 0.1
+    }
+   ]
+  },
+  {
+   "task": "H3",
+   "arm": "before_today",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "24.0%",
+   "calls": 4,
+   "chars": 7637,
+   "seconds": 1.43,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2211,
+     "seconds": 0.13
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2207,
+     "seconds": 0.54
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2207,
+     "seconds": 0.52
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 1012,
+     "seconds": 0.24
+    }
+   ]
+  },
+  {
+   "task": "H3",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "24.0%",
+   "calls": 4,
+   "chars": 7637,
+   "seconds": 1.62,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2211,
+     "seconds": 0.12
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2207,
+     "seconds": 0.73
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2207,
+     "seconds": 0.54
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 1012,
+     "seconds": 0.24
+    }
+   ]
+  },
+  {
+   "task": "H4",
+   "arm": "before_today",
+   "ok": false,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "Two values are on file: 89950000000 as first filed and 96571000000 as restated.",
+   "note": "both figures verified, but nothing flags that they disagree",
+   "calls": 5,
+   "chars": 8044,
+   "seconds": 1.58,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2228,
+     "seconds": 0.43
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 759,
+     "seconds": 0.41
+    },
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2342,
+     "seconds": 0.1
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 1665,
+     "seconds": 0.39
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 1050,
+     "seconds": 0.25
+    }
+   ]
+  },
+  {
+   "task": "H4",
+   "arm": "after_fixes",
+   "ok": false,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "Two values are on file: 89950000000 as first filed and 96571000000 as restated.",
+   "note": "both figures verified, but nothing flags that they disagree",
+   "calls": 5,
+   "chars": 8044,
+   "seconds": 1.37,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2228,
+     "seconds": 0.22
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 759,
+     "seconds": 0.42
+    },
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2342,
+     "seconds": 0.1
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 1665,
+     "seconds": 0.38
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 1050,
+     "seconds": 0.25
+    }
+   ]
+  },
+  {
+   "task": "H4",
+   "arm": "revamp",
+   "ok": true,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": true,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "Two values are on file: 89950000000 as first filed and 96571000000 as restated.",
+   "calls": 3,
+   "chars": 7004,
+   "seconds": 0.73,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 2382,
+     "seconds": 0.21
+    },
+    {
+     "tool": "research_claim",
+     "exit": 0,
+     "chars": 1117,
+     "seconds": 0.42
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 3505,
+     "seconds": 0.1
+    }
+   ]
+  },
+  {
+   "task": "H5",
+   "arm": "after_fixes",
+   "ok": true,
+   "verified": false,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": true,
+   "calls": 3,
+   "chars": 2692,
+   "seconds": 0.47,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2211,
+     "seconds": 0.13
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 40,
+     "seconds": 0.09
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 441,
+     "seconds": 0.25
+    }
+   ]
+  },
+  {
+   "task": "H5",
+   "arm": "revamp",
+   "ok": true,
+   "verified": false,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": true,
+   "calls": 3,
+   "chars": 2615,
+   "seconds": 0.32,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 1376,
+     "seconds": 0.12
+    },
+    {
+     "tool": "research_evidence",
+     "exit": 0,
+     "chars": 90,
+     "seconds": 0.1
+    },
+    {
+     "tool": "research_report",
+     "exit": 0,
+     "chars": 1149,
+     "seconds": 0.1
+    }
+   ]
+  },
+  {
+   "task": "H5",
+   "arm": "before_today",
+   "ok": true,
+   "verified": false,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": true,
+   "calls": 3,
+   "chars": 2692,
+   "seconds": 0.43,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2211,
+     "seconds": 0.11
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 40,
+     "seconds": 0.09
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 441,
+     "seconds": 0.23
+    }
+   ]
+  },
+  {
+   "task": "H6",
+   "arm": "revamp",
+   "ok": true,
+   "verified": false,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": true,
+   "abstained": false,
+   "calls": 2,
+   "chars": 2185,
+   "seconds": 0.36,
+   "log": [
+    {
+     "tool": "research_get",
+     "exit": 0,
+     "chars": 1390,
+     "seconds": 0.11
+    },
+    {
+     "tool": "research_claim",
+     "exit": 1,
+     "chars": 795,
+     "seconds": 0.25
+    }
+   ]
+  },
+  {
+   "task": "H6",
+   "arm": "before_today",
+   "ok": false,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "4939609000",
+   "note": "operands verified; the wrong result went unnoticed (nothing checks arithmetic)",
+   "calls": 4,
+   "chars": 7637,
+   "seconds": 1.46,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2211,
+     "seconds": 0.11
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2207,
+     "seconds": 0.55
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2207,
+     "seconds": 0.56
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 1012,
+     "seconds": 0.24
+    }
+   ]
+  },
+  {
+   "task": "H6",
+   "arm": "after_fixes",
+   "ok": false,
+   "verified": true,
+   "arithmetic_checked": false,
+   "conflict_surfaced": false,
+   "slip_caught": false,
+   "abstained": false,
+   "answer": "4939609000",
+   "note": "operands verified; the wrong result went unnoticed (nothing checks arithmetic)",
+   "calls": 4,
+   "chars": 7637,
+   "seconds": 1.32,
+   "log": [
+    {
+     "tool": "sec_facts",
+     "exit": 0,
+     "chars": 2211,
+     "seconds": 0.12
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2207,
+     "seconds": 0.5
+    },
+    {
+     "tool": "research_find",
+     "exit": 0,
+     "chars": 2207,
+     "seconds": 0.48
+    },
+    {
+     "tool": "research_verify",
+     "exit": 0,
+     "chars": 1012,
+     "seconds": 0.22
+    }
+   ]
+  }
+ ]
+}

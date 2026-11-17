@@ -1,0 +1,8 @@
+{
+  "name": "clp",
+  "version": "0.2.0",
+  "description": "Context Ledger (CLP) memory for Claude Code: lookup/read/verify over indexed notes, session ledger for durable turns across compact/resume, local L4-style gate. Loaded by claude-clp or claude-mem.",
+  "author": {
+    "name": "Mahimn Patel"
+  }
+}

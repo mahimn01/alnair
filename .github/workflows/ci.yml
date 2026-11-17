@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff
+      - name: ruff (syntax errors and undefined names)
+        run: ruff check --select E9,F63,F7,F82 --target-version py310 . claude-mem/bin/claude-lab-clp claude-clp/bin/claude-clp claude-mem/rune/bin/clp-rune
+      - name: install.sh syntax
+        run: bash -n install.sh
+
+  python:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [claude-clp/tests, claude-mem/tests, claude-mem/rune/tests, lab/tests, claude-research/tests, alnair-app/tests]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: poppler (pdftotext for the research tests)
+        run: brew install poppler
+      - name: venv inside the checkout, where the launcher and tools look for it
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install pytest hypothesis -r claude-research/requirements.txt
+      - run: .venv/bin/python -m pytest -q ${{ matrix.suite }}
+
+  app:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: alnair-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: npm test

@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+"""claude-clp: open Claude Code with the Context Ledger (CLP) tools, without changing your setup.
+
+What it does: starts your usual `claude` with one extra plugin (claude-clp/plugin). Its tools
+(lookup, read, verify, status, refresh, and an opt-in paid ask) work over your `clp` corpus,
+the indexed copy of your Obsidian vault or another folder. Claude Code is the model; the local
+verify gate decides whether an answer is backed by verbatim quotes before Claude states it.
+
+How to run:
+    claude-clp                  a session in this folder
+    claude-clp "task"           a session that starts with this prompt
+    claude-clp --dry-run        print the claude command and write the settings preview; starts nothing
+    claude-clp doctor           check claude, the plugin, the tools' Python and your corpus
+    claude-clp demo             a session over a tiny demo corpus built inside its run folder
+    --store DIR                 use a clp store other than ~/.clp (or $CLP_STORE)
+Install: ln -sf <this file> ~/.local/bin/claude-clp
+
+What it changes: writes only its run folder, ~/.local/state/claude-clp/runs/<id>/ (a session
+settings layer, run info and the protected files' hashes at launch; demo adds a demo folder and
+store there). --dry-run writes only a temporary preview folder. It reads ~/.claude/settings.json
+to copy your permissions, hooks and preferences into the session layer, but not its mcpServers
+block (that holds API keys). It never writes ~/.claude, ~/.claude.json, the plugin registry,
+the claude-lab tree or the Obsidian vault.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+REPO = ROOT.parent
+HOME = Path.home()
+STATE = HOME / ".local/state/claude-clp/runs"
+CLAUDE = HOME / ".local/bin/claude"
+SOURCE = HOME / ".claude/settings.json"
+LOCAL = HOME / ".claude/settings.local.json"
+PLUGIN = ROOT / "plugin"
+TOOL = ROOT / "bin/clp_tool.py"
+FIXTURE = ROOT / "fixture"
+LINK = HOME / ".local/bin/claude-clp"
+PROTECTED = [SOURCE, LOCAL, HOME / ".claude/remote-settings.json", HOME / ".claude/CLAUDE.md", HOME / ".claude.json",
+             HOME / ".claude/plugins/installed_plugins.json", HOME / "plugins/obsidian-memory/claude/config.json",
+             HOME / ".claude-mem/settings.json"]  # fmt: skip
+PROTECTED_DIRS = [HOME / ".claude", Path(os.environ.get("ALNAIR_VAULT") or HOME / "Documents/Obsidian Vault").expanduser(),
+                  HOME / "plugins/obsidian-memory",
+                  Path(os.environ.get("ALNAIR_LAB_ROOT") or ROOT.parent / "lab").expanduser()]  # fmt: skip
+PREFIX = "mcp__clp__"
+# Copied from settings.json into the session layer. mcpServers stays out: it holds API keys.
+COPIED = ("permissions", "autoMode", "theme", "tui", "model", "effortLevel", "modelSettings", "alwaysThinkingEnabled",
+          "attribution", "includeCoAuthoredBy", "hooks")  # fmt: skip
+# As in claude-lab: web-design plugins stay off, and claude-mem's unverified recall is off in a CLP session.
+WEB_PLUGINS = {"impeccable", "gsap-skills", "frontend-design", "vercel"}
+OFF_PLUGINS = ("claude-mem@thedotmack",)
+ALLOW = [PREFIX + name for name in ("lookup", "read", "verify", "status", "refresh")]  # offline: no prompt
+ASK = [PREFIX + "ask", "Bash(*clp_tool.py ask*)", "Bash(*clp ask*)", "Bash(*clp chat*)", "Bash(*context_ledger.daily.cli*ask*)"]  # spends: always asks
+GUIDE = """\
+This session runs in claude-clp: Claude Code plus the Context Ledger (CLP) tools over the user's
+indexed files (by default a copy of their Obsidian vault; mcp__clp__status says which).
+For a question whose answer should come from those notes or that code (positions, plans,
+decisions, a named note, file or function), follow the clp-memory skill: mcp__clp__lookup,
+mcp__clp__read, draft an ANSWER line with <claims> that quote the files word for word,
+then mcp__clp__verify before stating it as fact. If verify refuses, read more and repair,
+or say the files do not answer it; never present a refused answer as fact.
+mcp__clp__ask spends the user's API key: use it only when they ask for the paper's L4
+harness (clp ask) by name."""
+DEMO_PROMPT = ("This is a claude-clp demo over a tiny notes folder (the demo corpus). Use the clp-memory skill and verify each "
+               "answer before giving it: 1) What is the exit plan in [[AMZN]]? 2) What is the stop-loss in [[TSLA]]? "
+               "(No TSLA note exists; show what the gate does.)")  # fmt: skip
+
+
+def dump(path: Path, data: dict) -> None:
+    """Write run state atomically, private to the user."""
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n")
+    tmp.chmod(0o600)
+    tmp.replace(path)
+
+
+def hashes() -> dict[str, str]:
+    """sha256 of each protected file that exists (read only)."""
+    return {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in PROTECTED if p.is_file()}
+
+
+def tool_python() -> str:
+    """The interpreter the tools run under: the repo's virtualenv (it has the anthropic SDK for ask), else this one."""
+    venv = REPO / ".venv/bin/python"
+    return str(venv) if venv.exists() else sys.executable
+
+
+def claude_binary() -> str:
+    if CLAUDE.exists():
+        return str(CLAUDE)
+    found = shutil.which("claude")
+    if found is None:
+        raise RuntimeError(f"claude is not installed at {CLAUDE} or on PATH")
+    return found
+
+
+def session_env(run: Path, store: Path | None) -> dict[str, str]:
+    """What the plugin reads: where the tools are, which Python runs them, and an optional store."""
+    env = {"CLAUDE_CLP_ROOT": str(ROOT), "CLAUDE_CLP_PYTHON": tool_python(), "CLAUDE_CLP_RUN_DIR": str(run), "DISABLE_AUTOUPDATER": "1"}
+    if store is not None:
+        env["CLP_STORE"] = str(store)
+    return env
+
+
+def session_settings(run: Path, home: bool, store: Path | None) -> dict:
+    """The session layer: your copied settings, the CLP tool permissions, the plugin set and env."""
+    original = json.loads(SOURCE.read_text()) if SOURCE.exists() else {}
+    out = {key: json.loads(json.dumps(original[key])) for key in COPIED if key in original}
+    perms = out.get("permissions", {})
+    # A home launch loads no settings files, so it keeps the home folder's own local rules,
+    # which ordinary claude applies to sessions started in ~ (as claude-lab does).
+    extra = json.loads(LOCAL.read_text()).get("permissions", {}) if home and LOCAL.exists() else {}
+    for key, rules in [*extra.items(), ("allow", ALLOW), ("ask", ASK)]:
+        if isinstance(rules, list):
+            perms[key] = perms.get(key, []) + [rule for rule in rules if rule not in perms.get(key, [])]
+    out["permissions"] = perms
+    plugins = {k: v for k, v in original.get("enabledPlugins", {}).items() if k.split("@")[0] not in WEB_PLUGINS and k not in OFF_PLUGINS}
+    out["enabledPlugins"] = {**plugins, **dict.fromkeys(OFF_PLUGINS, False)}
+    out["env"] = session_env(run, store)
+    return out
+
+
+def prepare(project: Path, run: Path, store: Path | None = None) -> tuple[Path, dict]:
+    """Check the folders, then write the run's settings layer, run info and protected hashes."""
+    project = project.expanduser().resolve()
+    if not project.is_dir():
+        raise ValueError(f"Project directory does not exist: {project}")
+    run = run.expanduser().resolve()
+    if any(run == d.resolve() or d.resolve() in run.parents for d in PROTECTED_DIRS):
+        raise ValueError("The run folder cannot be inside ~/.claude, the Obsidian vault, obsidian-memory or claude-lab")
+    home = project == HOME.resolve()
+    if project == run or (project in run.parents and not home):
+        raise ValueError("The run folder must be outside the project folder")
+    if run.exists() and any(p.name != "demo" for p in run.iterdir()):
+        raise ValueError(f"Run folder already has files: {run}")
+    run.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        session_id = str(uuid.UUID(run.name))
+    except ValueError:
+        session_id = str(uuid.uuid4())
+    cfg = {"schema": 1, "runId": session_id, "project": str(project), "home": home, "root": str(ROOT),
+           "store": str(store) if store else None, "createdAt": datetime.now(timezone.utc).isoformat()}  # fmt: skip
+    dump(run / "runtime.json", cfg)
+    dump(run / "settings.json", session_settings(run, home, store))
+    dump(run / "source-hashes.json", hashes())
+    return run, cfg
+
+
+def build_demo(run: Path) -> tuple[Path, Path]:
+    """Copy the fixture notes into run/demo/notes and index them as corpus "demo" in run/demo/store."""
+    folder, store = run / "demo/notes", run / "demo/store"
+    shutil.copytree(FIXTURE, folder)
+    result = quiet([tool_python(), str(TOOL), "init", str(folder), "--name", "demo", "--store", str(store)], timeout=120)
+    if result.returncode != 0:
+        raise RuntimeError("could not index the demo corpus: " + (result.stderr or result.stdout).strip())
+    return folder, store
+
+
+def launch_command(run: Path, prompt: str = "") -> tuple[list[str], dict[str, str]]:
+    """The claude argv and environment for a prepared run."""
+    cfg = json.loads((run / "runtime.json").read_text())
+    store = Path(cfg["store"]) if cfg.get("store") else None
+    # In ~ the "project" settings file IS ~/.claude/settings.json, which would bring back every plugin
+    # the session layer leaves out, so a home launch loads no settings files besides the layer.
+    sources = "" if cfg["home"] else "project,local"
+    argv = [claude_binary(), "--setting-sources", sources, "--settings", str(run / "settings.json"), "--plugin-dir", str(PLUGIN),
+            "--append-system-prompt", GUIDE, "--session-id", cfg["runId"], "--name", "Claude CLP"]  # fmt: skip
+    if prompt:
+        argv.append(prompt)
+    return argv, {**os.environ, **session_env(run, store)}
+
+
+def quiet(argv: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
+    return subprocess.run(argv, capture_output=True, text=True, timeout=timeout, check=False)
+
+
+def doctor() -> dict:
+    """Report what a launch needs, without starting a session or calling a model."""
+    report: dict = {}
+    try:
+        claude = claude_binary()
+        version = quiet([claude, "--version"])
+        report["claude"] = {"path": claude, "version": version.stdout.strip() or version.stderr.strip()}
+    except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
+        report["claude"] = {"error": str(exc)}
+    manifest = json.loads((PLUGIN / ".claude-plugin/plugin.json").read_text())
+    report["plugin"] = {"dir": str(PLUGIN), "name": manifest.get("name"), "version": manifest.get("version"),
+                        "skills": sorted(p.parent.name for p in (PLUGIN / "skills").glob("*/SKILL.md"))}  # fmt: skip
+    python = tool_python()
+    probe = quiet([python, "-c", "import sys; print(sys.version.split()[0])"])
+    sdk = quiet([python, "-c", "import anthropic"])
+    report["tools_python"] = {"path": python, "version": probe.stdout.strip(), "anthropic_sdk_for_ask": sdk.returncode == 0}
+    status = quiet([python, str(TOOL), "status"], timeout=300)
+    report["corpus"] = (status.stdout if status.returncode == 0 else status.stderr).strip().splitlines()
+    report["launcher_on_path"] = {"link": str(LINK), "points_here": LINK.exists() and LINK.resolve() == Path(__file__).resolve()}
+    report["writes_only"] = [str(STATE), "a temporary folder for --dry-run"]
+    report["never_writes"] = [str(p) for p in PROTECTED + PROTECTED_DIRS]
+    report["note"] = "doctor started no Claude session and made no API call."
+    return report
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(prog="claude-clp", description="Claude Code with the Context Ledger (CLP) tools.")
+    p.add_argument("task", nargs="?", default="", help='"doctor", "demo", or a prompt to start the session with')
+    p.add_argument("--project", type=Path, default=Path.cwd(), help="folder the session starts in (default: here)")
+    p.add_argument("--store", type=Path, help="clp store other than ~/.clp")
+    p.add_argument("--dry-run", action="store_true", help="print the launch and write only a temporary preview")
+    opt = p.parse_args(argv)
+    if opt.task == "doctor":
+        print(json.dumps(doctor(), indent=2))
+        return 0
+    store = opt.store.expanduser().resolve() if opt.store else None
+    run = (Path(tempfile.mkdtemp(prefix="claude-clp-preview-")) if opt.dry_run else STATE / str(uuid.uuid4())).resolve()
+    project, prompt = opt.project, opt.task
+    if opt.task == "demo":
+        run.mkdir(parents=True, exist_ok=True, mode=0o700)
+        project, store = build_demo(run)
+        prompt = DEMO_PROMPT
+    run, cfg = prepare(project, run, store)
+    argv_, env = launch_command(run, prompt)
+    if opt.dry_run:
+        shown = [x if x != GUIDE else "[claude-clp session guide]" for x in argv_]
+        print(json.dumps({"run": str(run), "project": cfg["project"], "store": cfg["store"] or "default (~/.clp or $CLP_STORE)",
+                          "settings": str(run / "settings.json"), "argv": shown,
+                          "note": "No Claude session or model request was started; only this temporary preview folder was written."},
+                         indent=2))  # fmt: skip
+        return 0
+    print(f"Claude CLP · CLP tools on · run files: {run}", flush=True)
+    os.chdir(cfg["project"])
+    os.execve(argv_[0], argv_, env)
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+        print(f"claude-clp: {error}", file=sys.stderr)
+        raise SystemExit(1)
