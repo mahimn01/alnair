@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [claude-clp/tests, claude-mem/tests, claude-mem/rune/tests, lab/tests, claude-research/tests, alnair-app/tests]
+        suite: [claude-clp/tests, claude-mem/tests, claude-mem/rune/tests, lab/tests, claude-research/tests]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -45,15 +45,3 @@ jobs:
           .venv/bin/python -m pip install pytest hypothesis -r claude-research/requirements.txt
       - run: .venv/bin/python -m pytest -q ${{ matrix.suite }}
 
-  app:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: alnair-app
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - run: npm ci
-      - run: npm test

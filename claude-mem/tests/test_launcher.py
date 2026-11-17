@@ -215,22 +215,6 @@ def test_alnair_branding_doctor(capsys):
     assert {"claude-lab-clp","claude-mem-lab"} <= set(report["aliases"])
 
 
-def test_gui_install_dispatch_is_offline_and_does_not_open_app(monkeypatch):
-    from types import SimpleNamespace
-    calls = []
-    original = L.subprocess.run
-    def run(argv, *args, **kwargs):
-        if len(argv) > 1 and str(argv[1]).endswith('alnair-app/scripts/install.py'):
-            calls.append(argv)
-            return SimpleNamespace(returncode=0)
-        return original(argv, *args, **kwargs)
-    monkeypatch.setattr(L.subprocess, 'run', run)
-    assert L.main(['install-app', '--gui', '--dry-run']) == 0
-    assert len(calls) == 1
-    assert calls[0][-1] == '--dry-run'
-    assert 'open' not in calls[0]
-
-
 @pytest.mark.parametrize(
     "flags, expected",
     [

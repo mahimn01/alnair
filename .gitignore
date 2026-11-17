@@ -8,5 +8,3 @@ node_modules/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
-alnair-app/screens/
-alnair-app/dist/

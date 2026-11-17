@@ -77,30 +77,9 @@ which writes or updates **one** note under:
 
 `alnair fable-check` verifies recent local interactive Fable evidence without making a model call. `alnair --model fable` starts a Fable session. Hard/uncertain tasks use Opus xhigh; extremely difficult tasks use Fable. Headless `-p` / `--print` is disabled for every model, with no API-key fallback. See [routing](routing/README.md).
 
-## Mac app
+## Codex backend (GPT models)
 
-The new **Tauri generative-UI prototype** provides an interactive PTY terminal and a safe canvas beside it. Install/rebuild with:
-
-```sh
-alnair install-app --gui --dry-run  # plan only; no app/model launch
-alnair install-app --gui            # build and install ~/Applications/Alnair.app
-```
-
-The original app is preserved at `~/Applications/Alnair (Rune).app`. Open the new app yourself, choose a model, and click **Start session**. Cmd-K opens the command palette. No API keys or headless model calls. Trust/tool permissions must be approved manually in the terminal; the Tauri app does not need Accessibility or Automation. [Desktop architecture, tests and Windows next steps](../alnair-app/README.md).
-
-### Legacy Rune installer
-
-The commands below rebuild the **Rune** version, not the Tauri app. Use `--gui` above for the new app.
-
-```sh
-alnair install-app                  # build or rebuild ~/Applications/Alnair.app
-alnair install-app --dry-run        # installation plan only
-open ~/Applications/Alnair.app      # run this yourself to launch Rune + Alnair
-~/Applications/Alnair.app/Contents/MacOS/Alnair --dry-run
-```
-
-The app opens Rune's GUI at `~`, using a separate Alnair profile and Rune's stock colors (no gray theme). Its launcher sends Control-Command-C only to its own new Rune window to add the interactive Alnair + dashboard layout. It never accepts a dialog. First launch may ask for Automation/Accessibility access; approve it yourself if desired, or press Control-Command-C manually in Rune. Any Gatekeeper, Rune workspace trust, or Claude trust prompt must also be handled by you. No permissions are bypassed. Rebuild backs up existing app/profile files. [App implementation](app/DESIGN.md).
-
+`alnair --model gpt` starts an interactive Codex session instead of Claude Code. `bin/codex_backend.py` builds the command: the model (default `gpt-6.2-astra`, checked against Codex's own model list), the project folder, a developer note, the `alnair_clp` and `alnair_research` MCP servers, `forced_login_method="chatgpt"` and session-note hooks, all as `-c` overrides for that session. `alnair codex-setup` adds the two MCP servers to `~/.codex/config.toml` between marker comments, after a backup. `codex exec` and other headless commands are refused. See the top-level README for the details and gaps.
 
 ## Research/reviewer friction fixes (2026-11-11)
 
