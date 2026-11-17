@@ -9,7 +9,7 @@ Alnair starts an ordinary interactive session on your own subscription: Claude C
 
 ![alnair --help and a GPT dry run in a terminal](docs/terminal.png)
 
-*Real output of `alnair --help` and `alnair --model gpt --dry-run`, from a fresh clone in a scratch home folder. A dry run starts no session.*
+*Real output of `alnair --help` and `alnair --model gpt --dry-run`, captured from a fresh clone in a scratch home folder and rendered as an image. A dry run starts no session.*
 
 ## What it does
 
