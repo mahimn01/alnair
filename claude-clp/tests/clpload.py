@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
@@ -14,6 +15,7 @@ def _load(name: str, path: Path):
     loader = SourceFileLoader(name, str(path))
     spec = importlib.util.spec_from_loader(name, loader)
     module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module  # dataclasses looks the module up here
     loader.exec_module(module)
     return module
 
