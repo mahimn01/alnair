@@ -22,6 +22,8 @@ import { gallery } from "./demo";
 import { validate, type Spec } from "./spec";
 import { TerminalPane, native, type TerminalHandle } from "./TerminalPane";
 export default function App() {
+  const windows = /Win/i.test(navigator.platform);
+  const shortcut = windows ? "Ctrl K" : "⌘ K";
   const query = new URLSearchParams(location.search),
     demo = query.has("demo");
   const [items, setItems] = useState<Spec[]>(demo ? gallery : []),
@@ -169,7 +171,9 @@ export default function App() {
     },
     {
       name: "Resume latest session",
-      detail: "Alnair-owned history",
+      detail: windows
+        ? "Claude Code history in this folder"
+        : "Alnair-owned history",
       icon: History,
       action: () => start(true),
     },
@@ -184,7 +188,9 @@ export default function App() {
     })),
     {
       name: "Open vault note",
-      detail: "Current session · Obsidian",
+      detail: windows
+        ? "Unavailable on this machine"
+        : "Current session · Obsidian",
       icon: BookOpen,
       action: openNote,
     },
@@ -226,7 +232,7 @@ export default function App() {
         </div>
         <button className="new-session" onClick={() => start()} disabled={busy}>
           <Plus size={16} />
-          New session<span>⌘ K</span>
+          New session<span>{shortcut}</span>
         </button>
         <div className="nav-label">WORKSPACE</div>
         <nav>
@@ -239,7 +245,11 @@ export default function App() {
             <Layers size={16} />
             Component gallery
           </button>
-          <button onClick={openNote}>
+          <button
+            onClick={openNote}
+            disabled={windows}
+            title={windows ? "Vault unavailable on this machine" : undefined}
+          >
             <BookOpen size={16} />
             Vault note
             <ArrowUpRight size={12} />
@@ -262,7 +272,11 @@ export default function App() {
             <br />
             Remember more.
           </h4>
-          <p>Your memory travels with the work, not the window.</p>
+          <p>
+            {windows
+              ? "Interactive Claude and a live canvas. Mac memory and research are not installed here."
+              : "Your memory travels with the work, not the window."}
+          </p>
         </div>
         <div className="sidebar-bottom">
           <ShieldCheck size={17} />
@@ -285,7 +299,7 @@ export default function App() {
           <button className="palette-trigger" onClick={() => setPalette(true)}>
             <Search size={13} />
             <span>Jump to anything</span>
-            <kbd>⌘ K</kbd>
+            <kbd>{shortcut}</kbd>
           </button>
         </header>
         <section className="session-header">
@@ -299,8 +313,9 @@ export default function App() {
               A little more space to think.<span>✦</span>
             </h1>
             <p>
-              One conversation. Lasting memory. A canvas that follows your
-              ideas.
+              {windows
+                ? "Interactive Claude. A canvas that follows your ideas."
+                : "One conversation. Lasting memory. A canvas that follows your ideas."}
             </p>
           </div>
           <div className="session-actions">
@@ -311,10 +326,18 @@ export default function App() {
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
               >
-                <option value="auto">Auto routing</option>
+                <option value="auto">
+                  {windows
+                    ? "Claude default (no harness routing)"
+                    : "Auto routing"}
+                </option>
                 <option value="sonnet">Sonnet</option>
-                <option value="opus">Opus · xhigh</option>
-                <option value="fable">Fable 5.2 · xhigh</option>
+                <option value="opus">
+                  {windows ? "Opus" : "Opus · xhigh"}
+                </option>
+                <option value="fable">
+                  {windows ? "Fable 5.2" : "Fable 5.2 · xhigh"}
+                </option>
               </select>
               <ChevronDown size={12} />
             </div>
@@ -322,16 +345,24 @@ export default function App() {
               <span>
                 <i />
                 Memory{" "}
-                {active ? (health.memory ? "configured" : "starting") : "wired"}
+                {windows
+                  ? "unavailable on this machine"
+                  : active
+                    ? health.memory
+                      ? "configured"
+                      : "starting"
+                    : "wired"}
               </span>
               <span>
                 <i />
                 Research{" "}
-                {active
-                  ? health.research
-                    ? "configured"
-                    : "starting"
-                  : "wired"}
+                {windows
+                  ? "unavailable on this machine"
+                  : active
+                    ? health.research
+                      ? "configured"
+                      : "starting"
+                    : "wired"}
               </span>
             </div>
             {active && route && (
@@ -465,13 +496,15 @@ export default function App() {
         </div>
         <footer className="app-footer">
           <span>
-            <ShieldCheck size={12} /> Your subscription. Your machine. Your
-            memory.
+            <ShieldCheck size={12} />{" "}
+            {windows
+              ? "Your subscription. Your machine. Interactive Claude."
+              : "Your subscription. Your machine. Your memory."}
           </span>
           <span>
             ALNAIR <b>α</b>
             <i />
-            MAC PROTOTYPE
+            {windows ? "WINDOWS PROTOTYPE" : "MAC PROTOTYPE"}
           </span>
         </footer>
       </main>

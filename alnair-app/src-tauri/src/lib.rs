@@ -26,23 +26,51 @@ pub fn session_args(
     if !["auto", "sonnet", "opus", "fable"].contains(&model) {
         return Err("Unsupported model".into());
     }
-    let mut args = vec![
-        "--model".into(),
-        model.into(),
-        "--project".into(),
-        platform::home()?.to_string_lossy().into_owned(),
-    ];
-    if resume {
-        args.extend(["--resume".into(), "latest".into()]);
+    #[cfg(windows)]
+    {
+        let mut args = vec![];
+        if model != "auto" {
+            args.extend([
+                "--model".into(),
+                if model == "fable" {
+                    "claude-fable-5-2"
+                } else {
+                    model
+                }
+                .into(),
+            ]);
+        }
+        if resume {
+            args.push("--continue".into());
+        }
+        args.extend([
+            "--mcp-config".into(),
+            config.into(),
+            "--plugin-dir".into(),
+            plugin.into(),
+        ]);
+        return Ok(args);
     }
-    args.extend([
-        "--".into(),
-        "--mcp-config".into(),
-        config.into(),
-        "--plugin-dir".into(),
-        plugin.into(),
-    ]);
-    Ok(args)
+    #[cfg(not(windows))]
+    {
+        let mut args = vec![
+            "--model".into(),
+            model.into(),
+            "--project".into(),
+            platform::home()?.to_string_lossy().into_owned(),
+        ];
+        if resume {
+            args.extend(["--resume".into(), "latest".into()]);
+        }
+        args.extend([
+            "--".into(),
+            "--mcp-config".into(),
+            config.into(),
+            "--plugin-dir".into(),
+            plugin.into(),
+        ]);
+        Ok(args)
+    }
 }
 pub mod platform {
     use std::path::PathBuf;
@@ -52,6 +80,15 @@ pub mod platform {
             .ok_or("Home unavailable".into())
     }
     pub fn root() -> PathBuf {
+        #[cfg(windows)]
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(parent) = exe.parent() {
+                let runtime = parent.join("runtime");
+                if runtime.join("mcp/server.py").is_file() {
+                    return runtime;
+                }
+            }
+        }
         std::env::var_os("ALNAIR_APP_ROOT")
             .map(PathBuf::from)
             .unwrap_or_else(|| {
@@ -62,13 +99,27 @@ pub mod platform {
             })
     }
     pub fn launcher() -> Result<PathBuf, String> {
-        Ok(home()?.join(if cfg!(windows) {
-            ".local/bin/alnair.cmd"
-        } else {
-            ".local/bin/alnair"
-        }))
+        #[cfg(windows)]
+        {
+            let local = home()?.join(".local/bin/claude.exe");
+            if local.is_file() {
+                return Ok(local);
+            }
+            for dir in std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()) {
+                let candidate = dir.join("claude.exe");
+                if candidate.is_file() {
+                    return Ok(candidate);
+                }
+            }
+            Err("Claude Code not found. Install it and sign in interactively before starting Alnair.".into())
+        }
+        #[cfg(not(windows))]
+        Ok(home()?.join(".local/bin/alnair"))
     }
     pub fn python() -> String {
+        if cfg!(windows) {
+            return "python".into();
+        }
         if cfg!(target_os = "macos") && std::path::Path::new("/opt/homebrew/bin/python3").exists() {
             "/opt/homebrew/bin/python3".into()
         } else {
@@ -83,7 +134,11 @@ pub mod platform {
             None,
             None,
         );
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(windows)]
+        if window_vibrancy::apply_mica(window, Some(true)).is_err() {
+            let _ = window_vibrancy::apply_acrylic(window, Some((18, 20, 31, 220)));
+        }
+        #[cfg(not(any(target_os = "macos", windows)))]
         let _ = window;
     }
 }
@@ -390,6 +445,8 @@ fn clean_env(cmd: &mut portable_pty::CommandBuilder) {
     }
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
+    // Explorer-launched Windows apps must retain Python and system executable paths.
+    #[cfg(not(windows))]
     cmd.env(
         "PATH",
         format!(
@@ -459,6 +516,9 @@ fn start_session_inner(
         std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o600))
             .map_err(|e| e.to_string())?;
     }
+    #[cfg(windows)]
+    let (ledger_id, run_path) = (run_id.clone(), dir.clone());
+    #[cfg(not(windows))]
     let (ledger_id, run_path) = if resume {
         let preview = std::process::Command::new(platform::launcher()?)
             .args(["--dry-run", "--resume", "latest"])
@@ -486,16 +546,19 @@ fn start_session_inner(
             home.join(".local/state/claude-lab/runs").join(&run_id),
         )
     };
+    #[allow(unused_mut)]
     let mut args = session_args(
         &model,
         resume,
         &config.to_string_lossy(),
         &root.join("plugin").to_string_lossy(),
     )?;
+    #[cfg(not(windows))]
     if resume {
         let at = args.iter().position(|a| a == "--resume").unwrap() + 1;
         args[at] = run_path.to_string_lossy().into_owned();
     }
+    #[cfg(not(windows))]
     if !resume {
         let at = args.iter().position(|a| a == "--").unwrap();
         args.splice(
@@ -542,7 +605,7 @@ fn start_session_inner(
         config_dir: dir,
     });
     Ok(
-        json!({"id":run_id,"model":model,"memory":"loaded by harness","research":"loaded by harness"}),
+        json!({"id":run_id,"model":model,"memory":if cfg!(windows) {"unavailable on this machine"} else {"loaded by harness"},"research":if cfg!(windows) {"unavailable on this machine"} else {"loaded by harness"}}),
     )
 }
 #[tauri::command]
@@ -551,15 +614,31 @@ fn session_status(state: tauri::State<AppState>) -> Value {
     let Some(session) = guard.as_mut() else {
         return json!({"active":false});
     };
+    #[cfg(not(windows))]
     let read = |name: &str| -> Value {
         std::fs::read(session.run_path.join(name))
             .ok()
             .and_then(|b| serde_json::from_slice(&b).ok())
             .unwrap_or(Value::Null)
     };
-    let runtime = read("runtime.json");
-    let metrics = read("metrics.json");
-    json!({"active":session.child.try_wait().map(|status|status.is_none()).unwrap_or(false),"route":metrics["route"]["modelAlias"].as_str().or_else(||metrics["route"]["model"].as_str()),"memory":runtime["claudeMem"]==true,"research":runtime["research"]==true})
+    #[cfg(windows)]
+    {
+        let active = session
+            .child
+            .try_wait()
+            .map(|status| status.is_none())
+            .unwrap_or(false);
+        if !active {
+            guard.take();
+        } // Releases ConPTY so the reader can reach EOF.
+        return json!({"active":active,"route":null,"memory":false,"research":false});
+    }
+    #[cfg(not(windows))]
+    {
+        let runtime = read("runtime.json");
+        let metrics = read("metrics.json");
+        json!({"active":session.child.try_wait().map(|status|status.is_none()).unwrap_or(false),"route":metrics["route"]["modelAlias"].as_str().or_else(||metrics["route"]["model"].as_str()),"memory":runtime["claudeMem"]==true,"research":runtime["research"]==true})
+    }
 }
 #[tauri::command]
 fn pty_write(state: tauri::State<AppState>, data: String) -> Result<(), String> {
@@ -590,40 +669,48 @@ fn stop_session(state: tauri::State<AppState>) {
 }
 #[tauri::command]
 fn open_vault_note(state: tauri::State<AppState>) -> Result<(), String> {
-    let home = platform::home()?;
-    let guard = state.session.lock().unwrap();
-    let session = guard.as_ref().ok_or("Start a session first")?;
-    let marker = home
-        .join(".clp/sessions")
-        .join(&session.ledger_id)
-        .join("vault-note.json");
-    let data: Value = serde_json::from_slice(
-        &std::fs::read(marker).map_err(|_| "No vault note yet; finish a turn first")?,
-    )
-    .map_err(|e| e.to_string())?;
-    let path = data["path"]
-        .as_str()
-        .or_else(|| data["notePath"].as_str())
-        .ok_or("Vault note path unavailable")?;
-    let file = std::path::Path::new(path)
-        .canonicalize()
-        .map_err(|e| e.to_string())?;
-    let vault = std::env::var_os("ALNAIR_VAULT")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| home.join("Documents/Obsidian Vault"))
-        .canonicalize()
-        .map_err(|e| e.to_string())?;
-    if !file.starts_with(vault) || file.extension().and_then(|x| x.to_str()) != Some("md") {
-        return Err("Note is outside the vault".into());
+    #[cfg(windows)]
+    {
+        let _ = state;
+        return Err("Vault notes and CLP memory are unavailable on this machine.".into());
     }
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("open")
-        .arg(file)
-        .spawn()
+    #[cfg(not(windows))]
+    {
+        let home = platform::home()?;
+        let guard = state.session.lock().unwrap();
+        let session = guard.as_ref().ok_or("Start a session first")?;
+        let marker = home
+            .join(".clp/sessions")
+            .join(&session.ledger_id)
+            .join("vault-note.json");
+        let data: Value = serde_json::from_slice(
+            &std::fs::read(marker).map_err(|_| "No vault note yet; finish a turn first")?,
+        )
         .map_err(|e| e.to_string())?;
-    #[cfg(not(target_os = "macos"))]
-    return Err("Vault opening is not implemented on this platform yet".into());
-    Ok(())
+        let path = data["path"]
+            .as_str()
+            .or_else(|| data["notePath"].as_str())
+            .ok_or("Vault note path unavailable")?;
+        let file = std::path::Path::new(path)
+            .canonicalize()
+            .map_err(|e| e.to_string())?;
+        let vault = std::env::var_os("ALNAIR_VAULT")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| home.join("Documents/Obsidian Vault"))
+            .canonicalize()
+            .map_err(|e| e.to_string())?;
+        if !file.starts_with(vault) || file.extension().and_then(|x| x.to_str()) != Some("md") {
+            return Err("Note is outside the vault".into());
+        }
+        #[cfg(target_os = "macos")]
+        std::process::Command::new("open")
+            .arg(file)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        #[cfg(not(target_os = "macos"))]
+        return Err("Vault opening is not implemented on this platform yet".into());
+        Ok(())
+    }
 }
 pub fn run() {
     tauri::Builder::default()
@@ -762,5 +849,31 @@ mod boundary_tests {
             validate(&json!({"id":"x","type":"card","title":"a","body":"x".repeat(32001)}))
                 .is_err()
         );
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_launch_tests {
+    use super::*;
+    #[test]
+    fn direct_cli_uses_real_fable_id_without_harness_flags() {
+        let args = session_args("fable", false, "mcp.json", "plugin").unwrap();
+        assert!(args.contains(&"claude-fable-5-2".into()));
+        assert!(!args
+            .iter()
+            .any(|a| ["--project", "--run", "--", "-p", "--print"].contains(&a.as_str())));
+        assert!(args.contains(&"--mcp-config".into()));
+        assert!(args.contains(&"--plugin-dir".into()));
+    }
+    #[test]
+    fn default_leaves_model_selection_to_claude() {
+        let args = session_args("auto", false, "m", "p").unwrap();
+        assert!(!args.contains(&"--model".into()));
+    }
+    #[test]
+    fn resume_uses_interactive_continue() {
+        let args = session_args("opus", true, "m", "p").unwrap();
+        assert!(args.contains(&"--continue".into()));
+        assert!(!args.contains(&"latest".into()));
     }
 }

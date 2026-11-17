@@ -19,6 +19,7 @@ export const TerminalPane = forwardRef<
   TerminalHandle,
   { demo: boolean; onStatus: (status: string) => void }
 >(function TerminalPane({ demo, onStatus }, ref) {
+  const windows = /Win/i.test(navigator.platform);
   const host = useRef<HTMLDivElement>(null),
     term = useRef<Terminal | null>(null),
     fit = useRef<FitAddon | null>(null),
@@ -152,9 +153,9 @@ export const TerminalPane = forwardRef<
       );
     } else {
       terminal.writeln(
-        "  A real Claude Code session. Your Alnair harness.\r\n",
+        windows ? "  Interactive Claude. Canvas tools enabled; Mac harness unavailable.\r\n" : "  A real Claude Code session. Your Alnair harness.\r\n",
       );
-      terminal.writeln("  Choose Start session or press ⌘K.\r\n");
+      terminal.writeln(windows ? "  Choose Start session or press Ctrl-K.\r\n" : "  Choose Start session or press ⌘K.\r\n");
       terminal.writeln("  No API keys. No headless execution.");
       terminal.writeln("  Approve any trust or permission prompt yourself.");
     }

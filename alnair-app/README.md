@@ -55,3 +55,48 @@ Release build compatibility: Rust 1.95 strips build-time proc macros into dylibs
 ## Windows next
 
 React, the fixed schema, stdio MCP and portable-pty core are portable. Still required: install/sign in to Claude Code interactively; port the existing Alnair Python launcher/lab's Mac paths and Keychain assumptions; implement Windows launcher/Python discovery and vault opening; add Mica/Acrylic in the platform shim; install WebView2/MSVC; produce and test an MSI/NSIS package; verify PTY resize, Unicode, Ctrl-C, process-tree cleanup and credential environment filtering on the laptop. Windows has not been built or tested. No repository was pushed or created remotely.
+
+## Windows prototype
+
+Build on Windows 11 with current stable Rust/MSVC, Node 24 LTS, Python 3 on PATH,
+and WebView2 already installed. Claude Code must be installed and signed in by the
+user. No API key is used by the app; provider credentials are removed from its
+child environment. Never use Claude `-p` or `--print`.
+
+```powershell
+npm ci
+npm test
+python -m unittest discover -s tests -p 'test_*.py' -v
+cargo +stable test --manifest-path src-tauri/Cargo.toml
+npm run tauri -- build --bundles nsis
+powershell -NoProfile -File scripts/install-windows.ps1 -DryRun
+powershell -NoProfile -File scripts/install-windows.ps1
+```
+
+The last command copies the release executable and only MCP/plugin/schema runtime
+assets to `%LOCALAPPDATA%\Programs\Alnair` and creates a current-user Start Menu
+shortcut. It never launches Alnair or Claude, requires no admin, and refuses to
+overwrite an existing installation. No PowerShell execution-policy change is
+needed or recommended; when running from a shell use `& ./scripts/install-windows.ps1`.
+The NSIS installer is also per-user; WebView2 bootstrap installation is disabled
+so it cannot silently install a system dependency or request elevation.
+
+Windows uses portable-pty's ConPTY backend, standard title-bar controls, and Mica
+(with Acrylic fallback). Press Ctrl-K for commands. The interactive terminal and
+canvas work locally; **CLP memory, vault integration, research plugins, and harness
+auto-routing are unavailable** because those Mac-only harness assets are not
+copied. The UI labels these limitations. Auto means Claude Code's own default;
+Sonnet/Opus and the Fable 5.2 ID are explicit interactive selections. Resume uses
+Claude Code's `--continue` in the user's home folder, not Mac Alnair history.
+
+Only the user opens the app and chooses Start session. Claude may ask for login,
+folder trust, MCP/plugin or tool approval. Windows may show SmartScreen because
+the app is unsigned; do not disable security features. Claude's own normal
+runtime bookkeeping may update its account/session files after the user launches
+it; the build and installer do not write global Claude configuration.
+
+The Windows runtime assets ship beside the executable under `runtime/`; the
+source checkout is not needed to run the installed Windows app. Mac packaging
+and its existing Alnair launcher behavior are unchanged. Native rendering,
+subscription authentication and actual model interaction still need the user's
+first-launch check; automated tests never start Claude.

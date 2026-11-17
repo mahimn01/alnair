@@ -60,6 +60,7 @@ mod tests {
         assert!(size(80, 24).is_ok())
     }
     #[test]
+    #[cfg(not(windows))]
     fn real_pty_echoes_without_a_model() {
         let mut cmd = CommandBuilder::new("/bin/sh");
         cmd.args(["-c", "printf ALNAIR_PTY_OK"]);
@@ -69,5 +70,48 @@ mod tests {
         assert!(text.contains("ALNAIR_PTY_OK"));
         let _ = child.wait();
         drop(master);
+    }
+    #[test]
+    #[cfg(windows)]
+    fn real_conpty_echo_resize_and_cleanup_without_a_model() {
+        use std::time::{Duration, Instant};
+        let mut cmd = CommandBuilder::new("cmd.exe");
+        cmd.args(["/d", "/c", "echo ALNAIR_PTY_OK"]);
+        let (master, mut writer, mut child, mut reader) =
+            spawn(cmd, size(80, 24).unwrap()).unwrap();
+        master.resize(size(100, 30).unwrap()).unwrap();
+        assert_eq!(master.get_size().unwrap().cols, 100);
+        // ConPTY inherits the cursor: a real terminal (xterm.js in the app) answers DSR.
+        writer.write_all(b"\x1b[1;1R").unwrap();
+        writer.flush().unwrap();
+        let reading = std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            let _ = reader.read_to_end(&mut bytes);
+            bytes
+        });
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let exited = loop {
+            if child.try_wait().unwrap().is_some() {
+                break true;
+            }
+            if Instant::now() >= deadline {
+                break false;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        if !exited {
+            let _ = child.kill();
+        }
+        let _ = child.wait();
+        drop(writer);
+        // ClosePseudoConsole is required before its output pipe reaches EOF.
+        // Keep the reader draining concurrently to avoid ClosePseudoConsole deadlock.
+        drop(master);
+        let bytes = reading.join().unwrap();
+        assert!(
+            exited,
+            "Non-model ConPTY child failed to exit within 15 seconds"
+        );
+        assert!(String::from_utf8_lossy(&bytes).contains("ALNAIR_PTY_OK"));
     }
 }

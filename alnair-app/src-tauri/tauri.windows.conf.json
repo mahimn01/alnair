@@ -1,0 +1,36 @@
+{
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Alnair",
+        "width": 1440,
+        "height": 940,
+        "minWidth": 1000,
+        "minHeight": 680,
+        "transparent": true,
+        "titleBarStyle": "Visible",
+        "hiddenTitle": false,
+        "decorations": true
+      }
+    ]
+  },
+  "bundle": {
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico", "icons/icon.png"],
+    "resources": {
+      "../mcp/": "runtime/mcp/",
+      "../plugin/": "runtime/plugin/",
+      "../spec.schema.json": "runtime/spec.schema.json"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "skip"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "startMenuFolder": "Alnair"
+      }
+    }
+  }
+}
