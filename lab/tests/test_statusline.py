@@ -62,6 +62,12 @@ class StatusLineTest(unittest.TestCase):
         self.assertIn('compactions 0', lines[0])
         self.assertIn('bili off', lines[0])
 
+    def test_code_mode_shows_only_when_the_session_runs_it(self):
+        self.write([reply(NOW - 600)])
+        self.assertIn('bili off · code mode', status.render(self.data(), {'CLAUDE_CODE_EXPERIMENTAL_CODE_MODE': '1'}, NOW)[0])
+        self.assertNotIn('code mode', status.render(self.data(), {'CLAUDE_CODE_EXPERIMENTAL_CODE_MODE': '0'}, NOW)[0])
+        self.assertNotIn('code mode', status.render(self.data(), {}, NOW)[0])
+
     def test_expired_cache_tells_the_user_to_start_fresh_for_a_new_topic(self):
         self.write([reply(NOW - 4000)])
         lines = status.render(self.data(120_000), {}, NOW)

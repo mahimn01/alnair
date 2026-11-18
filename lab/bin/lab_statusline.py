@@ -132,6 +132,8 @@ def render(data: dict, env: dict, now: float, cache_file: Path | None = None) ->
             name = '5-hour' if key == 'five_hour' else 'Weekly'
             warnings.append(f'{name} limit {pct}% used (resets {clock(window_info.get("resets_at"))}). Keep tasks small or wait.')
     parts.append('bili on' if bili else 'bili off')
+    if env.get('CLAUDE_CODE_EXPERIMENTAL_CODE_MODE') == '1':
+        parts.append('code mode')
 
     if share >= 85:
         warnings.insert(0, 'Context nearly full: it compacts soon and loses detail. Finish this step, then /lab-new and /clear.')
