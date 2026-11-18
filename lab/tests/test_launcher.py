@@ -67,11 +67,23 @@ class LauncherTest(unittest.TestCase):
     def test_readiness_blocks_inactive_plugin_without_running_a_model(self):
         import os
         env={**os.environ,'CLAUDE_LAB_RUN_DIR':str(self.run)}
-        result=subprocess.check_output(['python3',str(ROOT/'bin/ready_guard.py')],env=env,text=True)
+        result=subprocess.check_output(['python3',str(ROOT/'bin/ready_guard.py')],env=env,text=True,input='')
         self.assertEqual(json.loads(result)['decision'],'block')
         state=json.loads((self.run/'metrics.json').read_text());state['runtimeReady']=True;lab.dump(self.run/'metrics.json',state)
-        result=subprocess.check_output(['python3',str(ROOT/'bin/ready_guard.py')],env=env,text=True)
+        result=subprocess.check_output(['python3',str(ROOT/'bin/ready_guard.py')],env=env,text=True,input='')
         self.assertEqual(json.loads(result),{})
+
+    def test_readiness_never_withholds_prompts_the_person_did_not_type(self):
+        import os
+        env={**os.environ,'CLAUDE_LAB_RUN_DIR':str(self.run)}
+        guard=['/usr/bin/python3',str(ROOT/'bin/ready_guard.py')]
+        for source in ('poll_event','system','loop_wakeup'):
+            result=subprocess.check_output(guard,env=env,text=True,input=json.dumps({'prompt':'x','source':source}))
+            self.assertEqual(json.loads(result),{},source)
+        for payload in ({'prompt':'x','source':'user'},{'prompt':'x'},'not json'):
+            text=payload if isinstance(payload,str) else json.dumps(payload)
+            result=subprocess.check_output(guard,env=env,text=True,input=text)
+            self.assertEqual(json.loads(result)['decision'],'block',payload)
 
     def test_launcher_accepts_a_prompt_after_flags_without_starting_claude(self):
         import os

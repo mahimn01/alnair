@@ -1,5 +1,6 @@
 import {expect, mock, test} from 'claude-code/testing';
-import {route, evidenceComplete, redact, exhaustedWindows, spawnModel, usageSummary, budgetWarnings, mcporterDenial} from '../hooks/register.js';
+import {route, evidenceComplete, redact, exhaustedWindows, spawnModel, usageSummary, budgetWarnings, mcporterDenial,
+  nestedSessionDenial, settingsWriteDenial, scriptDenial, splitShell, isUserPrompt, isCodeCall, codeUsage} from '../hooks/register.js';
 
 function fixture(on, overrides = {}, config = {}, env = {}) {
   const f = {files:new Map(), models:[], efforts:[], calls:[], hash:'source-a', spawns:0, spawnModels:[]};
@@ -513,4 +514,126 @@ test('missing review artifacts fail clearly before a worker starts',async ($,on)
   const r=await $.agent.spawn({prompt:'Review missing.md',subagentType:'harness-lab:reviewer'});
   expect(r.deny.includes('missing')).toBe(true);
   expect(f.spawns).toBe(0);
+});
+
+// Code Mode: scripts run by the REPL tool, whose own tool calls carry tool_use_id "repl_...".
+const HOME='/home/u';
+test('Bash commands are checked part by part, so a cd prefix or a pipe cannot hide a nested session',async ($,on) => {
+  for (const c of ["cd 'app' && claude -p 'hi'",'cd /x; alnair --print task','git status | claude -p','echo ok\nclaude -p x',
+    '/opt/bin/claude -p x','FOO=1 timeout 9 claude -p x','x=$(claude -p hi)','bash -lc "claude -p hi"','echo hi | xargs alnair',
+    'codex exec "fix it"','(cd x && claude-lab-clp --resume)','$(which claude) -p x',"echo don't && claude -p x"])
+    expect(nestedSessionDenial(c)).toBeTruthy();
+  for (const c of ['claude --version','claude plugin validate /p','claude plugin test /p','alnair --help','grep -rn claude notes',
+    'git commit -m "never run claude -p"','cd ~/Documents/Dev/alnair && pytest -q','git clone --bare repo','echo hi # claude -p',
+    'ln -sfn /repo/claude-mem/bin/claude-lab-clp ~/.local/bin/alnair','codex --version'])
+    expect(nestedSessionDenial(c)).toBe(null);
+  expect(nestedSessionDenial('claude plugin test /p -p x')).toBeTruthy();
+  expect(splitShell("cd 'a b' && ls > out.txt 2>&1 | wc -l")).toEqual({commands:[['cd','a b'],['ls'],['wc','-l']],subs:[],writes:['out.txt']});
+  expect(splitShell("echo 'unclosed")).toBe(null);
+  const f=fixture(on);await start($);
+  const denied=await $.tool.call({tool:'Bash',command:"cd 'app' && claude -p hi",tool_use_id:'repl_1'});
+  expect(denied.deny.includes('nested session')).toBe(true);
+  expect((await $.tool.call({tool:'Bash',command:'grep -c claude README.md'})).deny).toBe(undefined);
+  expect(f.calls).toEqual(['Bash']);
+});
+
+test('no tool call, direct or from a script, may write the user Claude settings files; reads stay allowed',async ($,on) => {
+  expect(settingsWriteDenial('jq ".x=1" ~/.claude.json > /tmp/t && mv /tmp/t ~/.claude.json',HOME)).toBeTruthy();
+  expect(settingsWriteDenial('cp new.json $HOME/.claude/settings.json',HOME)).toBeTruthy();
+  expect(settingsWriteDenial('sed -i "" s/a/b/ /home/u/.claude/settings.json',HOME)).toBeTruthy();
+  expect(settingsWriteDenial('cat ~/.claude/settings.json; jq . ~/.claude.json > /tmp/copy',HOME)).toBe(null);
+  expect(settingsWriteDenial('echo {} > ./project/.claude/settings.json',HOME)).toBe(null);
+  const f=fixture(on,{},{},{HOME});await start($);
+  expect((await $.tool.call({tool:'Write',file_path:'/home/u/.claude.json',content:'{}',tool_use_id:'repl_2'})).deny.includes('unchanged')).toBe(true);
+  expect((await $.tool.call({tool:'Edit',file_path:'~/.claude/settings.json',old_string:'a',new_string:'b'})).deny).toBeTruthy();
+  expect((await $.tool.call({tool:'Bash',command:'echo {} > ~/.claude.json'})).deny).toBeTruthy();
+  expect((await $.tool.call({tool:'Read',file_path:'/home/u/.claude/settings.json'})).deny).toBe(undefined);
+  expect((await $.tool.call({tool:'Write',file_path:'/project/.claude/settings.json',content:'{}'})).deny).toBe(undefined);
+  expect(f.calls).toEqual(['Read','Write']);
+});
+
+test('a REPL script that starts a session or writes the settings files is refused before it runs',async ($,on) => {
+  expect(scriptDenial('const out = await $`cd app && claude -p "summarise"`',HOME)).toBeTruthy();
+  expect(scriptDenial('await Bash({command: "alnair --bare x"})',HOME)).toBeTruthy();
+  expect(scriptDenial('await $`codex exec "x"`',HOME)).toBeTruthy();
+  expect(scriptDenial("await Write({\n  file_path: '/home/u/.claude/settings.json',\n  content: '{}'\n})",HOME)).toBeTruthy();
+  expect(scriptDenial('await $`cp /tmp/s.json ~/.claude.json`',HOME)).toBeTruthy();
+  expect(scriptDenial("await Write({file_path: path.join(os.homedir(), '.claude.json'), content: ''})",HOME)).toBeTruthy();
+  expect(scriptDenial("const s = await Read({file_path: '~/.claude/settings.json'}); await Write({file_path: '/tmp/x', content: s.file.content})",HOME)).toBe(null);
+  expect(scriptDenial('await $`git clone --bare repo && claude --version`',HOME)).toBe(null);
+  const f=fixture(on,{},{},{HOME});await start($);
+  const refused=await $.tool.call({tool:'REPL',code:'await $`claude -p hi`'});
+  expect(refused.deny.includes('another Claude')).toBe(true);
+  const ran=await $.tool.call({tool:'REPL',code:'const {filenames} = await Glob({pattern:"**/*.md"}); filenames.length'});
+  expect(ran.deny).toBe(undefined);
+  expect(f.calls).toEqual(['REPL']);
+});
+
+test('workers still cannot delegate when the Agent call comes from their script',async ($,on) => {
+  const f=fixture(on);await start($);
+  const r=await $.tool.call({tool:'Agent',agentId:'worker-1',tool_use_id:'repl_9',subagent_type:'harness-lab:implementer',prompt:'x'});
+  expect(r.deny.includes('Nested delegation')).toBe(true);
+  expect(f.calls).toEqual([]);
+});
+
+test('REPL scripts and their inner calls are counted per agent and shown when code mode is on',async ($,on) => {
+  expect(isCodeCall({tool_use_id:'repl_ab12'})).toBe(true);
+  expect(isCodeCall({tool_use_id:'toolu_01'})).toBe(false);
+  expect(codeUsage({replCalls:1,innerToolCalls:2,agents:{w:{replCalls:2,innerToolCalls:5}}})).toEqual({replCalls:3,innerToolCalls:7});
+  const f=fixture(on,{},{codeMode:true});await start($);
+  await $.tool.call({tool:'REPL',code:'1+1'});
+  await $.tool.call({tool:'Read',file_path:'/project/a.md',tool_use_id:'repl_1'});
+  await $.tool.call({tool:'Grep',pattern:'x',tool_use_id:'repl_2'});
+  await $.tool.call({tool:'REPL',code:'2',agentId:'worker-1'});
+  await $.tool.call({tool:'Bash',command:'ls',agentId:'worker-1',tool_use_id:'repl_3'});
+  await $.tool.call({tool:'Bash',command:'ls'});
+  const state=JSON.parse(f.files.get('/lab/run/metrics.json'));
+  expect([state.replCalls,state.innerToolCalls,state.mainToolCalls]).toEqual([1,2,4]);
+  expect([state.agents['worker-1'].replCalls,state.agents['worker-1'].innerToolCalls]).toEqual([1,1]);
+  const status=await $.command.run({command:'lab-status',args:''});
+  expect(status.text.includes('code mode on · REPL scripts 2 (3 inner calls)')).toBe(true);
+});
+
+test('a script keeps the whole output of its own Bash call; direct calls are still shortened',async ($,on) => {
+  const f=fixture(on);f.stdout='HEAD\n'+'a'.repeat(24000)+'\nTAIL';await start($);
+  const inner=await $.tool.call({tool:'Bash',command:'cat big.json',tool_use_id:'repl_big'});
+  expect(inner.result.stdout).toBe(f.stdout);
+  expect(f.files.has('/lab/run/tool-output-repl_big.log')).toBe(false);
+  const direct=await $.tool.call({tool:'Bash',command:'cat big.json',tool_use_id:'toolu_big'});
+  expect(direct.result.stdout.length<10000).toBe(true);
+});
+
+test('script output and other machine-made prompts pass through untouched and are never blocked',async ($,on) => {
+  expect(isUserPrompt({origin:{kind:'composer'}})).toBe(true);
+  expect(isUserPrompt({})).toBe(true);
+  expect(isUserPrompt({origin:{kind:'unclassified'}})).toBe(true);
+  expect(isUserPrompt({source:'poll_event'})).toBe(false);
+  expect(isUserPrompt({origin:{kind:'task-notification'}})).toBe(false);
+  expect(isUserPrompt({isMeta:true,origin:{kind:'peer'}})).toBe(false);
+  const f=fixture(on);await start($);
+  for (const origin of [{kind:'task-notification'},{kind:'peer'},{kind:'auto-continuation'}]) {
+    const passed=await $.prompt.submit({text:'<event kind="repl-eval">Investigate a race condition</event>',origin,wait:false});
+    expect(passed.context).toBe(undefined);
+  }
+  const state=JSON.parse(f.files.get('/lab/run/metrics.json'));
+  expect(state.route).toBe(null);
+  expect(f.files.has('/lab/run/brief.md')).toBe(false);
+  // Broken lab state blocks a typed prompt, but never script output.
+  f.files.set('/lab/run/metrics.json','not json');
+  const later=await $.prompt.submit({text:'script output',origin:{kind:'task-notification'},wait:false});
+  expect(later.drop).toBe(undefined);
+  expect(later.text).toBe('script output');
+});
+
+test('Code Mode guidance reaches the lead only when the run has code mode on',async ($,on) => {
+  const f=fixture(on,{},{codeMode:true});await start($);
+  const on1=await prompt($,'Implement pagination');
+  expect(on1.context.join('\n').includes('Code Mode is on')).toBe(true);
+  expect(f.files.get('/lab/run/brief.md').includes('Implement pagination')).toBe(true);
+});
+
+test('without code mode the lead gets no Code Mode guidance',async ($,on) => {
+  fixture(on);await start($);
+  const off=await prompt($,'Implement pagination');
+  expect(off.context.join('\n').includes('Code Mode')).toBe(false);
 });

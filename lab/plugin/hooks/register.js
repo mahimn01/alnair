@@ -98,10 +98,249 @@ export function mcporterDenial(command) {
   if (/\bmcporter(?:\s+--?[\w-]+(?:[ =][^\s-]\S*)?)*\s+config\b/i.test(command)) return 'mcporter config output can contain credentials; ask the user to run config commands themselves.';
   return null;
 }
+
+// Code Mode (CLAUDE_CODE_EXPERIMENTAL_CODE_MODE): the model writes a script for the REPL tool and
+// the script's own tool calls ("inner calls") reach this hook under their normal names. The engine
+// gives every inner call a tool_use_id that starts with "repl_" (it checks the same prefix itself).
+// That id only feeds metrics and the output-shortening rule below; every deny check runs on every
+// call whatever its id, so a wrong guess about the id changes nothing that matters for safety.
+export const REPL_TOOLS = new Set(['REPL','Eval']);
+export const isCodeCall = e => typeof e?.tool_use_id === 'string' && e.tool_use_id.startsWith('repl_');
+
+// Programs that start a Claude, Alnair or Codex session. A nested session would bypass the lab's
+// routing, worker budget and handoffs, so Bash may only ask them for their version or help, and
+// may run `claude plugin validate|test` (static checks of a plugin, no model session).
+const LAUNCHERS = new Set(['claude','claude-rotate','claude-fallback','claude-headless','claude-science','alnair',
+  'claude-lab','claude-lab-clp','claude-clp','claude-mem','claude-mem-lab']);
+const INFO_ARGS = new Set(['--version','-v','--help','-h']);
+const SESSION_FLAGS = new Set(['-p','--print','--bare','-c','--continue','-r','--resume']);
+// Programs that only read, print or move their arguments: a launcher name there is data
+// (`grep claude notes.md`), not a command. Anything else that names a launcher is treated as running it.
+const DATA_PROGRAMS = new Set(['grep','egrep','fgrep','rg','ag','cat','head','tail','wc','ls','echo','printf','which','type',
+  'readlink','realpath','file','stat','basename','dirname','diff','git','jq','sort','uniq','cut','tr','cd','pushd','test','[',
+  'mkdir','cp','mv','rm','ln','chmod','touch','du','less','more','find']);
+const KEYWORDS = new Set(['!','{','}','if','then','else','elif','fi','do','done','while','until','time']);
+const SHELLS = new Set(['sh','bash','zsh','dash','ksh','fish']);
+const NESTED_SESSION = 'Use the lab specialists (the Agent tool) instead of starting another Claude, Alnair or Codex session: a nested session bypasses the lab routing, worker budget and handoffs. Version, help and `claude plugin validate|test` are allowed.';
+// Whole-text check for commands the splitter cannot read (an unbalanced quote): the pre-Code-Mode
+// rule, widened from claude/claude-rotate to every launcher and to `codex exec`.
+const LOOSE_NESTED = /(?:^|[;&|\s])(?:claude(?:-[a-z]+)*|alnair)(?=\s|$)|(?:^|[;&|\s])codex\s+(?:exec|e)(?=\s|$)/;
+const base = word => word.split('/').pop();
+
+// Splits a shell command line into simple commands (words with quotes removed) at &&, ||, ;, |, &,
+// newlines and parentheses, so `cd 'app' && claude -p x` is read as two commands. Text inside $(...),
+// backticks and <(...) is returned separately for the same check; redirection targets are returned
+// as `writes`. Returns null for text it cannot read with certainty (an unclosed quote or paren).
+export function splitShell(text) {
+  const commands = [], subs = [], writes = [];
+  let words = [], word = '', inWord = false, pendingWrite = false, i = 0;
+  const endWord = () => {
+    if (inWord) { if (pendingWrite) writes.push(word); else words.push(word); pendingWrite = false; }
+    word = ''; inWord = false;
+  };
+  const endCommand = () => { endWord(); if (words.length) commands.push(words); words = []; };
+  // Index just past the ) that closes the ( at `open`, skipping quoted text; -1 when unclosed.
+  const closeParen = open => {
+    let depth = 0;
+    for (let j = open; j < text.length; j++) {
+      const c = text[j];
+      if (c === '\\') { j++; continue; }
+      if (c === "'") { j = text.indexOf("'", j + 1); if (j < 0) return -1; continue; }
+      if (c === '"') { j++; while (j < text.length && text[j] !== '"') j += text[j] === '\\' ? 2 : 1; if (j >= text.length) return -1; continue; }
+      if (c === '(') depth++;
+      else if (c === ')' && --depth === 0) return j + 1;
+    }
+    return -1;
+  };
+  // A $(...), `...` or <(...) starting at i: records its body and returns the index after it.
+  const substitution = at => {
+    if (text[at] === '`') {
+      let j = at + 1;
+      while (j < text.length && text[j] !== '`') j += text[j] === '\\' ? 2 : 1;
+      if (j >= text.length) return -1;
+      subs.push(text.slice(at + 1, j));
+      return j + 1;
+    }
+    const end = closeParen(at + 1);
+    if (end < 0) return -1;
+    subs.push(text.slice(at + 2, end - 1));
+    return end;
+  };
+  const opensSub = at => text[at] === '`' || ('$<>'.includes(text[at]) && text[at + 1] === '(');
+  while (i < text.length) {
+    const c = text[i];
+    if (c === '\\') { if (text[i + 1] !== '\n' && i + 1 < text.length) { word += text[i + 1]; inWord = true; } i += 2; continue; }
+    if (c === "'") {
+      const j = text.indexOf("'", i + 1);
+      if (j < 0) return null;
+      word += text.slice(i + 1, j); inWord = true; i = j + 1; continue;
+    }
+    if (c === '"') {
+      let j = i + 1;
+      while (j < text.length && text[j] !== '"') {
+        if (text[j] === '\\') { word += text[j + 1] ?? ''; j += 2; continue; }
+        if (opensSub(j) && text[j] !== '<' && text[j] !== '>') { const end = substitution(j); if (end < 0) return null; word += '\0'; j = end; continue; }
+        word += text[j]; j++;
+      }
+      if (j >= text.length) return null;
+      inWord = true; i = j + 1; continue;
+    }
+    if (opensSub(i)) { const end = substitution(i); if (end < 0) return null; word += '\0'; inWord = true; i = end; continue; }
+    if (c === '$' && text[i + 1] === '{') {
+      const j = text.indexOf('}', i);
+      if (j < 0) return null;
+      word += text.slice(i, j + 1); inWord = true; i = j + 1; continue;
+    }
+    if (c === '#' && !inWord) { const j = text.indexOf('\n', i); i = j < 0 ? text.length : j; continue; }
+    if (c === '\n') { endCommand(); i++; continue; }
+    if (/\s/.test(c)) { endWord(); i++; continue; }
+    if (';&|()'.includes(c)) { endCommand(); i++; continue; }
+    if (c === '<' || c === '>') {
+      // A redirection: `>`/`>>` targets are files written; `<`, `<<` and `<<<` take no command word.
+      // A number written against it (the 2 of 2>&1) names a file descriptor, not an argument.
+      if (inWord && /^\d+$/.test(word) && /\d/.test(text[i - 1])) { word = ''; inWord = false; }
+      endWord();
+      const op = /^(?:\d*>>?\|?|<<-?|<<<|<>|<)/.exec(text.slice(i))?.[0] || c;
+      i += op.length;
+      if (text[i] === '&') { i++; while (/[\d-]/.test(text[i] || '')) i++; continue; }  // 2>&1
+      pendingWrite = op.includes('>');
+      if (!pendingWrite) { while (text[i] === ' ' || text[i] === '\t') i++; while (i < text.length && !/[\s;&|()<>]/.test(text[i])) i++; }
+      continue;
+    }
+    word += c; inWord = true; i++;
+  }
+  endCommand();
+  return {commands, subs, writes};
+}
+
+// Why one simple command (its words) must not run, or null.
+function commandDenial(words, subs, depth) {
+  let i = 0;
+  while (i < words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]) || KEYWORDS.has(words[i]))) i++;
+  if (i >= words.length) return null;
+  const program = words[i], name = base(program), args = words.slice(i + 1);
+  // A program name built at run time from a substitution that names a launcher: $(which claude) -p.
+  if (program.includes('\0') && subs.some(s => [...s.matchAll(/[^\s;&|()'"`]+/g)].some(m => LAUNCHERS.has(base(m[0]))))) return NESTED_SESSION;
+  if (/\s/.test(program)) return nestedSessionDenial(program, depth + 1);
+  if (LAUNCHERS.has(name)) {
+    if (args.length === 1 && INFO_ARGS.has(args[0])) return null;
+    if (name === 'claude' && args[0] === 'plugin' && ['validate','test'].includes(args[1]) && !args.some(a => SESSION_FLAGS.has(a))) return null;
+    return NESTED_SESSION;
+  }
+  if (name === 'codex') return ['exec','e'].includes(args.find(a => !a.startsWith('-'))) ? NESTED_SESSION : null;
+  if (name === 'eval') return nestedSessionDenial(args.join(' '), depth + 1);
+  if (SHELLS.has(name)) {
+    const flag = args.findIndex(a => /^-[a-z]*c[a-z]*$/.test(a));
+    if (flag >= 0 && args[flag + 1] !== undefined) return nestedSessionDenial(args[flag + 1], depth + 1);
+  }
+  if (DATA_PROGRAMS.has(name) && !(name === 'find' && args.some(a => /^-(?:exec|execdir|ok|okdir)$/.test(a)))) return null;
+  // Any other program (xargs, env, nohup, timeout, ssh, an unknown wrapper) that names a launcher
+  // is treated as running it, and an argument that is itself a command line is read as one.
+  for (const a of args) {
+    if (LAUNCHERS.has(base(a))) return NESTED_SESSION;
+    if (base(a) === 'codex' && ['exec','e'].includes(args[args.indexOf(a) + 1])) return NESTED_SESSION;
+    if (/\s/.test(a)) { const inner = nestedSessionDenial(a, depth + 1); if (inner) return inner; }
+  }
+  return null;
+}
+
+// Why a Bash command line must not run because it starts a nested session, or null.
+export function nestedSessionDenial(command, depth = 0) {
+  const text = String(command || '');
+  if (!text.trim()) return null;
+  const lexed = depth < 4 ? splitShell(text) : null;
+  if (!lexed) return LOOSE_NESTED.test(text) ? NESTED_SESSION : null;
+  for (const inner of lexed.subs) { const reason = nestedSessionDenial(inner, depth + 1); if (reason) return reason; }
+  for (const words of lexed.commands) { const reason = commandDenial(words, lexed.subs, depth); if (reason) return reason; }
+  return null;
+}
+
+// The user's own Claude settings files. The lab never changes them (Code Mode is enabled through the
+// child environment only), and neither may a tool call from the model or from a script.
+const SETTINGS_DENIAL = 'The lab leaves ~/.claude/settings.json and ~/.claude.json unchanged. Ask the user to change Claude settings themselves outside this session; use /lab-model for routing.';
+function protectedPaths(home) { return home ? [home + '/.claude/settings.json', home + '/.claude.json'] : []; }
+function expandHome(path, home) {
+  return String(path || '').replace(/^(?:~|\$HOME|\$\{HOME\})(?=\/|$)/, home || '~').replace(/\/{2,}/g, '/').replace(/\/(?:\.\/)+/g, '/');
+}
+export function isProtectedPath(path, home) {
+  return Boolean(home) && protectedPaths(home).includes(expandHome(path, home));
+}
+// Why a Bash command line writes one of the settings files, or null. Reads stay allowed.
+export function settingsWriteDenial(command, home) {
+  if (!home || !/\.claude/.test(command || '')) return null;
+  const lexed = splitShell(String(command));
+  if (!lexed) return /(?:>|\btee\b|\bmv\b|\bcp\b|\bln\b|\brm\b|\bsed\s+-i|\btruncate\b)[^\n;&|]*(?:~|\$\{?HOME\}?|\/)[^\s;&|]*\/\.claude(?:\/settings\.json|\.json)(?![\w.-])/.test(command) ? SETTINGS_DENIAL : null;
+  if (lexed.writes.some(w => isProtectedPath(w, home))) return SETTINGS_DENIAL;
+  for (const words of lexed.commands) {
+    const name = base(words[0] || ''), args = words.slice(1).filter(a => !a.startsWith('-'));
+    const hit = a => isProtectedPath(a, home);
+    if (['tee','rm','truncate','unlink','shred'].includes(name) && args.some(hit)) return SETTINGS_DENIAL;
+    if (['cp','ln','install','rsync','ditto'].includes(name) && hit(args[args.length - 1] || '')) return SETTINGS_DENIAL;
+    if (name === 'mv' && args.some(hit)) return SETTINGS_DENIAL;
+    if (['sed','gsed','perl'].includes(name) && words.some(a => /^-[a-zA-Z]*i/.test(a)) && args.some(hit)) return SETTINGS_DENIAL;
+  }
+  for (const inner of lexed.subs) { const reason = settingsWriteDenial(inner, home); if (reason) return reason; }
+  return null;
+}
+
+// A first look at a whole REPL script, before any of its calls run. Each inner call is still
+// checked on its own (the authoritative check: it sees the real values, which code may build at
+// run time). This catches the plain cases early with one clear reason.
+const SCRIPT_NESTED = /(?<![\w.-])(?:claude(?:-[a-z]+)*|alnair)(?![\w-])[^\n'"`;|&]{0,200}?\s(?:-p|--print|--bare)(?![\w-])/;
+const SCRIPT_CODEX = /(?<![\w.-])codex\s+(?:exec|e)(?![\w-])/;
+const WRITE_CALLS = /^(?:Write|Edit|MultiEdit|NotebookEdit|edit|write|writeFile|writeFileSync|appendFile|appendFileSync|rename|renameSync|copyFile|copyFileSync|unlink|unlinkSync|rm|rmSync)$/;
+const SHELL_WRITE = /(?:>|\btee\b|\bmv\b|\bcp\b|\bln\b|\brm\b|\btruncate\b|\bsed\s+(?:-\S+\s+)*-[a-zA-Z]*i|\bperl\s+-\S*i)[^'"`]*$/;
+export function scriptDenial(code, home) {
+  const text = String(code || '');
+  if (SCRIPT_NESTED.test(text) || SCRIPT_CODEX.test(text)) return 'This script starts another Claude, Alnair or Codex session (-p, --print, --bare or codex exec). ' + NESTED_SESSION;
+  const homeRe = home ? '|' + home.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '';
+  const paths = new RegExp('(?:~|\\$\\{?HOME\\}?|process\\.env\\.HOME\\s*\\+\\s*[\'"`]' + homeRe + ')/\\.claude(?:/settings\\.json|\\.json)(?![\\w.-])'
+    + '|homedir\\(\\)\\s*,\\s*[\'"`]\\.claude(?:[\'"`]\\s*,\\s*[\'"`]settings\\.json|\\.json)[\'"`]', 'g');
+  for (const m of text.matchAll(paths)) {
+    // The string the path sits in: a shell write before it in the same string (`cp x ~/.claude.json`).
+    const before = text.slice(Math.max(0, m.index - 400), m.index);
+    const quote = Math.max(before.lastIndexOf("'"), before.lastIndexOf('"'), before.lastIndexOf('`'));
+    if (quote >= 0 && SHELL_WRITE.test(before.slice(quote + 1))) return SETTINGS_DENIAL;
+    // The calls the path sits inside: Write({file_path: '~/.claude.json', ...}) and the like.
+    let depth = 0;
+    for (let j = m.index - 1, seen = 0; j >= 0 && j > m.index - 2000 && seen < 3; j--) {
+      const c = text[j];
+      if (')]}'.includes(c)) depth++;
+      else if ('([{'.includes(c)) {
+        if (depth > 0) { depth--; continue; }
+        if (c !== '(') continue;
+        seen++;
+        const callee = /([A-Za-z_$][\w$]*)\s*$/.exec(text.slice(Math.max(0, j - 60), j))?.[1] || '';
+        if (WRITE_CALLS.test(callee)) return SETTINGS_DENIAL;
+      }
+    }
+  }
+  return null;
+}
+
+// Totals of Code Mode use for the status line: REPL scripts and the tool calls they made.
+export function codeUsage(state = {}) {
+  const parts = [state, ...Object.values(state.agents || {})];
+  return {replCalls:parts.reduce((n, p) => n + (p?.replCalls || 0), 0), innerToolCalls:parts.reduce((n, p) => n + (p?.innerToolCalls || 0), 0)};
+}
+
+// Only the person's own prompt starts or re-routes a task. Script output delivered while a Code Mode
+// script runs in the background (`poll_event`), notifications, peer-session messages and other
+// machine-made turns pass through untouched: no routing, no brief, no added context, never blocked.
+// A prompt with no origin, or one of a kind this list does not name, keeps the normal lab handling.
+const NON_USER_ORIGINS = new Set(['task-notification','peer','peer-send-message','projects-relay','channel','observer',
+  'observer-activity','auto-continuation','plugin']);
+const CODE_MODE_CONTEXT = 'Code Mode is on (the REPL tool runs your JavaScript). Batch related reads, searches and lookups into one script, filter and summarise in code, and return only the compact result. The lab rules still hold inside scripts: record checkpoints with mcp__harness-lab__checkpoint, run acceptance checks through mcp__harness-lab__verify, start specialists with Agent, and never start another Claude, Alnair or Codex session.';
+export function isUserPrompt(e) {
+  if (e?.source === 'poll_event' || e?.source === 'system') return false;
+  const kind = e?.origin?.kind;
+  if (e?.isMeta && kind !== 'composer' && kind !== 'bridge') return false;
+  return !NON_USER_ORIGINS.has(kind);
+}
 // Keeps a raised session effort (/effort) and raises a lower one to what the route needs.
 function atLeast(current, wanted) { return EFFORTS.indexOf(current) >= EFFORTS.indexOf(wanted) ? current : wanted; }
 
-let cfg, state, run, root;
+let cfg, state, run, root, home;
 let authSource, authEnabled, authGeneration;
 let lock = Promise.resolve();
   async function init($) {
@@ -115,6 +354,7 @@ let lock = Promise.resolve();
     authSource = await $.env.get('CLAUDE_LAB_AUTH_SOURCE');
     authEnabled = await $.env.get('CLAUDE_LAB_AUTH_FALLBACK') === '1';
     authGeneration = await $.env.get('CLAUDE_LAB_AUTH_GENERATION');
+    home = (await $.env.get('HOME')) || '';
   }
   async function change($, fn) {
     const previous = lock;
@@ -173,7 +413,8 @@ let lock = Promise.resolve();
     const warnings = budgetWarnings(state);
     return `${cfg.mode} · ${state.route?.model || 'awaiting task'} · workers ${state.workers} · requests ${state.steps} · Opus ${usage.opusShare}% of ${usage.calls} calls · ${(usage.tokens / 1e6).toFixed(1)}M new tokens (+${(usage.cacheReads / 1e6).toFixed(1)}M cache reads) · revision ${state.revision}` +
       (warnings.length ? ' · OVER SOFT BUDGET: ' + warnings.join('; ') : '') +
-      (cfg.homeWorkspace ? ` · code scope: ${state.verificationProject || 'choose with /lab-project'}` : '');
+      (cfg.homeWorkspace ? ` · code scope: ${state.verificationProject || 'choose with /lab-project'}` : '') +
+      (cfg.codeMode ? ` · code mode on · REPL scripts ${codeUsage(state).replCalls} (${codeUsage(state).innerToolCalls} inner calls)` : '');
   }
   // One reasoner hint per task replaces the old automatic switch of the lead to Opus.
   function setHint(reason) { if (!state.reasonerHinted) state.reasonerHint = reason; }
@@ -281,6 +522,7 @@ export function register(on) {
   });
 
   on('prompt.submit', async ($, e, next) => {
+    if (!isUserPrompt(e)) return next(e);
     try {
       const chosen = await change($, async () => {
         // Route on the user's words only; project paths are not task signals.
@@ -310,7 +552,8 @@ export function register(on) {
       });
       let context = `Claude Lab: ${chosen.model}, ${chosen.effort}; ${chosen.reason}. Task artifacts: ${run}. Use compact checkpoints and evidence, not another transcript. ${status()}.`;
       context += '\nSoft budget for this task (replaces any earlier "no budget" instruction): at most 4 workers, one independent review plus at most one re-review after fixes, and stop to ask the user once the lab status shows more than 2M tokens on this task. The lead model stays fixed for the task. Multi-step data or bulk output → harness-lab:code-first-data skill; return summaries, not dumps.';
-      if (chosen.overBudget) context += '\nSOFT BUDGET EXCEEDED (see status). Before more work, tell the user the usage so far and ask whether to continue; if they already said continue, carry on.';
+      if (cfg.codeMode) context += '\n' + CODE_MODE_CONTEXT;
+      if (chosen.overBudget) context +='\nSOFT BUDGET EXCEEDED (see status). Before more work, tell the user the usage so far and ask whether to continue; if they already said continue, carry on.';
       if (chosen.hard) context += '\nThis looks like a hard question. Keep the lead model; spawn harness-lab:reasoner once with the specific question and the evidence.';
       if (chosen.hint) context += '\n' + hintText(chosen.hint);
       if (cfg.homeWorkspace && state.scopeRequired) context += '\nHome-directory session: browse normally. Before coding, select the specific work folder with mcp__harness-lab__select_project. No entire-home source scan is performed; unscoped research completion records a checkpoint only.';
@@ -319,7 +562,7 @@ export function register(on) {
       $.ui.log(`Route: ${chosen.model} (${chosen.reason}).`);
       return next({...e,context:[...(e.context || []),context]});
     } catch { return {drop:'Claude Lab state could not be loaded. Run claude-lab doctor; ordinary claude remains available.'}; }
-  }).catch(() => ({drop:'Lab prompt routing failed. No prompt is sent; inspect the lab runtime.'}));
+  }).catch(async ($, e, next) => isUserPrompt(e) ? {drop:'Lab prompt routing failed. No prompt is sent; inspect the lab runtime.'} : next(e));
 
   on('agent.spawn', async ($, e, next) => {
     let model, warnings;
@@ -409,8 +652,23 @@ export function register(on) {
   });
 
 
+  // Stays fast and never throws: in Code Mode a hook that fails or hangs refuses the script's call.
+  // Ordinary calls cost one counter write and string checks; only the lab's own verify and
+  // select_project tools run processes, because running them is what those tools are.
   on('tool.call', async ($, e, next) => {
-    await change($, () => { if (!e.agentId) state.mainToolCalls = (state.mainToolCalls || 0) + 1; });
+    const fromCode = isCodeCall(e), script = REPL_TOOLS.has(e.tool);
+    await change($, () => {
+      if (!e.agentId) state.mainToolCalls = (state.mainToolCalls || 0) + 1;
+      if (script || fromCode) {
+        const owner = e.agentId ? (state.agents[e.agentId] ||= {model:null,effort:null,steps:0}) : state;
+        if (script) owner.replCalls = (owner.replCalls || 0) + 1;
+        if (fromCode) owner.innerToolCalls = (owner.innerToolCalls || 0) + 1;
+      }
+    });
+    if (script) {
+      const denial = scriptDenial(e.code, home);
+      if (denial) return {deny:denial};
+    }
     if (e.tool === 'mcp__harness-lab__checkpoint') {
       await change($, async () => {
         for (const name of ['context','plan','implementation'])
@@ -433,9 +691,13 @@ export function register(on) {
     }
     if (e.agentId && (e.tool === 'Agent' || e.tool === 'Workflow')) return {deny:'Nested delegation is disabled in this lab.'};
     if (e.tool === 'Workflow') return {deny:'Use the bounded lab specialists. Open-ended workflows are disabled in this variation.'};
-    if (e.tool === 'Bash' && /(?:^|[;&|\s])claude(?:-rotate)?(?:\s|$)/.test(e.command || ''))
-      return {deny:'Use the lab specialists to keep model routing and context handoffs consistent.'};
-    if (['Bash','Monitor'].includes(e.tool) && mcporterDenial(e.command || '')) return {deny:mcporterDenial(e.command)};
+    if (['Write','Edit','MultiEdit','NotebookEdit'].includes(e.tool) && isProtectedPath(e.file_path || e.notebook_path, home))
+      return {deny:SETTINGS_DENIAL};
+    if (['Bash','Monitor'].includes(e.tool)) {
+      const command = e.command || '';
+      const denial = nestedSessionDenial(command) || settingsWriteDenial(command, home) || mcporterDenial(command);
+      if (denial) return {deny:denial};
+    }
     // Pass on the original event. This never changes a permission decision.
     const result = await next(e);
     if (!result.deny && !result.isError && ['Write','Edit','MultiEdit','NotebookEdit'].includes(e.tool)) {
@@ -448,7 +710,10 @@ export function register(on) {
         state.evidenceComplete = false;
       });
     }
-    if (e.tool === 'Bash' && typeof result.result?.stdout === 'string' && result.result.stdout.length > 20000) {
+    // Long output is shortened for the model, with the full text saved locally. A script's own Bash
+    // call is left whole: the script parses it, and Code Mode itself cuts each part of what a script
+    // returns or logs to a head and tail before the model reads it.
+    if (e.tool === 'Bash' && !fromCode && typeof result.result?.stdout === 'string' && result.result.stdout.length > 20000) {
       const id = String(e.tool_use_id || ('step-' + state.steps)).replace(/[^A-Za-z0-9_-]/g,'_');
       const path = run + '/tool-output-' + id + '.log';
       const full = redact(result.result.stdout);
