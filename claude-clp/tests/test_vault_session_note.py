@@ -300,3 +300,26 @@ def test_a_session_without_tools_gets_no_tool_section(vsn, tmp_path: Path):
     write_transcript(transcript, "s1", ["hello"], "hi")
     parsed = vsn.parse_transcript(transcript)
     assert parsed["tool_use"]["repl_scripts"] == 0 and vsn.render_tool_use(parsed["tool_use"]) == []
+
+
+def test_rows_of_the_wrong_shape_are_skipped_not_fatal(vsn, tmp_path: Path):
+    """Every field the parser reads, given the wrong type: the note still parses and counts what it can."""
+    odd = [
+        {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": ["x"], "id": 7, "input": ["a"]}]}},
+        {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": {"a": 1}, "id": "repl_z", "input": "s"}]}},
+        {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "REPL", "input": {"code": 5}}]}},
+        {"type": "assistant", "message": {"content": {"type": "tool_use"}}},
+        {"type": "assistant", "message": "text"},
+        {"type": "assistant", "isVirtual": "yes", "message": {"content": [{"type": "tool_use", "name": None, "id": None}]}},
+        {"type": "progress", "data": {"type": "repl_tool_call", "toolName": ["Read"], "toolUseId": {"x": 1}, "toolInput": 3}},
+        {"type": "progress", "data": "repl_tool_call"},
+        {"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": None}, "loose", 4]}},
+        {"type": "user", "message": {"role": "user", "content": "keep this prompt"}},
+        ["a", "list"], 5, None,
+    ]
+    path = tmp_path / "odd.jsonl"
+    path.write_text("\n".join(json.dumps(r) for r in odd) + "\n")
+    parsed = vsn.parse_claude_transcript(path)
+    tools = parsed["tool_use"]
+    assert set(tools["direct"]) | set(tools["inner"]) <= {"tool"}
+    assert tools["repl_scripts"] == 1 and "keep this prompt" in json.dumps(parsed["prompts"])

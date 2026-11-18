@@ -9,7 +9,7 @@ of work where batching tool calls in a script should help, if it helps at all.
 1. `bash claude-mem/bench/code_mode_ab/setup.sh` makes `/tmp/alnair-ab-off` and `/tmp/alnair-ab-on`, two
    identical copies of `claude-clp/fixture` with the task material added.
 2. In one terminal, arm OFF:
-   `<repo>/claude-mem/bin/claude-lab-clp --model opus --mode deep --project /tmp/alnair-ab-off`
+   `<repo>/claude-mem/bin/claude-lab-clp --model opus --mode deep --no-code-mode --project /tmp/alnair-ab-off`
 3. In another terminal, arm ON:
    `<repo>/claude-mem/bin/claude-lab-clp --model opus --mode deep --code-mode --project /tmp/alnair-ab-on`
 4. Paste the prompt below into each, unchanged. Don't help either session along. When it has answered,
@@ -46,7 +46,8 @@ Don't change any other file.
    (`backoff`, `cap`, `attempts_left`, `jitter`, `Window.__init__`, `Window.allows`) have a docstring, and
    the twelve behaviour cases hold.
 3. No other file changed: compared with `/tmp/alnair-ab-<arm>.seed.json`, only `code/limits.py` changed and
-   only `broken-links.txt` was added (`__pycache__` folders are ignored).
+   only `broken-links.txt` was added. `__pycache__` folders are ignored, and files Claude Code itself
+   writes under `.claude/` (a "don't ask again" answer) are listed apart and don't count.
 
 An arm passes when all three hold. Then compare cost and behaviour: API requests, input, output and cache
 tokens, tool calls (direct, REPL scripts, calls inside scripts), wall time, whether the lab hooks fired

@@ -114,5 +114,29 @@ def test_an_on_arm_where_code_mode_never_ran_is_marked_invalid(arms, tmp_path, m
     result = collect.arm("on", str(folder), collect.load_note_parser())
     assert result["session"] == session and result["code_mode_ran"] is False and result["arm_valid"] is False
     assert "Code Mode did not run" in result["arm_problem"]
-    (run / "metrics.json").write_text(json.dumps({"replCalls": 2, "innerToolCalls": 5}))
-    assert collect.arm("on", session, collect.load_note_parser())["arm_valid"] is True
+    (run / "metrics.json").write_text(json.dumps({"replCalls": 2, "innerToolCalls": 5, "hasBrief": True}))
+    ran = collect.arm("on", session, collect.load_note_parser())
+    assert ran["arm_valid"] is True and ran["lab_metrics"]["brief_written"] is True
+    # The OFF arm is invalid when it was launched with Code Mode on, even if no script ran.
+    (run / "metrics.json").write_text(json.dumps({"replCalls": 0}))
+    off = collect.arm("off", session, collect.load_note_parser())
+    assert off["arm_valid"] is False and "launched with Code Mode on" in off["arm_problem"]
+    assert off["lab_metrics"]["brief_written"] is False  # the placeholder brief.md is not proof
+    # The vault-note marker is read from the run's own CLP store.
+    store = tmp_path / "store"
+    note = tmp_path / "note.md"
+    note.write_text("x")
+    (store / "sessions" / session).mkdir(parents=True)
+    (store / "sessions" / session / "vault-note.json").write_text(json.dumps({"path": str(note)}))
+    (run / "runtime.json").write_text(json.dumps({"runId": session, "project": str(folder), "codeMode": True, "clpStore": str(store)}))
+    assert collect.arm("on", session, collect.load_note_parser())["vault_note"] == str(note)
+
+
+def test_files_claude_code_writes_under_dot_claude_do_not_fail_the_arm(arms):
+    collect = load_collect()
+    folder = arms / "alnair-ab-off"
+    solve(folder)
+    (folder / ".claude").mkdir()
+    (folder / ".claude/settings.local.json").write_text("{}")
+    done = collect.criteria(folder, arms / "alnair-ab-off.seed.json")
+    assert done["passed"] is True and done["claude_code_files"] == [".claude/settings.local.json"]

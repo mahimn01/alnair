@@ -148,7 +148,7 @@ done
 cat <<EOF
 
 Both arms are ready. Start each in its own terminal (the repo launcher, not ~/.local/bin):
-  arm OFF: $repo/claude-mem/bin/claude-lab-clp --model opus --mode deep --project $base/alnair-ab-off
+  arm OFF: $repo/claude-mem/bin/claude-lab-clp --model opus --mode deep --no-code-mode --project $base/alnair-ab-off
   arm ON:  $repo/claude-mem/bin/claude-lab-clp --model opus --mode deep --code-mode --project $base/alnair-ab-on
 Paste the prompt from $here/TASK.md into each, wait for the reply, then exit the session (/exit).
 Afterwards:

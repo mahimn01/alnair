@@ -163,11 +163,14 @@ def criteria(folder: Path | None, seed_file: Path | None) -> dict:
     out["check_output"] = (check.stdout + check.stderr).strip()[-600:]
     seed = read_json(seed_file) if seed_file else {}
     before = seed.get("files") or {}
+    # Claude Code itself may write <folder>/.claude/ (a "don't ask again" answer goes to settings.local.json),
+    # so that folder is reported apart and doesn't count against the session.
     now = {str(p.relative_to(folder)): hashlib.sha256(p.read_bytes()).hexdigest()
            for p in sorted(folder.rglob("*")) if p.is_file() and "__pycache__" not in p.parts}
+    claude_dir = sorted(k for k in now if Path(k).parts[0] == ".claude" and k not in before)
     changed = sorted(k for k in before if now.get(k) != before[k])
-    added = sorted(k for k in now if k not in before)
-    out["changed"], out["added"] = changed, added
+    added = sorted(k for k in now if k not in before and k not in claude_dir)
+    out["changed"], out["added"], out["claude_code_files"] = changed, added, claude_dir
     out["only_expected_changes"] = bool(before) and changed == ["code/limits.py"] and added == ["broken-links.txt"]
     out["passed"] = bool(out["broken_links"] and out["check"] and out["only_expected_changes"])
     return out
@@ -191,12 +194,14 @@ def arm(label: str, spec: str, parser) -> dict:
     result["lab_metrics"] = {
         "runtime_ready": metrics.get("runtimeReady"),
         "route": (metrics.get("route") or {}).get("model"),
-        "brief_written": bool(metrics.get("hasBrief")) or bool(run and (run / "brief.md").is_file()),
+        "brief_written": bool(metrics.get("hasBrief")),  # brief.md exists from the start as a placeholder
         "main_tool_calls": metrics.get("mainToolCalls"),
         "repl_scripts": metrics.get("replCalls"),
         "inner_tool_calls": metrics.get("innerToolCalls"),
     }
-    marker = read_json(SESSIONS / session / "vault-note.json")
+    # The session-end hook writes the marker under the run's own CLP store (clpStore), else the default store.
+    sessions = Path(cfg["clpStore"]).expanduser() / "sessions" if cfg.get("clpStore") else SESSIONS
+    marker = read_json(sessions / session / "vault-note.json") if session else {}
     result["vault_note"] = marker.get("path") if marker.get("path") and Path(marker["path"]).is_file() else None
     result["criteria"] = criteria(folder, Path(f"{folder}.seed.json") if folder else None)
     # An arm is only a fair sample if Code Mode really ran (ON) or really did not (OFF): a recorded choice
@@ -205,10 +210,14 @@ def arm(label: str, spec: str, parser) -> dict:
                   int((result.get("tool_use_from_transcript") or {}).get("repl_scripts") or 0))
     result["code_mode_ran"] = scripts > 0
     want = label == "on"
-    result["arm_valid"] = result["code_mode_ran"] == want
-    if not result["arm_valid"]:
-        result["arm_problem"] = ("Code Mode did not run (no REPL scripts), so this ON arm is invalid" if want
-                                 else "REPL scripts ran, so this OFF arm is invalid")
+    problems = []
+    if bool(result["code_mode_recorded"]) != want:
+        problems.append(f"the run was launched with Code Mode {'off' if want else 'on'}")
+    if result["code_mode_ran"] != want:
+        problems.append("Code Mode did not run (no REPL scripts)" if want else "REPL scripts ran")
+    result["arm_valid"] = not problems
+    if problems:
+        result["arm_problem"] = "; ".join(problems) + f", so this {label.upper()} arm is invalid"
     return result
 
 
@@ -265,6 +274,9 @@ def show(results: list[dict]) -> None:
             print(f"\n{r['arm']} check output:\n{out}")
         changed = cell(r, "criteria", "changed"), cell(r, "criteria", "added")
         print(f"{r['arm']} changed: {changed[0]}  added: {changed[1]}")
+        written = cell(r, "criteria", "claude_code_files")
+        if written not in ("-", []):
+            print(f"{r['arm']} written by Claude Code under .claude/ (not counted): {written}")
 
 
 def main(argv: list[str] | None = None) -> int:

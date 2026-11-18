@@ -172,7 +172,7 @@ What's different inside a Code Mode session:
 - The lab's guards run on every call a script makes, just as on a direct call. A script still can't start another Claude, Alnair or Codex session, can't write `~/.claude/settings.json` or `~/.claude.json`, and can't use the blocked mcporter servers. Script text that would start a headless session or write those two files is refused before it runs.
 - The CLP and research tools take `format: "json"` and then return one JSON object, so a script can `JSON.parse` the result instead of reading prose.
 - Bash output from inside a script isn't shortened by the lab, because Code Mode trims what a script returns. Direct Bash calls are still shortened.
-- `/lab-status` and the status line show `code mode`, with the number of scripts and the calls made inside them.
+- The status line shows `code mode`. `/lab-status` also shows how many scripts ran and how many calls they made.
 - Session notes get a tool section: direct calls, scripts, calls inside scripts, and commands run. Claude Code doesn't document how script calls are written to the transcript, so the note parser accepts several shapes and falls back to reading the script text. Treat the note's counts as a lower bound. The lab metrics count every call.
 
 `claude-mem/bench/code_mode_ab/` has a small task, a setup script and a collector for comparing the same task with Code Mode off and on.

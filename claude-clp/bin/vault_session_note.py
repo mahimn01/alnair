@@ -280,6 +280,11 @@ def _count(table: dict, name: str) -> None:
     table[name] = table.get(name, 0) + 1
 
 
+def _tool_name(value: object) -> str:
+    """A tool name as written, or "tool" when the row has none or something that isn't text."""
+    return value.strip() if isinstance(value, str) and value.strip() else "tool"
+
+
 def _add_command(tools: dict, command: object) -> None:
     if isinstance(command, str) and command.strip():
         text = " ".join(command.split())[:MAX_COMMAND_CHARS]
@@ -301,7 +306,7 @@ def _inner_call(tools: dict, files_changed: list[str], call_id: object, name: ob
         if call_id in tools["_inner_ids"]:
             return
         tools["_inner_ids"].add(call_id)
-    _count(tools["inner"], str(name or "tool"))
+    _count(tools["inner"], _tool_name(name))
     _add_paths(files_changed, inp)
     if isinstance(inp, dict):
         _add_command(tools, inp.get("command"))
@@ -331,7 +336,7 @@ def _tool_blocks(tools: dict, files_changed: list[str], content: object, virtual
     for block in content:
         if not isinstance(block, dict) or block.get("type") != "tool_use":
             continue
-        name, inp, call_id = block.get("name") or "tool", block.get("input"), block.get("id")
+        name, inp, call_id = _tool_name(block.get("name")), block.get("input"), block.get("id")
         if name in REPL_TOOLS:
             _script(tools, files_changed, inp.get("code") if isinstance(inp, dict) else None)
         elif isinstance(call_id, str) and call_id.startswith(INNER_PREFIX):
