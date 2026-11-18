@@ -346,18 +346,27 @@ def finalize_run(lab, run: Path, store: Path | None, force_bili_off: bool = True
     dump(run / "settings.json", merge_clp_into_settings(settings, run, store, session_id, research, research_home))
     dump(run / "source-hashes-mem.json", hashes())
     if persist:
-        ensure_session_ledger(session_id, cfg.get("project"), run, store)
-        meta = {
-            "schema": 1,
-            "runId": session_id,
-            "runDir": str(run),
-            "project": cfg.get("project"),
-            "createdAt": datetime.now(timezone.utc).isoformat(),
-            "labRoot": str(LAB_ROOT),
-            "clpRoot": str(CLP_ROOT),
-        }
-        dump(STATE / session_id / "mem.json", meta)
+        persist_session(cfg, run, store)
     return cfg
+
+
+def persist_session(cfg: dict, run: Path, store: Path | None) -> None:
+    """Open the CLP session ledger and record the mem meta: the state outside the run folder.
+
+    The launcher calls this only once the launch is certain to go ahead, so a refused launch leaves no
+    ledger behind for `latest` to pick up."""
+    session_id = cfg["runId"]
+    ensure_session_ledger(session_id, cfg.get("project"), run, store)
+    meta = {
+        "schema": 1,
+        "runId": session_id,
+        "runDir": str(run),
+        "project": cfg.get("project"),
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+        "labRoot": str(LAB_ROOT),
+        "clpRoot": str(CLP_ROOT),
+    }
+    dump(STATE / session_id / "mem.json", meta)
 
 
 def demo_prompt() -> str:
@@ -688,7 +697,7 @@ def main(argv: list[str] | None = None) -> int:
         recorded = bool(cfg.get("codeMode"))
         if opt.code_mode is not None and opt.code_mode != recorded:
             code_notes.append(f"alnair: this session was started with Code Mode {'on' if recorded else 'off'} and resumes that way.")
-        cfg = finalize_run(lab, run, store, force_bili_off=True, persist=not opt.dry_run, **research_opts(opt, resume=True))
+        cfg = finalize_run(lab, run, store, force_bili_off=True, persist=False, **research_opts(opt, resume=True))
         if not opt.dry_run:
             os.chdir(cfg.get("launchCwd", cfg["project"]))
         code_source = "run"
@@ -713,7 +722,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             run, cfg = lab.prepare(opt.project, opt.mode, opt.model, opt.run, opt.full_tools, headless=opt.print_mode)
             os.chdir(cfg.get("launchCwd", cfg["project"]))
-        cfg = finalize_run(lab, run, store, force_bili_off=True, persist=not opt.dry_run, code_mode=code_mode, **research_opts(opt))
+        cfg = finalize_run(lab, run, store, force_bili_off=True, persist=False, code_mode=code_mode, **research_opts(opt))
 
     # Build the launch, then check a Code Mode run against what Code Mode needs (the final env after the
     # bili/auth clean-up, the settings layers, the routed models, Remote Control and the passthrough flags).
@@ -728,6 +737,9 @@ def main(argv: list[str] | None = None) -> int:
         argv_, env = launch_argv_env(lab, run, prompt, resume=resume, **launch)
     argv_ = with_remote_control(argv_, opt.remote_control)
     cfg = json.loads((run / "runtime.json").read_text())
+    if not opt.dry_run:
+        # Only now is the launch certain, so only now does state outside the run folder get written.
+        persist_session(cfg, run, store)
     for note in code_notes:
         print(note, file=sys.stderr)
 

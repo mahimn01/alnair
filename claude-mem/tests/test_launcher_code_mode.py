@@ -198,3 +198,22 @@ def test_a_bad_alnair_code_mode_value_stops_before_any_run_folder_and_spares_inf
     assert list(runs.iterdir()) == []
     assert L.main(["doctor"]) == 0  # info commands don't read the setting
     capsys.readouterr()
+
+
+def test_a_refused_real_launch_writes_no_session_ledger_or_mem_meta(project, tmp_path, monkeypatch):
+    """Not a dry run: the refusal comes after the run folder exists, so it must stop before the state outside it."""
+    runs, mem_state = tmp_path / "runs", tmp_path / "mem-state"
+    runs.mkdir()
+    monkeypatch.setattr(LAB, "STATE", runs)
+    monkeypatch.setattr(L, "STATE", mem_state)
+    ledgers: list[str] = []
+    monkeypatch.setattr(L, "ensure_session_ledger", lambda session_id, *a, **k: ledgers.append(session_id))
+    monkeypatch.setattr(L.os, "execve", lambda *a: pytest.fail("a refused launch must not start a session"))
+    monkeypatch.setattr(LAB, "auth_environment", lambda env, source=None: dict(env))  # no Keychain read
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("DISABLE_TELEMETRY", "1")
+    with pytest.raises(ValueError, match="DISABLE_TELEMETRY is set"):
+        L.main(["--project", str(project), "--code-mode", "--store", str(tmp_path / "store")])
+    assert ledgers == [] and not mem_state.exists()
+    (run,) = runs.iterdir()
+    assert json.loads((run / "runtime.json").read_text())["launchRefused"] is True
