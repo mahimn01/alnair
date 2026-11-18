@@ -544,6 +544,18 @@ test('Bash commands are checked part by part, so a cd prefix or a pipe cannot hi
     "python3 - <<'EOF'\nimport subprocess\nprint(subprocess.run(['claude','--version']).returncode)\nEOF", "python3 -c \"models = ['claude', 'gpt']; print(models)\"",
     "cat <<'EOF' || true\nclaude -p hi\nEOF"])
     expect([command,nestedSessionDenial(command)]).toEqual([command,null]);
+  // Third review: a wrapper whose option takes a value, or a later pipe stage, still reads the body; a
+  // process call's list is a command in any of its forms; a list handed to print, sorted or set is data.
+  for (const command of ["uv run python - <<'EOF'\nimport os\nos.system('claude -p hi')\nEOF", "sudo -u root bash <<'EOF'\nclaude -p hi\nEOF",
+    "env -u X bash <<'EOF'\nclaude -p hi\nEOF", "timeout -s KILL 5 bash <<'EOF'\nalnair -p hi\nEOF", "ssh host bash -s <<'EOF'\nclaude -p hi\nEOF",
+    "cat <<EOF | tee /tmp/log | bash\nclaude -p hi\nEOF", "python3 -c \"import os; os.execlp('claude', 'claude', '-p', 'x')\"",
+    "python3 -c \"import pty; pty.spawn(['claude', '-p', 'x'])\"", "node -e \"require('execa').execa('alnair', ['-p', 'x'])\""])
+    expect([command,nestedSessionDenial(command)]).toEqual([command,expect.stringContaining('Agent tool')]);
+  for (const command of ["python3 -c \"print(sorted(['alnair', 'beta']))\"", "python3 -c \"names = set(['claude', 'codex']); print(len(names))\"",
+    "python3 -c \"import json; d = json.load(open('c.json')); print(d.get('alnair', []))\"", "python3 - <<'EOF'\nprint(', '.join(['claude', 'codex']))\nEOF",
+    "node -e \"console.log(['claude', 'codex'].length)\"", "node -e \"console.log(JSON.stringify(['claude', 'codex']))\"",
+    "python3 -c \"import os; os.execvp('claude', ['claude', '--version'])\""])
+    expect([command,nestedSessionDenial(command)]).toEqual([command,null]);
   const f=fixture(on);await start($);
   const denied=await $.tool.call({tool:'Bash',command:"cd 'app' && claude -p hi",tool_use_id:'repl_1'});
   expect(denied.deny.includes('nested session')).toBe(true);
@@ -582,7 +594,10 @@ test('no tool call, direct or from a script, may write the user Claude settings 
     'rm -rf ~/.claude', 'rm ~/.claude/*.json', 'rm -rf ~/.c*', 'mv ~/.claude ~/.claude.old', 'rm -rf /',
     "cd ~/.claude && python3 -c \"open('settings.json','w').write('{}')\"", "osascript -e 'do shell script \"echo x > ~/.claude.json\"'",
     'cp -R /tmp/backup/.claude ~/', "python3 -m json.tool /tmp/in.json ~/.claude.json",
-    "python3 -c \"import json,os;json.dump({}, open(os.path.expanduser('~/.claude.json'), 'w'))\"", "node -e \"require('fs').writeFileSync('/home/u/.claude.json','{}')\""])
+    "python3 -c \"import json,os;json.dump({}, open(os.path.expanduser('~/.claude.json'), 'w'))\"", "node -e \"require('fs').writeFileSync('/home/u/.claude.json','{}')\"",
+    // Third review: wrappers with option values, and a body piped through tee into a shell.
+    "uv run python - <<'EOF'\nopen('/home/u/.claude.json','w').write('{}')\nEOF", "sudo -u root bash <<'EOF'\necho {} > ~/.claude.json\nEOF",
+    "timeout -s KILL 5 bash <<'EOF'\necho {} > ~/.claude/settings.json\nEOF", "cat <<'EOF' | tee /dev/null | sh\necho {} > ~/.claude.json\nEOF"])
     expect([command,settingsWriteDenial(command,HOME)]).toEqual([command,expect.stringContaining('unchanged')]);
   expect(settingsWriteDenial('echo {} > settings.json',HOME,HOME + '/.claude')).toBeTruthy();
   expect(settingsWriteDenial('echo {} > settings.json',HOME,'/project')).toBe(null);
@@ -631,6 +646,12 @@ test('a REPL script that starts a session or writes the settings files is refuse
   expect(scriptDenial('const hits = await $`grep -rn "claude -p" README.md`',HOME)).toBe(null);
   expect(scriptDenial("await Edit({file_path: '/project/README.md', old_string: 'a', new_string: 'never run claude -p or write ~/.claude.json'})",HOME)).toBe(null);
   expect(scriptDenial("const note = 'alnair -p is refused'; await Write({file_path: '/project/notes.md', content: note})",HOME)).toBe(null);
+  // Third review: a quote inside a regex literal does not hide the calls after it.
+  expect(scriptDenial("const re = /'/g; await $`claude -p hi`",HOME)).toBeTruthy();
+  expect(scriptDenial("s.replace(/\"/g, ''); fs.writeFileSync(os.homedir() + '/.claude.json', '{}')",HOME)).toBeTruthy();
+  expect(scriptDenial("const x = a.split(/'/); await Bash({command: 'alnair -p x'})",HOME)).toBeTruthy();
+  // A division is not a regex literal, so the call between two of them is still seen.
+  expect(scriptDenial("const half = total / 2; await $`claude -p hi`; half / 3",HOME)).toBeTruthy();
   // A write call or a shell call that is only written inside a string or a comment is not made by the script.
   expect(scriptDenial("await Write({file_path:'/p/notes.md', content:'Do not writeFileSync(\"~/.claude.json\")'})",HOME)).toBe(null);
   expect(scriptDenial("// fs.writeFileSync('/home/u/.claude.json', '{}')\nconst x = 1",HOME)).toBe(null);

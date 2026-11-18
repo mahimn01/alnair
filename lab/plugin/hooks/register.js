@@ -245,16 +245,29 @@ function commandDenial(words, subs, depth) {
   return null;
 }
 
-// Interpreter code that starts a program from a list of quoted words passed to a call:
-// subprocess.run(['claude', '-p', 'x']) or spawn('alnair', ['-p']). Each such list whose program is a
-// launcher is checked as that command, so --version and --help stay allowed.
+// Interpreter code that starts a program through a process call with its words as a list:
+// subprocess.run(['claude', '-p', 'x']), pty.spawn([...]), Bun.spawn([...]), os.execvp('claude', [...]),
+// os.execlp('claude', 'claude', '-p'), spawn('alnair', ['-p']), execa(...), execFileSync(...),
+// asyncio.create_subprocess_exec(...), new Deno.Command('claude', {args: [...]}). Each one whose program
+// is a launcher is checked as that command, so --version and --help stay allowed. Lists passed to any
+// other call (print, sorted, set, JSON.stringify) are only data. Scans are bounded (400 characters).
+const LIST_CALL = /\b(?:run|call|Popen|check_call|check_output|spawn|spawnSync)\s*\(\s*\[([^\]]{0,400})\]/g;
+const PROGRAM_CALL = /\b(?:os\.(?:exec\w*|spawn\w*|posix_spawnp?)|spawn|spawnSync|execFile|execFileSync|execa|execaSync|fork|create_subprocess_exec|Deno\.Command)\s*\(\s*(['"])([\w./-]+)\1/g;
 function codeListDenial(code, depth) {
+  const text = String(code);
   const quoted = list => [...list.matchAll(/(['"])([^'"\n]*)\1/g)].map(w => w[2]);
   const lists = [];
-  // Each item is a quoted word, then spaces, then an optional comma and spaces: one way to match, so a
-  // long malformed list fails fast.
-  for (const m of String(code).matchAll(/\(\s*\[\s*((?:(['"])[^'"\n]*\2\s*(?:,\s*)?)+)\]/g)) lists.push(quoted(m[1]));
-  for (const m of String(code).matchAll(/\(\s*(['"])([\w./-]+)\1\s*,\s*\[\s*((?:(['"])[^'"\n]*\4\s*(?:,\s*)?)*)\]/g)) lists.push([m[2], ...quoted(m[3])]);
+  for (const m of text.matchAll(LIST_CALL)) lists.push(quoted(m[1]));
+  for (const m of text.matchAll(PROGRAM_CALL)) {
+    // The program, then its arguments: a list right after it, an options object's args list, or more
+    // quoted words passed one by one.
+    const after = text.slice(m.index + m[0].length, m.index + m[0].length + 400);
+    const list = /^\s*,\s*(?:\{[^}]*?\bargs\s*:\s*)?\[([^\]]*)\]/.exec(after);
+    const each = /^(?:\s*,\s*(['"])[^'"\n]*\1)*/.exec(after)[0];
+    const args = quoted(list ? list[1] : each);
+    // os.exec* and posix_spawn take the full argv, so their first word repeats the program name.
+    lists.push([m[2], ...(m[0].startsWith('os.') ? args.slice(1) : args)]);
+  }
   for (const words of lists) {
     if (!words.length || !(LAUNCHERS.has(base(words[0])) || base(words[0]) === 'codex')) continue;
     const reason = commandDenial(words, [], depth + 1);
@@ -263,7 +276,7 @@ function codeListDenial(code, depth) {
   return null;
 }
 
-// Here-document bodies are judged by who reads them: the simple command that owns the << and the
+// Here-document bodies are judged by who reads them: the simple command that owns the << and every
 // command it pipes into.
 // - A shell (bash <<EOF, cat <<EOF | sh): the body runs as commands, so it stays in place and is checked.
 // - An interpreter (python3 - <<EOF, cat <<EOF | node): the body is cut out and kept as code ({code:true}).
@@ -286,15 +299,24 @@ function programOf(text) {
   }
   return '';
 }
-const readerOf = name => SHELLS.has(name) ? 'shell' : INTERPRETER.test(name) ? 'code' : 'data';
+// Programs that take a here-document as plain text: cat > note.md, git commit -F -, tee, jq, pbcopy ...
+const TEXT_READERS = new Set(['cat','tee','git','gh','pbcopy','mail','jq','yq','sed','awk','sort','uniq','wc','tr',
+  'base64','column','diff','patch','curl','head','tail','grep','egrep','fgrep','rg','echo','printf','less','more','true']);
+// How one pipeline stage reads its input: 'data' when its program is a known text reader; otherwise
+// any shell or interpreter word in it decides (sudo -u root bash, uv run python -, ssh host bash -s).
+function readerOf(stage) {
+  if (TEXT_READERS.has(programOf(stage))) return 'data';
+  const words = String(stage).trim().split(/\s+/).map(w => base(w.replace(/^['"]+|['"]+$/g, '')));
+  return words.some(w => SHELLS.has(w)) ? 'shell' : words.some(w => INTERPRETER.test(w)) ? 'code' : 'data';
+}
 export function withoutHeredocBodies(text, bodies = []) {
   return String(text).replace(HEREDOC, (match, quote, delimiter, rest, at, whole) => {
     const before = whole.slice(whole.lastIndexOf('\n', at) + 1, at);
-    const owner = readerOf(programOf(before.split(/&&|\|\||[;&|(]/).pop()));
-    const pipe = /(?:^|[^|])\|(?!\|)&?([^|;&]*)/.exec(rest);
-    const piped = pipe ? readerOf(programOf(pipe[1])) : 'data';
-    if (owner === 'shell' || piped === 'shell') return match;
-    bodies.push({text:match.slice(match.indexOf('\n') + 1), code:owner === 'code' || piped === 'code'});
+    // The command that owns the <<, then every later stage of its pipeline (cat <<EOF | tee log | bash).
+    const stages = [before.split(/&&|\|\||[;&|(]/).pop(), ...rest.split(/&&|\|\||;/)[0].split(/\|&?/).slice(1)];
+    const readers = stages.map(readerOf);
+    if (readers.includes('shell')) return match;
+    bodies.push({text:match.slice(match.indexOf('\n') + 1), code:readers.includes('code')});
     return '<<' + delimiter + rest;
   });
 }
@@ -495,6 +517,23 @@ function codeOnly(text) {
       const close = text[i + 1] === '/' ? text.indexOf('\n', i) : text.indexOf('*/', i + 2);
       const end = close < 0 ? text.length : text[i + 1] === '/' ? close : close + 2;
       out += ' '.repeat(end - i); i = end; continue;
+    }
+    // A regex literal (/'/g, /"/): a / where a value starts, not after one (a / b divides). It ends at the
+    // next unescaped / outside a [...] class on the same line, and its body is blanked like a string.
+    if (c === '/') {
+      let k = i - 1;
+      while (k >= 0 && /\s/.test(text[k])) k--;
+      const word = /[A-Za-z_$]+$/.exec(text.slice(Math.max(0, k - 9), k + 1))?.[0];
+      if (k < 0 || '(,=:[!&|?{};+-*%<>~^'.includes(text[k]) || /^(?:return|typeof|case|do|else|in|of|void|yield|await)$/.test(word ?? '')) {
+        let j = i + 1, inClass = false;
+        while (j < text.length && text[j] !== '\n' && (inClass || text[j] !== '/')) {
+          if (text[j] === '\\') j++;
+          else if (text[j] === '[') inClass = true;
+          else if (text[j] === ']') inClass = false;
+          j++;
+        }
+        if (text[j] === '/') { out += '/' + ' '.repeat(j - i - 1) + '/'; i = j + 1; continue; }
+      }
     }
     if (c === "'" || c === '"' || c === '`') {
       let j = i + 1;
