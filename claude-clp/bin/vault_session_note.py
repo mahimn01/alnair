@@ -32,6 +32,8 @@ MAX_ASSISTANT_CHARS = 4000
 MAX_FINDINGS = 30
 MAX_FINDING_CHARS = 400
 MAX_FILES = 40
+MAX_COMMANDS = 20
+MAX_COMMAND_CHARS = 200
 MAX_NOTE_CHARS = 120_000
 
 SECRET_PATTERNS = [
@@ -254,6 +256,105 @@ def is_codex_transcript(transcript_path: Path) -> bool:
     return False
 
 
+# Code Mode (Claude Code's experimental REPL tool; "Eval" is its older name) runs one model-written JavaScript
+# script that makes many tool calls. The transcript format of those inner calls is not a documented interface:
+# Claude Code 2.1.327 shows them live as "repl_tool_call" progress (ids start with "repl_") and keeps the
+# script itself in the REPL tool_use input `code`. So the parser reads every shape defensively and never fails
+# on one: the script text (heuristic: tool names, file paths and commands written in it), tool_use blocks whose
+# id starts with repl_, and repl_tool_call progress rows when a version writes them. Virtual (isVirtual) rows are
+# never taken as prompts or replies; their other tool_use blocks (a plugin-run tool, a question dialog) are
+# display copies, so they add file paths but no call counts.
+REPL_TOOLS = {"REPL", "Eval"}
+INNER_PREFIX = "repl_"
+SCRIPT_CALL = re.compile(r"(?<![\w$.])(?:tools\.)?(mcp__[A-Za-z0-9_\-]+|[A-Z][A-Za-z]+)\s*\(\s*\{")
+SCRIPT_FIELD = re.compile(r"\b(file_path|notebook_path|path|command)\s*:\s*(['\"`])((?:(?!\2)[^\\\n]|\\.){1,400})\2")
+SCRIPT_TOOL_NAMES = {"Read", "Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "Grep", "Glob", "WebFetch", "WebSearch",
+                     "Agent", "Task", "Monitor", "TodoWrite", "Skill", "LSP", "AskUserQuestion"}
+
+
+def new_tool_use() -> dict:
+    return {"direct": {}, "repl_scripts": 0, "inner": {}, "script_tools": {}, "commands": [], "_inner_ids": set()}
+
+
+def _count(table: dict, name: str) -> None:
+    table[name] = table.get(name, 0) + 1
+
+
+def _add_command(tools: dict, command: object) -> None:
+    if isinstance(command, str) and command.strip():
+        text = " ".join(command.split())[:MAX_COMMAND_CHARS]
+        if text not in tools["commands"] and len(tools["commands"]) < MAX_COMMANDS:
+            tools["commands"].append(text)
+
+
+def _add_paths(files_changed: list[str], inp: object) -> None:
+    if isinstance(inp, dict):
+        for key in ("file_path", "notebook_path", "path"):
+            value = inp.get(key)
+            if isinstance(value, str) and value and value not in files_changed:
+                files_changed.append(value)
+
+
+def _inner_call(tools: dict, files_changed: list[str], call_id: object, name: object, inp: object) -> None:
+    """One tool call a Code Mode script made (counted once per id)."""
+    if isinstance(call_id, str) and call_id:
+        if call_id in tools["_inner_ids"]:
+            return
+        tools["_inner_ids"].add(call_id)
+    _count(tools["inner"], str(name or "tool"))
+    _add_paths(files_changed, inp)
+    if isinstance(inp, dict):
+        _add_command(tools, inp.get("command"))
+
+
+def _script(tools: dict, files_changed: list[str], code: object) -> None:
+    """A REPL script: count it, and read tool names, file paths and commands from its text (heuristic)."""
+    tools["repl_scripts"] += 1
+    if not isinstance(code, str):
+        return
+    for name in SCRIPT_CALL.findall(code):
+        if name in SCRIPT_TOOL_NAMES or name.startswith("mcp__"):
+            _count(tools["script_tools"], name)
+    for key, _quote, value in SCRIPT_FIELD.findall(code):
+        if "${" in value:
+            continue  # a template with a variable: not a literal path or command
+        if key == "command":
+            _add_command(tools, value)
+        elif value not in files_changed:
+            files_changed.append(value)
+
+
+def _tool_blocks(tools: dict, files_changed: list[str], content: object, virtual: bool) -> None:
+    """Every tool_use block in one message: a REPL script, an inner Code Mode call, or a direct call."""
+    if not isinstance(content, list):
+        return
+    for block in content:
+        if not isinstance(block, dict) or block.get("type") != "tool_use":
+            continue
+        name, inp, call_id = block.get("name") or "tool", block.get("input"), block.get("id")
+        if name in REPL_TOOLS:
+            _script(tools, files_changed, inp.get("code") if isinstance(inp, dict) else None)
+        elif isinstance(call_id, str) and call_id.startswith(INNER_PREFIX):
+            _inner_call(tools, files_changed, call_id, name, inp)
+        elif virtual:
+            _add_paths(files_changed, inp)
+        else:
+            _count(tools["direct"], name)
+            _add_paths(files_changed, inp)
+            if isinstance(inp, dict) and name in ("Bash", "Monitor"):
+                _add_command(tools, inp.get("command"))
+
+
+def _progress(tools: dict, files_changed: list[str], obj: dict) -> None:
+    data = obj.get("data")
+    if isinstance(data, dict) and data.get("type") == "repl_tool_call" and data.get("phase") in (None, "start"):
+        _inner_call(tools, files_changed, data.get("toolUseId") or obj.get("toolUseID"), data.get("toolName"), data.get("toolInput"))
+
+
+def public_tool_use(tools: dict) -> dict:
+    return {k: v for k, v in tools.items() if not k.startswith("_")}
+
+
 def parse_transcript(transcript_path: Path) -> dict:
     if transcript_path.is_file() and is_codex_transcript(transcript_path):
         try:
@@ -264,11 +365,18 @@ def parse_transcript(transcript_path: Path) -> dict:
     return parse_claude_transcript(transcript_path)
 
 
+def _is_script_event(content: object) -> bool:
+    """A user-role turn that only carries a background Code Mode script's result (<event kind="repl-eval">)."""
+    text = _text_from_content(content).lstrip()
+    return text.startswith("<event kind=\"repl-")
+
+
 def parse_claude_transcript(transcript_path: Path) -> dict:
     prompts: list[str] = []
     assistants: list[str] = []
     findings: list[str] = []
     files_changed: list[str] = []
+    tools = new_tool_use()
     cwd = None
     session_from_file = None
     if not transcript_path.is_file():
@@ -277,6 +385,7 @@ def parse_claude_transcript(transcript_path: Path) -> dict:
             "assistants": assistants,
             "findings": findings,
             "files_changed": files_changed,
+            "tool_use": public_tool_use(tools),
             "cwd": cwd,
             "session_id": session_from_file,
             "error": f"transcript missing: {transcript_path}",
@@ -296,12 +405,24 @@ def parse_claude_transcript(transcript_path: Path) -> dict:
                     obj = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                if not isinstance(obj, dict):
+                    continue
                 if session_from_file is None and isinstance(obj.get("sessionId"), str):
                     session_from_file = obj["sessionId"]
                 if cwd is None and isinstance(obj.get("cwd"), str):
                     cwd = obj["cwd"]
                 typ = obj.get("type")
                 msg = obj.get("message") if isinstance(obj.get("message"), dict) else None
+                if typ == "progress":
+                    _progress(tools, files_changed, obj)
+                    continue
+                if obj.get("isVirtual") is True:
+                    # A row Claude Code made for display (e.g. a Code Mode script's inner calls): tools only.
+                    if msg:
+                        _tool_blocks(tools, files_changed, msg.get("content"), virtual=True)
+                    continue
+                if typ == "user" and msg and msg.get("role") == "user" and _is_script_event(msg.get("content")):
+                    continue  # a background Code Mode script's result, delivered as a turn the person did not type
                 if typ == "user" and msg and msg.get("role") == "user":
                     text = _text_from_content(msg.get("content")).strip()
                     # Skip pure tool_result echoes (no human prompt)
@@ -337,23 +458,15 @@ def parse_claude_transcript(transcript_path: Path) -> dict:
                                 hit = next(g for g in m.groups() if g)
                                 if hit not in files_changed:
                                     files_changed.append(hit)
-                    # tool_use file paths on assistant side
-                    content = msg.get("content")
-                    if isinstance(content, list):
-                        for b in content:
-                            if isinstance(b, dict) and b.get("type") == "tool_use":
-                                inp = b.get("input") or {}
-                                if isinstance(inp, dict):
-                                    for k in ("file_path", "path"):
-                                        v = inp.get(k)
-                                        if isinstance(v, str) and v not in files_changed:
-                                            files_changed.append(v)
+                    # tool_use blocks on the assistant side: file paths, commands, and Code Mode scripts
+                    _tool_blocks(tools, files_changed, msg.get("content"), virtual=False)
     except OSError as exc:
         return {
             "prompts": prompts,
             "assistants": assistants,
             "findings": findings,
             "files_changed": files_changed,
+            "tool_use": public_tool_use(tools),
             "cwd": cwd,
             "session_id": session_from_file,
             "error": str(exc),
@@ -363,6 +476,7 @@ def parse_claude_transcript(transcript_path: Path) -> dict:
         "assistants": assistants[-12:],
         "findings": findings[-MAX_FINDINGS:],
         "files_changed": files_changed[:MAX_FILES],
+        "tool_use": public_tool_use(tools),
         "cwd": cwd,
         "session_id": session_from_file,
         "error": None,
@@ -506,6 +620,7 @@ def render_note(
             lines.append("- (none yet)")
     lines.append("")
     lines.extend(["## Latest assistant output (concise)", "", "```", last_out, "```", ""])
+    lines.extend(render_tool_use(parsed.get("tool_use") or {}))
     lines.extend(["## Files touched (from transcript)", ""])
     if files_changed:
         for f in files_changed:
@@ -519,6 +634,34 @@ def render_note(
     if len(body) > MAX_NOTE_CHARS:
         body = body[: MAX_NOTE_CHARS - 20] + "\n\n…truncated…\n"
     return body
+
+
+def _counts(table: dict) -> str:
+    return ", ".join(f"{name} {n}" for name, n in sorted(table.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+def render_tool_use(tool_use: dict) -> list[str]:
+    """The note's tool section: direct calls, Code Mode scripts and their inner calls, and commands run."""
+    direct, inner, script_tools = tool_use.get("direct") or {}, tool_use.get("inner") or {}, tool_use.get("script_tools") or {}
+    scripts, commands = int(tool_use.get("repl_scripts") or 0), tool_use.get("commands") or []
+    if not (direct or inner or scripts or commands):
+        return []
+    lines = ["## Tool use (from transcript)", ""]
+    if direct:
+        lines.append(f"- **Direct calls ({sum(direct.values())}):** {_counts(direct)}")
+    if scripts:
+        lines.append(f"- **Code Mode scripts (REPL):** {scripts}")
+        if inner:
+            lines.append(f"- **Calls made inside scripts ({sum(inner.values())}):** {_counts(inner)}")
+        if script_tools:
+            lines.append(f"- **Tools named in script text (heuristic):** {_counts(script_tools)}")
+    elif inner:
+        lines.append(f"- **Calls made inside Code Mode scripts ({sum(inner.values())}):** {_counts(inner)}")
+    if commands:
+        lines.append("- **Commands run:**")
+        lines.extend(f"  - `{redact(c).replace('`', chr(39))}`" for c in commands)
+    lines.append("")
+    return lines
 
 
 def update_session_meta(session_id: str, note_path: Path, store: Path | None = None) -> None:

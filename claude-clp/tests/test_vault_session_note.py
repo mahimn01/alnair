@@ -254,3 +254,49 @@ def test_codex_mode_prints_json_even_when_it_fails(vsn, tmp_path: Path, capsys, 
     monkeypatch.delenv("CLAUDE_MEM_SESSION_ID", raising=False)
     assert vsn.main(["--vault", str(tmp_path / "v"), "--store", str(tmp_path / "s"), "--no-refresh", "--codex"]) == 0
     assert capsys.readouterr().out.strip() == "{}"
+
+
+CODE_MODE_FIXTURE = ROOT / "tests" / "fixtures" / "code-mode-session.jsonl"
+
+
+def test_code_mode_scripts_and_their_inner_calls_are_parsed(vsn):
+    parsed = vsn.parse_transcript(CODE_MODE_FIXTURE)
+    tools = parsed["tool_use"]
+    assert parsed["error"] is None and parsed["session_id"] == "c0de0000-0000-4000-8000-00000000c0de"
+    # The prompt the person typed is kept; the script-event turn and the virtual rows are not prompts or replies.
+    assert parsed["prompts"] == ["Add a docstring to each function in code/limits.py and run its check."]
+    assert not any("virtual display text" in a for a in parsed["assistants"])
+    assert tools["repl_scripts"] == 1
+    # repl_a1 appears as progress (start and complete) and in a virtual row: it counts once.
+    assert tools["inner"] == {"Read": 1, "Edit": 1, "Bash": 1}
+    assert tools["direct"] == {"Bash": 1}
+    assert tools["script_tools"] == {"Glob": 1, "Read": 1, "mcp__clp__lookup": 1, "Edit": 1, "Bash": 1}
+    assert tools["commands"] == ["python3 -m pytest -q code", "git diff --stat"]
+    # A virtual row's other tool_use blocks (a dialog, a plugin-run Read) are display copies: no counts, paths only.
+    assert "AskUserQuestion" not in tools["inner"] and "AskUserQuestion" not in tools["direct"]
+    # The edited file comes from the inner calls; the template path with ${root} is not taken literally.
+    assert parsed["files_changed"] == ["/tmp/alnair-code-mode-fixture/code/limits.py", "/tmp/alnair-code-mode-fixture/notes/AMZN.md"]
+
+
+def test_the_note_shows_code_mode_tool_use(vsn, vault_env, tmp_path: Path):
+    vault, store, pre, pre_hash = vault_env
+    transcript = tmp_path / "t.jsonl"
+    transcript.write_bytes(CODE_MODE_FIXTURE.read_bytes())
+    sid = "c0de0000-0000-4000-8000-00000000c0de"
+    out = vsn.run(transcript_path=transcript, session_id=sid, cwd="/tmp/alnair-code-mode-fixture", event="Stop",
+                  vault=vault, store=store, refresh=False)
+    assert out["ok"] is True
+    body = Path(out["path"]).read_text(encoding="utf-8")
+    assert "## Tool use (from transcript)" in body
+    assert "- **Code Mode scripts (REPL):** 1" in body
+    assert "- **Calls made inside scripts (3):** Bash 1, Edit 1, Read 1" in body
+    assert "- **Direct calls (1):** Bash 1" in body
+    assert "  - `python3 -m pytest -q code`" in body
+    assert hashlib.sha256(pre.read_bytes()).hexdigest() == pre_hash
+
+
+def test_a_session_without_tools_gets_no_tool_section(vsn, tmp_path: Path):
+    transcript = tmp_path / "plain.jsonl"
+    write_transcript(transcript, "s1", ["hello"], "hi")
+    parsed = vsn.parse_transcript(transcript)
+    assert parsed["tool_use"]["repl_scripts"] == 0 and vsn.render_tool_use(parsed["tool_use"]) == []
