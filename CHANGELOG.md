@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+Added:
+
+- `alnair --code-mode` / `--no-code-mode` (also on `claude-lab` and `claude-clp`), defaulting from `ALNAIR_CODE_MODE=1|0` in `config.env`. It runs Claude Code's experimental Code Mode, where the model writes JavaScript that makes many tool calls in one step. Alnair sets `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE` only in the session's environment, saves the choice in the run, and keeps it on `--resume`
+- checks before launch for what Code Mode can't run with (telemetry switches, `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN`, `apiKeyHelper`, cloud providers, unsupported models, `--remote-control`, flags that remove `REPL`). An explicit `--code-mode` is refused; a `config.env` default is turned off for that session with a one-line reason. `--model gpt` refuses the flag, and bili is skipped while Code Mode is on
+- `code mode` in `--dry-run` output, the status line and `/lab-status` (scripts run and calls made inside them), and a Code Mode note in the session's system prompt
+- lab guards that hold inside Code Mode scripts: the nested-session check now parses shell commands (including `$(…)`, `eval` and `sh -c`) instead of matching one pattern, writes to `~/.claude/settings.json` and `~/.claude.json` are refused from Bash and the edit tools, and script text that would start a headless session or write those files is refused before it runs
+- `format: "json"` on the CLP and research tools, which returns one JSON object a script can parse, plus complete input schemas and Code Mode notes in the clp-memory, research-loop, work-task and code-first-data skills
+- a tool section in session notes: direct calls, Code Mode scripts, calls made inside them, and commands run. The parser handles the transcript shapes it can't be sure of without failing
+- `ALNAIR_LAB_LEGACY_ROOTS`: lets this checkout resume runs made by an earlier lab copy, without changing the root a run recorded
+- `claude-mem/bench/code_mode_ab/`, a task, setup script and collector for comparing a session with Code Mode off and on
+
+Changed:
+
+- prompts the person didn't type (Code Mode script results, task notifications, other machine-made turns) skip lab routing and the readiness check, so they're never held back
+- `alnair --resume latest` skips a run whose launch was refused before a session started
+
 ## 0.2.0 (2026-11-17)
 
 Alnair now runs OpenAI GPT models through Codex as well as Claude, and it's terminal-only.

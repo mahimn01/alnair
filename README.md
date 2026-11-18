@@ -146,6 +146,37 @@ Fable is gated. `alnair fable-check` looks in your local Claude Code transcripts
 
 New Claude models show up on their own. Once a day, or right away when the Claude Code binary changes, Alnair reads the aliases listed in `claude --help` and adds any new one to the catalog, after which it's a valid `--model` choice. `alnair update` forces that check. Auto-routing only picks Sonnet, Opus or Fable, so a new alias has to be chosen by name.
 
+## Code Mode (experimental)
+
+```sh
+alnair --code-mode "..."      # this session runs in Code Mode
+alnair --no-code-mode "..."   # off, even when config.env turns it on
+```
+
+Code Mode is an experimental Claude Code feature (2.1.323 and later). Normally the model makes one tool call per turn. In Code Mode it can write a short JavaScript script instead, which the `REPL` tool runs. One script can read several files, search, call MCP tools and run a check, some of them in parallel, and keep only the part of the output it needs. The aim is fewer model turns and less raw tool output in the context.
+
+Alnair turns it on by setting `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1` in the session's own environment, and nowhere else. It never writes `~/.claude/settings.json` or `~/.claude.json`. A session with Code Mode off gets `0`, so a value left in your shell can't leak in. The run saves the choice in `runtime.json` and `--resume` keeps it, because a session started in Code Mode only resumes with Code Mode on. The default comes from `ALNAIR_CODE_MODE=1` or `0` in `config.env`. Without that line, Code Mode is off. `claude-lab` and `claude-clp` take the same two flags.
+
+Code Mode can't start when any of these is true:
+
+- `DISABLE_TELEMETRY`, `CLAUDE_CODE_ENABLE_TELEMETRY` or `ENABLE_BETA_TRACING_DETAILED` is set
+- `ANTHROPIC_BASE_URL` or `ANTHROPIC_AUTH_TOKEN` is set, an `apiKeyHelper` is configured, or Bedrock, Vertex or Foundry is selected. Alnair already removes a shell `ANTHROPIC_BASE_URL` from its sessions
+- the model isn't Opus 5.5, Sonnet 5.5, Haiku 5.5 or Fable 5.2 (for `auto`, every model the router can pick is checked)
+- `--remote-control` is on, or flags after `--` (`--tools`, `--disallowedTools`, `--restricted`) remove the `REPL` tool
+- the project's settings deny `REPL`
+
+With `--code-mode`, Alnair refuses to start and says which one it hit. When the default came from `config.env`, it turns Code Mode off for that session and prints one line saying why. `--model gpt` has no Code Mode: the flag is refused there, and a `config.env` default is ignored with a note. bili, which routes a session through `ANTHROPIC_BASE_URL`, is skipped while Code Mode is on.
+
+What's different inside a Code Mode session:
+
+- The lab's guards run on every call a script makes, just as on a direct call. A script still can't start another Claude, Alnair or Codex session, can't write `~/.claude/settings.json` or `~/.claude.json`, and can't use the blocked mcporter servers. Script text that would start a headless session or write those two files is refused before it runs.
+- The CLP and research tools take `format: "json"` and then return one JSON object, so a script can `JSON.parse` the result instead of reading prose.
+- Bash output from inside a script isn't shortened by the lab, because Code Mode trims what a script returns. Direct Bash calls are still shortened.
+- `/lab-status` and the status line show `code mode`, with the number of scripts and the calls made inside them.
+- Session notes get a tool section: direct calls, scripts, calls inside scripts, and commands run. Claude Code doesn't document how script calls are written to the transcript, so the note parser accepts several shapes and falls back to reading the script text. Treat the note's counts as a lower bound. The lab metrics count every call.
+
+`claude-mem/bench/code_mode_ab/` has a small task, a setup script and a collector for comparing the same task with Code Mode off and on.
+
 ## Settings
 
 `~/.config/alnair/config.env` holds `KEY=VALUE` lines. Anything exported in your shell wins over the file.
@@ -159,6 +190,8 @@ New Claude models show up on their own. Once a day, or right away when the Claud
 | `RESEARCH_MAILTO` | unset | contact address sent to Crossref, OpenAlex and SEC. SEC full-text search wants one |
 | `ALNAIR_TZ` | `America/Toronto` | time zone used in session note titles |
 | `ALNAIR_LAB_ROOT` | `lab/` in the checkout | use a different copy of the lab shell |
+| `ALNAIR_CODE_MODE` | unset (off) | `1` starts new Claude sessions in Code Mode, `0` keeps it off. `--code-mode` and `--no-code-mode` win |
+| `ALNAIR_LAB_LEGACY_ROOTS` | unset | earlier lab copies (separated by `:`) whose runs this checkout may `--resume`. Each run keeps the root it was made with |
 | `CONTEXT_LEDGER_RESEARCH_API_KEY` | unset | only for the optional paid `clp ask` command. Sessions never use it |
 
 `CODEX_HOME` is respected if you've moved Codex's folder.
