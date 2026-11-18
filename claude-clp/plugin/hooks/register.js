@@ -7,7 +7,7 @@ const CORPUS = {corpus:{type:'string',maxLength:100,description:'Corpus name, on
 const named = e => (e.corpus ? ['--name=' + e.corpus] : []);
 const sessionOpt = e => (e.session ? ['--session=' + e.session] : []);
 
-export const TOOLS = [
+const SPECS = [
   {name:'lookup',isDeferred:false,timeoutMs:60000,
    description:"Find where something is in the user's indexed notes and code (the CLP corpus, by default a copy of their Obsidian vault): a note ([[AMZN]] or positions/AMZN.md), a Python name (pkg.mod.func) or keywords. Returns addresses path:start-end#sha with short previews. Offline. Read an address before quoting it.",
    inputSchema:{type:'object',properties:{query:{type:'string',minLength:1,maxLength:500},limit:{type:'integer',minimum:1,maximum:10,description:'Keyword hits (default 5).'},...CORPUS},required:['query']},
@@ -50,6 +50,17 @@ export const TOOLS = [
    argv:e => ['ask',...(e.model ? ['--model=' + e.model] : []),...(e.note ? ['--note=' + e.note] : []),...named(e),'--',e.question]},
 ];
 
+// Every tool takes an optional format ("json" wraps the result in one JSON object); the paid ask does not.
+// Every object schema is closed (additionalProperties false) so a Code Mode script sees exactly what is accepted.
+const FORMAT = {type:'string',enum:['text','json'],description:'text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text.'};
+export const TOOLS = SPECS.map(s => s.name === 'ask'
+  ? {...s, inputSchema:{...s.inputSchema, additionalProperties:false}}
+  : {...s, description:s.description + ' format:"json" returns a JSON object as text.', inputSchema:{...s.inputSchema, properties:{...s.inputSchema.properties, format:FORMAT}, additionalProperties:false}});
+
+// Addresses in outputs: path:start-end#sha and session-ledger sessions/<id>/turns.jsonl#seq=N#sha=...
+const REFS = /[^\s:#`'"()\[\]<>,]+:\d+-\d+#[0-9a-f]{4,64}|sessions\/[^\s#"']+\/turns\.jsonl#seq=\d+#sha=[0-9a-f]+/g;
+const refsOf = text => [...new Set(text.match(REFS) || [])];
+
 function resolveArgv(spec, e, sessionId) {
   const raw = spec.argv(e);
   return raw.map(a => a === '--session=__ENV__' ? ('--session=' + sessionId) : a);
@@ -63,6 +74,8 @@ export async function runTool($, spec, e) {
   if (spec.needsSessionEnv && !e.session) {
     if (!sessionId) return {deny:'session tools need CLAUDE_MEM_SESSION_ID (start with claude-mem) or pass session explicitly.'};
   }
+  const {format, ...input} = e || {};  // format is for this file only, never for argv or stdin
+  e = input;
   const argv = resolveArgv(spec, e, sessionId || 'latest');
   // session_append without explicit session: ensure ledger exists via env id
   if (spec.name === 'session_append' && !e.session && sessionId) {
@@ -71,7 +84,11 @@ export async function runTool($, spec, e) {
   const init = {timeoutMs:spec.timeoutMs,...(spec.stdin ? {stdin:spec.stdin(e)} : {})};
   const {exitCode, stdout, stderr} = await $.process.run([python, root + '/bin/clp_tool.py', ...argv], init);
   const text = [stdout, stderr].map(s => (s || '').trim()).filter(Boolean).join('\n');
-  if (exitCode === 0 || (spec.name === 'verify' && exitCode === 1)) return {result:text || '(no output)'};
+  if (exitCode === 0 || (spec.name === 'verify' && exitCode === 1)) {
+    const out = text || '(no output)';
+    if (format !== 'json' || spec.name === 'ask') return {result:out};
+    return {result:JSON.stringify({tool:spec.name, ok:exitCode === 0, status:exitCode === 0 ? 'ok' : 'refused', exitCode, text:out, refs:refsOf(out)})};
+  }
   return {deny:text || `clp_tool ${spec.name} exited with code ${exitCode}`};
 }
 

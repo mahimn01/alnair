@@ -24,3 +24,9 @@ Do the fetching, joining and filtering in code; bring back only the answer.
 
 For scripted MCP calls from Bash (read-only chrome-devtools audits), read `mcporter.md` in this
 skill's folder first. Never call the Obsidian vault server through mcporter.
+
+If this session has a REPL tool (Code Mode), use it instead of throwaway scripts for MCP data work:
+batch the calls in one script, filter in code, return only the compact result, and try/catch each call
+(MCP errors throw). `describeTool('<tool name>')` shows the schema. The clp and research tools accept
+`format:'json'` (result is a JSON object as text). Gates (mcp__clp__verify, research_report,
+mcp__harness-lab__verify) still apply before you state facts or claim checks passed.

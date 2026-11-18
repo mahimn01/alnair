@@ -4,7 +4,7 @@ export const TOOLS = [
   "name": "scholar_search",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[LIVE keyless] Search scholarly works. source=all queries OpenAlex + Crossref + Semantic Scholar + arXiv and lists each provider separately (a provider that is rate-limited or refuses is reported UNAVAILABLE, never guessed). OpenAlex keyless has a small shared daily budget; Semantic Scholar's keyless pool is often rate-limited (429). Citation counts are volatile snapshots. Saves a search record in the research store.",
+  "description": "[LIVE keyless] Search scholarly works. source=all queries OpenAlex + Crossref + Semantic Scholar + arXiv and lists each provider separately (a provider that is rate-limited or refuses is reported UNAVAILABLE, never guessed). OpenAlex keyless has a small shared daily budget; Semantic Scholar's keyless pool is often rate-limited (429). Citation counts are volatile snapshots. Saves a search record in the research store. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -35,18 +35,27 @@ export const TOOLS = [
      "type": "string",
      "description": "Year or range, e.g. 2017 or 2015-2018",
      "maxLength": 12
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "query"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "scholar_work",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[LIVE keyless] Full metadata for one work (title, authors, venue, year, ids, abstract, open-access link, reference list size). DOI (10.xxxx/..), arXiv id (1706.03762), OpenAlex id (W2741809807) or Semantic Scholar paper id. Saves the record; counts are volatile.",
+  "description": "[LIVE keyless] Full metadata for one work (title, authors, venue, year, ids, abstract, open-access link, reference list size). DOI (10.xxxx/..), arXiv id (1706.03762), OpenAlex id (W2741809807) or Semantic Scholar paper id. Saves the record; counts are volatile. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -65,18 +74,27 @@ export const TOOLS = [
       "semanticscholar",
       "arxiv"
      ]
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "id"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "scholar_author",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[LIVE keyless] Look up an author by name (OpenAlex default, or Semantic Scholar). Name matches can be different people: check institution/ORCID. h-index and counts are volatile.",
+  "description": "[LIVE keyless] Look up an author by name (OpenAlex default, or Semantic Scholar). Name matches can be different people: check institution/ORCID. h-index and counts are volatile. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -99,18 +117,27 @@ export const TOOLS = [
      "description": "Candidates (default 5)",
      "minimum": 1,
      "maximum": 10
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "name"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "scholar_citations",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[LIVE keyless] Citation graph for a work: direction=references (works it cites) or cited_by (works citing it, top by citations). Citing lists and counts change over time; present them as dated snapshots.",
+  "description": "[LIVE keyless] Citation graph for a work: direction=references (works it cites) or cited_by (works citing it, top by citations). Citing lists and counts change over time; present them as dated snapshots. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -142,18 +169,27 @@ export const TOOLS = [
      "description": "Max rows (default 20)",
      "minimum": 1,
      "maximum": 50
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "id"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "scholar_fulltext",
   "isDeferred": true,
   "timeoutMs": 240000,
-  "description": "[LIVE keyless] Open-access full text: finds a legal OA PDF (OpenAlex/Semantic Scholar/arXiv or a direct PDF URL), downloads it with size limits, extracts text with pdftotext and saves it for quoting. Paywalled papers are reported as not available; no unauthorised copies are used.",
+  "description": "[LIVE keyless] Open-access full text: finds a legal OA PDF (OpenAlex/Semantic Scholar/arXiv or a direct PDF URL), downloads it with size limits, extracts text with pdftotext and saves it for quoting. Paywalled papers are reported as not available; no unauthorised copies are used. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -162,18 +198,27 @@ export const TOOLS = [
      "description": "DOI (10.xxxx/..), arXiv id (1706.03762), OpenAlex id (W2741809807) or Semantic Scholar paper id, or a direct https PDF URL",
      "minLength": 3,
      "maxLength": 500
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "id"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "sec_search",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[LIVE keyless] SEC EDGAR full-text search (filings from 2001 on). Returns company, form, filing date and document links to open with sec_get. Uses a descriptive User-Agent with contact and stays under SEC's request limits.",
+  "description": "[LIVE keyless] SEC EDGAR full-text search (filings from 2001 on). Returns company, form, filing date and document links to open with sec_get. Uses a descriptive User-Agent with contact and stays under SEC's request limits. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -209,18 +254,27 @@ export const TOOLS = [
      "description": "Skip this many hits",
      "minimum": 0,
      "maximum": 1000
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "query"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "sec_filings",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[LIVE keyless] List a company's SEC filings (newest first) by ticker, name fragment or CIK, optionally one form type; links open with sec_get. older=true also reads the older index pages.",
+  "description": "[LIVE keyless] List a company's SEC filings (newest first) by ticker, name fragment or CIK, optionally one form type; links open with sec_get. older=true also reads the older index pages. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -244,18 +298,27 @@ export const TOOLS = [
     "older": {
      "type": "boolean",
      "description": "Also read older filing index pages"
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "company"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "sec_get",
   "isDeferred": true,
   "timeoutMs": 200000,
-  "description": "[LIVE keyless] Fetch one sec.gov document (10-K/8-K htm, txt, pdf or json) as clean text with tables joined by ' | ', and save the exact text for quoting. Large filings are split into parts.",
+  "description": "[LIVE keyless] Fetch one sec.gov document (10-K/8-K htm, txt, pdf or json) as clean text with tables joined by ' | ', and save the exact text for quoting. Large filings are split into parts. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -264,18 +327,27 @@ export const TOOLS = [
      "description": "A https://www.sec.gov/... URL from sec_search or sec_filings",
      "minLength": 12,
      "maxLength": 1000
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "url"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "sec_facts",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[LIVE keyless] XBRL 'company concept' history from SEC (as-filed values with period, form, filing date and accession), e.g. concept=Revenues or NetIncomeLoss. Complements sec_get; tagging differs by company.",
+  "description": "[LIVE keyless] XBRL 'company concept' history from SEC (as-filed values with period, form, filing date and accession), e.g. concept=Revenues or NetIncomeLoss. Complements sec_get; tagging differs by company. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -295,19 +367,28 @@ export const TOOLS = [
      "type": "string",
      "description": "us-gaap (default), dei, ifrs-full",
      "maxLength": 20
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "company",
     "concept"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "patent_get",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[LIVE keyless] One patent from its public Google Patents page (robots.txt allows /patent/): title, inventors, assignee, earliest priority date, filing/publication dates, abstract, claims, description. The priority date is the page's value, not a legal determination.",
+  "description": "[LIVE keyless] One patent from its public Google Patents page (robots.txt allows /patent/): title, inventors, assignee, earliest priority date, filing/publication dates, abstract, claims, description. The priority date is the page's value, not a legal determination. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -316,18 +397,27 @@ export const TOOLS = [
      "description": "Publication number such as US6285999B1 or EP1234567A1",
      "minLength": 6,
      "maxLength": 30
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "number"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "patent_search",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[LIVE keyless] Patent keyword search on USPTO Patent Public Search (US patents and published applications; all words in the title, then title/abstract, then anywhere; newest first), with Europe PMC's biomedical patent index as fallback. Returns publication numbers to open with patent_get. Google Patents' own search is NOT used (its robots.txt disallows it). A listing is a lead, not evidence. An operator API key is optional.",
+  "description": "[LIVE keyless] Patent keyword search on USPTO Patent Public Search (US patents and published applications; all words in the title, then title/abstract, then anywhere; newest first), with Europe PMC's biomedical patent index as fallback. Returns publication numbers to open with patent_get. Google Patents' own search is NOT used (its robots.txt disallows it). A listing is a lead, not evidence. An operator API key is optional. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -342,18 +432,27 @@ export const TOOLS = [
      "description": "Results (default 8)",
      "minimum": 1,
      "maximum": 20
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "query"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "court_search",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[LIVE keyless] Find a court case by name or reporter citation. Free route: the name is resolved to a citation (Wikipedia, discovery only) and confirmed against the published reporter (Harvard Caselaw Access Project). This is a name/citation lookup covering published reporters to about 2018 plus Supreme Court cases on Cornell LII; it is NOT a full-text search of all courts. With COURTLISTENER_TOKEN set, CourtListener's full-text search is used first.",
+  "description": "[LIVE keyless] Find a court case by name or reporter citation. Free route: the name is resolved to a citation (Wikipedia, discovery only) and confirmed against the published reporter (Harvard Caselaw Access Project). This is a name/citation lookup covering published reporters to about 2018 plus Supreme Court cases on Cornell LII; it is NOT a full-text search of all courts. With COURTLISTENER_TOKEN set, CourtListener's full-text search is used first. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -368,18 +467,27 @@ export const TOOLS = [
      "description": "Results (default 5)",
      "minimum": 1,
      "maximum": 20
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "query"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "court_opinion",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[LIVE keyless] Full text of a court opinion, saved for quoting: by reporter citation (\"347 U.S. 483\", \"410 F.2d 1000\") from the Caselaw Access Project scan of the published reporter, or by Supreme Court docket number (\"22-451\") from Cornell LII. The saved text marks the reporter's head matter (syllabus/headnotes, not the court's words) separately from each opinion. A numeric CourtListener opinion id works only with COURTLISTENER_TOKEN.",
+  "description": "[LIVE keyless] Full text of a court opinion, saved for quoting: by reporter citation (\"347 U.S. 483\", \"410 F.2d 1000\") from the Caselaw Access Project scan of the published reporter, or by Supreme Court docket number (\"22-451\") from Cornell LII. The saved text marks the reporter's head matter (syllabus/headnotes, not the court's words) separately from each opinion. A numeric CourtListener opinion id works only with COURTLISTENER_TOKEN. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -394,16 +502,25 @@ export const TOOLS = [
      "description": "CourtListener opinion id (needs a token)",
      "minLength": 1,
      "maxLength": 9
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
-   "required": []
+   "required": [],
+   "additionalProperties": false
   }
  },
  {
   "name": "wayback_cdx",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[LIVE keyless] List Internet Archive captures of a URL (timestamp, status, type, digest). Use start/end (YYYY, YYYYMM, YYYYMMDD) to find historic versions; then wayback_fetch one.",
+  "description": "[LIVE keyless] List Internet Archive captures of a URL (timestamp, status, type, digest). Use start/end (YYYY, YYYYMM, YYYYMMDD) to find historic versions; then wayback_fetch one. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -442,18 +559,27 @@ export const TOOLS = [
       "timestamp:6",
       "none"
      ]
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "url"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "wayback_fetch",
   "isDeferred": true,
   "timeoutMs": 200000,
-  "description": "[LIVE keyless] Fetch the archived snapshot of a URL nearest a timestamp (original bytes, no Wayback toolbar), save its exact text and report the real snapshot time.",
+  "description": "[LIVE keyless] Fetch the archived snapshot of a URL nearest a timestamp (original bytes, no Wayback toolbar), save its exact text and report the real snapshot time. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -468,19 +594,28 @@ export const TOOLS = [
      "description": "YYYY, YYYYMM, YYYYMMDD or YYYYMMDDhhmmss",
      "minLength": 4,
      "maxLength": 14
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "url",
     "timestamp"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "github_search",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[LIVE via the logged-in gh CLI] GitHub-wide search: kind=code | issues (issues and PRs) | repos | commits. Uses `gh api`; no token is ever read. Code search is limited to ~10 requests/min, so calls are spaced.",
+  "description": "[LIVE via the logged-in gh CLI] GitHub-wide search: kind=code | issues (issues and PRs) | repos | commits. Uses `gh api`; no token is ever read. Code search is limited to ~10 requests/min, so calls are spaced. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -505,19 +640,28 @@ export const TOOLS = [
      "description": "Results (default 8)",
      "minimum": 1,
      "maximum": 20
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "kind",
     "query"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "github_get",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[LIVE via gh] Fetch one file from a public repo at a ref (default branch). Saves it under a permanent commit URL so quotes stay tied to that exact commit.",
+  "description": "[LIVE via gh] Fetch one file from a public repo at a ref (default branch). Saves it under a permanent commit URL so quotes stay tied to that exact commit. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -537,19 +681,28 @@ export const TOOLS = [
      "type": "string",
      "description": "Branch, tag or commit (optional)",
      "maxLength": 100
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "repo",
     "path"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "github_issue",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[LIVE via gh] One issue or pull request with its body and the first comments, saved for quoting.",
+  "description": "[LIVE via gh] One issue or pull request with its body and the first comments, saved for quoting. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -570,19 +723,28 @@ export const TOOLS = [
      "description": "Comments to include (default 20)",
      "minimum": 0,
      "maximum": 100
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "repo",
     "number"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "research_fetch",
   "isDeferred": true,
   "timeoutMs": 200000,
-  "description": "[LIVE] Fetch and SAVE raw bytes plus locally extracted clean article text, not an LLM summary. Public/robots-safe only. Bounded fallback: Wayback closest capture/URL variants, existing archive.today capture, advertised AMP/RSS. No auth, captcha or paywall bypass. Reports attempts and blocked results honestly. Use research_find then research_read/verify.",
+  "description": "[LIVE] Fetch and SAVE raw bytes plus locally extracted clean article text, not an LLM summary. Public/robots-safe only. Bounded fallback: Wayback closest capture/URL variants, existing archive.today capture, advertised AMP/RSS. No auth, captcha or paywall bypass. Reports attempts and blocked results honestly. Use research_find then research_read/verify. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -591,18 +753,27 @@ export const TOOLS = [
      "description": "A public http(s) URL",
      "minLength": 8,
      "maxLength": 2000
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "url"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "research_lookup",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[offline] Search every source saved in the research store (all providers) with the CLP index; returns file:lines#hash addresses and previews. Previews are not citable: call research_read first.",
+  "description": "[offline] Search every source saved in the research store (all providers) with the CLP index; returns file:lines#hash addresses and previews. Previews are not citable: call research_read first. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -617,18 +788,27 @@ export const TOOLS = [
      "description": "Hits (default 5)",
      "minimum": 1,
      "maximum": 10
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "query"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "research_read",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[offline] The exact lines at an address (file:start-end or file:start-end#hash) from a saved source, fenced as untrusted data, with its URL, retrieved_at, sha256 and revision. The header line is the ref to cite.",
+  "description": "[offline] The exact lines at an address (file:start-end or file:start-end#hash) from a saved source, fenced as untrusted data, with its URL, retrieved_at, sha256 and revision. The header line is the ref to cite. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -637,18 +817,27 @@ export const TOOLS = [
      "description": "Address from research_lookup, a tool's 'file:' line plus a range, e.g. work-xyz.txt:1-60",
      "minLength": 3,
      "maxLength": 1000
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "address"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "research_verify",
   "isDeferred": false,
   "timeoutMs": 150000,
-  "description": "[offline] The citation gate. Pass the question and a draft 'ANSWER: ...' line plus <claims>[{\"text\":..., \"citations\":[{\"ref\":\"file:start-end#hash\",\"quote\":\"exact words\"}]}]</claims>. PASS = every quote is word for word in the saved source text and numbers/names sit inside the quotes. PASS does NOT mean the source is true, current or that the claim follows from the quote. 'ANSWER: UNANSWERABLE' with empty claims is always allowed.",
+  "description": "[offline] The citation gate. Pass the question and a draft 'ANSWER: ...' line plus <claims>[{\"text\":..., \"citations\":[{\"ref\":\"file:start-end#hash\",\"quote\":\"exact words\"}]}]</claims>. PASS = every quote is word for word in the saved source text and numbers/names sit inside the quotes. PASS does NOT mean the source is true, current or that the claim follows from the quote. 'ANSWER: UNANSWERABLE' with empty claims is always allowed. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -663,12 +852,21 @@ export const TOOLS = [
      "description": "ANSWER line + <claims> block",
      "minLength": 1,
      "maxLength": 60000
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "question",
     "answer"
-   ]
+   ],
+   "additionalProperties": false
   },
   "stdinKey": "answer"
  },
@@ -676,7 +874,7 @@ export const TOOLS = [
   "name": "research_sources",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[offline] List saved sources (newest first) with url, kind, retrieved_at, sha256 and revision links; optional kind filter. Use to see what has been fetched and which revisions exist.",
+  "description": "[offline] List saved sources (newest first) with url, kind, retrieved_at, sha256 and revision links; optional kind filter. Use to see what has been fetched and which revisions exist. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -690,16 +888,25 @@ export const TOOLS = [
      "description": "Rows (default 20)",
      "minimum": 1,
      "maximum": 100
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
-   "required": []
+   "required": [],
+   "additionalProperties": false
   }
  },
  {
   "name": "research_status",
   "isDeferred": false,
   "timeoutMs": 280000,
-  "description": "[offline unless live=true] Doctor/capability report: whether research is enabled, store size and index state, and each provider's expected and last-observed capability (live, rate-limited, needs key, blocked). live=true probes every provider once (slow, spaced); deep=true re-hashes every saved source.",
+  "description": "[offline unless live=true] Doctor/capability report: whether research is enabled, store size and index state, and each provider's expected and last-observed capability (live, rate-limited, needs key, blocked). live=true probes every provider once (slow, spaced); deep=true re-hashes every saved source. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -710,16 +917,25 @@ export const TOOLS = [
     "deep": {
      "type": "boolean",
      "description": "Verify every saved source against its sha256"
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
-   "required": []
+   "required": [],
+   "additionalProperties": false
   }
  },
  {
   "name": "research_find",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[offline] Find a literal passage in a saved source id or part filename with nearby lines and citable hash-addresses. No regex execution.",
+  "description": "[offline] Find a literal passage in a saved source id or part filename with nearby lines and citable hash-addresses. No regex execution. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -745,19 +961,28 @@ export const TOOLS = [
      "description": "Matches (default 10)",
      "minimum": 1,
      "maximum": 30
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "source",
     "query"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "market_history",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[LIVE free] Daily OHLCV and latest COMPLETED session close. Yahoo chart, Stooq US equity CSV fallback. Delayed/unofficial snapshots, raw payload and timestamp saved for verification; not a real-time feed.",
+  "description": "[LIVE free] Daily OHLCV and latest COMPLETED session close. Yahoo chart, Stooq US equity CSV fallback. Delayed/unofficial snapshots, raw payload and timestamp saved for verification; not a real-time feed. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -777,18 +1002,27 @@ export const TOOLS = [
       "1y",
       "5y"
      ]
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "symbol"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "market_options",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[LIVE free] Delayed options chain (Cboe; Yahoo through an anonymous session as fallback) and the at-the-money straddle for the first expiry STRICTLY AFTER a caller-supplied verified earnings date. The at-the-money strike is chosen from the option quotes themselves (put-call parity), so an after-hours share price cannot pick the wrong strike; a mismatch between quoted and implied share price is flagged. Saves raw chain and calculation, rejects crossed/zero quotes. Cost of the straddle through expiry, not a pure earnings forecast. No keys or logins.",
+  "description": "[LIVE free] Delayed options chain (Cboe; Yahoo through an anonymous session as fallback) and the at-the-money straddle for the first expiry STRICTLY AFTER a caller-supplied verified earnings date. The at-the-money strike is chosen from the option quotes themselves (put-call parity), so an after-hours share price cannot pick the wrong strike; a mismatch between quoted and implied share price is flagged. Saves raw chain and calculation, rejects crossed/zero quotes. Cost of the straddle through expiry, not a pure earnings forecast. No keys or logins. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -801,19 +1035,28 @@ export const TOOLS = [
      "type": "string",
      "description": "Independently verified YYYY-MM-DD earnings date; never guess",
      "maxLength": 10
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "symbol",
     "earnings_date"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "market_earnings",
   "isDeferred": true,
   "timeoutMs": 150000,
-  "description": "[LIVE free] Earnings picture from free sources in one saved record: Nasdaq expected next report date and analyst consensus EPS (an ESTIMATE, not company-confirmed), Nasdaq reported-vs-forecast history, and the company's own past earnings releases from SEC 8-K Item 2.02 filings (dates that actually happened). Yahoo is tried through an anonymous session only if Nasdaq gives nothing. Confirm an upcoming date on the issuer IR page; if no source answers, an explicit unavailable record is saved and no number is invented. No paid provider, keys or logins.",
+  "description": "[LIVE free] Earnings picture from free sources in one saved record: Nasdaq expected next report date and analyst consensus EPS (an ESTIMATE, not company-confirmed), Nasdaq reported-vs-forecast history, and the company's own past earnings releases from SEC 8-K Item 2.02 filings (dates that actually happened). Yahoo is tried through an anonymous session only if Nasdaq gives nothing. Confirm an upcoming date on the issuer IR page; if no source answers, an explicit unavailable record is saved and no number is invented. No paid provider, keys or logins. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -821,18 +1064,27 @@ export const TOOLS = [
      "type": "string",
      "description": "Ticker",
      "maxLength": 20
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "symbol"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "scholar_discover",
   "isDeferred": true,
   "timeoutMs": 280000,
-  "description": "[LIVE keyless] Recall-oriented expanded literature search: synonyms, OpenAlex keyword+finance concept, Crossref (including indexed SSRN), Semantic Scholar with shared backoff, arXiv q-fin. Saves work metadata and search evidence. CORE requires a key so is not called. Inspect relevance; no causal claims from titles.",
+  "description": "[LIVE keyless] Recall-oriented expanded literature search: synonyms, OpenAlex keyword+finance concept, Crossref (including indexed SSRN), Semantic Scholar with shared backoff, arXiv q-fin. Saves work metadata and search evidence. CORE requires a key so is not called. Inspect relevance; no causal claims from titles. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -858,18 +1110,27 @@ export const TOOLS = [
      "description": "Results per query/provider",
      "minimum": 1,
      "maximum": 10
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "query"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "research_search",
   "isDeferred": false,
   "timeoutMs": 280000,
-  "description": "[LIVE keyless] Discovery across several domains in ONE call, side by side: papers (OpenAlex, Crossref, Semantic Scholar, arXiv), sec (EDGAR full-text), patents (USPTO), courts (case name or citation), code (GitHub through gh). Each listing ends with `next:` specs ready for research_get. Listings are leads, never evidence; a provider that is unavailable is reported, not guessed.",
+  "description": "[LIVE keyless] Discovery across several domains in ONE call, side by side: papers (OpenAlex, Crossref, Semantic Scholar, arXiv), sec (EDGAR full-text), patents (USPTO), courts (case name or citation), code (GitHub through gh). Each listing ends with `next:` specs ready for research_get. Listings are leads, never evidence; a provider that is unavailable is reported, not guessed. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -925,19 +1186,28 @@ export const TOOLS = [
      "type": "string",
      "description": "Optional inquiry name: logs what was searched and which providers were unavailable",
      "maxLength": 120
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "query",
     "domains"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "research_get",
   "isDeferred": false,
   "timeoutMs": 280000,
-  "description": "[LIVE keyless] Fetch up to 12 sources in ONE call, side by side. Each is saved as exact text and comes back as a compact card: where it came from (provenance tier) and the passages matching your focus words, ready to quote. Specs: sec:facts:NFLX:Revenues | sec:filings:NFLX:10-K | https://www.sec.gov/... | arxiv:1706.03762 | doi:10.x/y | fulltext:<id> | refs:<id> | cites:<id> | author:<name> | patent:US6285999B1 | court:5 U.S. 137 | wayback:<url>@<timestamp> | cdx:<url> | github:owner/repo@ref:path | issue:owner/repo#12 | market:history:AAPL | market:earnings:AAPL | market:options:AAPL:<verified earnings date> | any https URL. A source that cannot have changed is reused from the store without a network call (the card says so). One failing item never fails the batch; nothing is invented.",
+  "description": "[LIVE keyless] Fetch up to 12 sources in ONE call, side by side. Each is saved as exact text and comes back as a compact card: where it came from (provenance tier) and the passages matching your focus words, ready to quote. Specs: sec:facts:NFLX:Revenues | sec:filings:NFLX:10-K | https://www.sec.gov/... | arxiv:1706.03762 | doi:10.x/y | fulltext:<id> | refs:<id> | cites:<id> | author:<name> | patent:US6285999B1 | court:5 U.S. 137 | wayback:<url>@<timestamp> | cdx:<url> | github:owner/repo@ref:path | issue:owner/repo#12 | market:history:AAPL | market:earnings:AAPL | market:options:AAPL:<verified earnings date> | any https URL. A source that cannot have changed is reused from the store without a network call (the card says so). One failing item never fails the batch; nothing is invented. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -961,7 +1231,8 @@ export const TOOLS = [
       },
       "required": [
        "spec"
-      ]
+      ],
+      "additionalProperties": false
      },
      "minItems": 1,
      "maxItems": 12
@@ -985,18 +1256,27 @@ export const TOOLS = [
      "type": "string",
      "description": "Optional inquiry name: logs what was fetched and which providers were unavailable",
      "maxLength": 120
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "items"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "research_evidence",
   "isDeferred": false,
   "timeoutMs": 150000,
-  "description": "[offline] Work with what is already saved. query (optionally with src) returns the best-matching passages with citable addresses; read=<file>:<start>-<end> returns those exact lines; with no arguments it lists saved sources (optional kind filter). literal=true matches the query as one exact phrase.",
+  "description": "[offline] Work with what is already saved. query (optionally with src) returns the best-matching passages with citable addresses; read=<file>:<start>-<end> returns those exact lines; with no arguments it lists saved sources (optional kind filter). literal=true matches the query as one exact phrase. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -1029,16 +1309,25 @@ export const TOOLS = [
      "description": "Sources or passages (default 5)",
      "minimum": 1,
      "maximum": 20
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
-   "required": []
+   "required": [],
+   "additionalProperties": false
   }
  },
  {
   "name": "research_claim",
   "isDeferred": false,
   "timeoutMs": 150000,
-  "description": "[offline] Record claims for an inquiry and have each one checked. Base claim {id, text, cite:[{src, quote}]}: give the src code and the exact words; the address and hash are found for you and the real citation gate decides (every number and date in the text must be in the quote, written as the source writes it; a name is checked only when you give it as value). Derived claim {id, text, calc}: a formula over earlier claim ids (+ - * / abs round min max days(a,b) years(a,b); a bare number may only scale, as in x * 100, or be the 1 in a / b - 1); it is recomputed and must equal the number in the text. Reasoned claim {id, text, from:[ids]}: a conclusion; only its numbers are checked. Add key and value so the same fact from two sources is compared: different values come back as a conflict. verified = the words are in the saved source (integrity only), not that the source is right.",
+  "description": "[offline] Record claims for an inquiry and have each one checked. Base claim {id, text, cite:[{src, quote}]}: give the src code and the exact words; the address and hash are found for you and the real citation gate decides (every number and date in the text must be in the quote, written as the source writes it; a name is checked only when you give it as value). Derived claim {id, text, calc}: a formula over earlier claim ids (+ - * / abs round min max days(a,b) years(a,b); a bare number may only scale, as in x * 100, or be the 1 in a / b - 1); it is recomputed and must equal the number in the text. Reasoned claim {id, text, from:[ids]}: a conclusion; only its numbers are checked. Add key and value so the same fact from two sources is compared: different values come back as a conflict. verified = the words are in the saved source (integrity only), not that the source is right. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -1076,6 +1365,11 @@ export const TOOLS = [
            "description": "src code, source id, file name or passage address",
            "maxLength": 400
           },
+          "ref": {
+           "type": "string",
+           "description": "Alternative to src: a passage address (file:start-end#hash)",
+           "maxLength": 400
+          },
           "quote": {
            "type": "string",
            "description": "Exact words from that source",
@@ -1083,9 +1377,9 @@ export const TOOLS = [
           }
          },
          "required": [
-          "src",
           "quote"
-         ]
+         ],
+         "additionalProperties": false
         },
         "maxItems": 4
        },
@@ -1120,7 +1414,8 @@ export const TOOLS = [
       },
       "required": [
        "text"
-      ]
+      ],
+      "additionalProperties": false
      },
      "minItems": 1,
      "maxItems": 12
@@ -1129,19 +1424,28 @@ export const TOOLS = [
      "type": "string",
      "description": "The research question (stored with the first call)",
      "maxLength": 2000
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "inquiry",
     "claims"
-   ]
+   ],
+   "additionalProperties": false
   }
  },
  {
   "name": "research_report",
   "isDeferred": false,
   "timeoutMs": 150000,
-  "description": "[offline] Gate the final answer against the inquiry's claims and return the structured report. Every number and date in the answer must come from a verified or derived claim (a value that only restates the question is listed apart as not from a source), else REFUSED with what is uncovered. The report lists verified claims with quote, address, URL, retrieval time and provenance tier; derived claims with their formula; open conflicts; weak and refused claims; provider gaps. Sources are re-hashed first. 'UNANSWERABLE' is always accepted (its reason may add no figures). Write your note from this report.",
+  "description": "[offline] Gate the final answer against the inquiry's claims and return the structured report. Every number and date in the answer must come from a verified or derived claim (a value that only restates the question is listed apart as not from a source), else REFUSED with what is uncovered. The report lists verified claims with quote, address, URL, retrieval time and provenance tier; derived claims with their formula; open conflicts; weak and refused claims; provider gaps. Sources are re-hashed first. 'UNANSWERABLE' is always accepted (its reason may add no figures). Write your note from this report. format:\"json\" returns a JSON object as text.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -1160,11 +1464,20 @@ export const TOOLS = [
      "type": "string",
      "description": "The research question, only if no claim recorded it yet (an abstention may restate its figures)",
      "maxLength": 2000
+    },
+    "format": {
+     "type": "string",
+     "enum": [
+      "text",
+      "json"
+     ],
+     "description": "text (default) or json: the result is one JSON object {tool, ok, status, exitCode, text, refs} returned as text"
     }
    },
    "required": [
     "inquiry"
-   ]
+   ],
+   "additionalProperties": false
   }
  }
 ];

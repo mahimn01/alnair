@@ -80,3 +80,53 @@ test('every tool spec has an argv builder and a schema object', async () => {
     expect(Array.isArray(spec.argv({question:'q', query:'q', address:'a', answer:'a', text:'t', session:'s'}))).toBe(true);
   }
 });
+
+const walk = (node, path, bad) => {
+  if (!node || typeof node !== 'object') return;
+  if (node.type === 'object' && node.additionalProperties !== false) bad.push(path);
+  for (const [k, v] of Object.entries(node.properties || {})) walk(v, path + '.' + k, bad);
+  if (node.items) walk(node.items, path + '[]', bad);
+};
+
+test('every object schema is closed (additionalProperties:false) and every tool but ask declares format', async () => {
+  const bad = [];
+  for (const spec of TOOLS) {
+    walk(spec.inputSchema, spec.name, bad);
+    expect(!!spec.inputSchema.properties.format).toBe(spec.name !== 'ask');
+    expect(spec.description.includes('format:"json"')).toBe(spec.name !== 'ask');
+  }
+  expect(bad).toEqual([]);
+});
+
+test('every argument an argv builder reads is declared in the schema', async () => {
+  const read = {lookup:['query', 'limit', 'corpus'], read:['address', 'corpus'], verify:['question', 'answer', 'corpus'], status:['corpus'], refresh:['corpus'],
+    session_append:['text', 'kind', 'role', 'session', 'tag'], session_read:['address'], session_lookup:['query', 'session', 'limit'], session_list:['limit'],
+    ask:['question', 'model', 'note', 'corpus']};
+  for (const spec of TOOLS) for (const k of read[spec.name]) expect(k in spec.inputSchema.properties).toBe(true);
+});
+
+test('format json wraps the same text in one JSON object with refs and never reaches argv or stdin', async ($, on) => {
+  const f = fixture(on); await start($);
+  f.stdout = 'note `AMZN`:\n  notes/AMZN.md:1-5#077dfe59  file\n  code/limits.py:4-6#0a1b2c3d  py\n  notes/AMZN.md:1-5#077dfe59  again';
+  const plain = await call($, 'lookup', {query:'AMZN'});
+  const answer = await call($, 'lookup', {query:'AMZN', format:'json'});
+  expect(f.runs[1].argv).toEqual(f.runs[0].argv);
+  expect(f.runs[1].argv.join(' ').includes('json')).toBe(false);
+  const o = JSON.parse(answer.result);
+  expect(o).toEqual({tool:'lookup', ok:true, status:'ok', exitCode:0, text:plain.result, refs:['notes/AMZN.md:1-5#077dfe59', 'code/limits.py:4-6#0a1b2c3d']});
+  f.stdout = '{"ok":true,"address":"sessions/sess-1/turns.jsonl#seq=1#sha=abc123def456"}';
+  const s = JSON.parse((await call($, 'session_append', {text:'x', format:'json'})).result);
+  expect(s.refs).toEqual(['sessions/sess-1/turns.jsonl#seq=1#sha=abc123def456']);
+  expect(f.runs[2].init.stdin).toBe('x');
+});
+
+test('format json: verify refusal is status refused with ok false; other failures still deny; text stays the default', async ($, on) => {
+  const f = fixture(on); await start($);
+  f.exitCode = 1; f.stdout = 'REFUSED: not verified (1 problem).';
+  const o = JSON.parse((await call($, 'verify', {question:'q', answer:'a', format:'json'})).result);
+  expect([o.ok, o.status, o.exitCode, o.text, o.refs]).toEqual([false, 'refused', 1, 'REFUSED: not verified (1 problem).', []]);
+  f.exitCode = 2; f.stdout = 'error: boom';
+  expect((await call($, 'read', {address:'a:1-2', format:'json'})).deny).toBe('error: boom');
+  f.exitCode = 0; f.stdout = 'hello';
+  expect((await call($, 'status', {})).result).toBe('hello');
+});

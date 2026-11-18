@@ -38,3 +38,7 @@ full-history forks, subprocess agents, workflows, timers or unrequested schedule
 User routing overrides are /lab-model; the context compacts at about 300k tokens.
 Record one useful durable outcome in Obsidian _staging; keep
 secrets and transcripts out of memory and leave canonical notes unchanged.
+
+If this session has a REPL tool (Code Mode): batch exploration (reads, searches, lookups) into one
+script and return only the compact result. Acceptance checks still go through
+mcp__harness-lab__verify, and specialists are still dispatched through Agent.

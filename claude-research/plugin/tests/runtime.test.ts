@@ -64,3 +64,44 @@ test('without the launcher env the tools explain how to start', async ($, on) =>
   expect((await call($, 'sec_search', {query: 'x'})).deny.includes('claude-lab-clp')).toBe(true);
   expect(f.runs.length).toBe(0);
 });
+
+const walk = (node, path, bad) => {
+  if (!node || typeof node !== 'object') return;
+  if (node.type === 'object' && node.additionalProperties !== false) bad.push(path);
+  for (const [k, v] of Object.entries(node.properties || {})) walk(v, path + '.' + k, bad);
+  if (node.items) walk(node.items, path + '[]', bad);
+};
+
+test('every object schema, nested items included, is closed and every tool declares format', async () => {
+  const bad = [];
+  for (const spec of TOOLS) {
+    walk(spec.inputSchema, spec.name, bad);
+    expect(spec.inputSchema.properties.format.enum).toEqual(['text', 'json']);
+    expect(spec.description.includes('format:"json"')).toBe(true);
+  }
+  expect(bad).toEqual([]);
+  const claim = TOOLS.find(t => t.name === 'research_claim').inputSchema.properties.claims.items;
+  expect(claim.additionalProperties).toBe(false);
+  expect(claim.properties.cite.items.additionalProperties).toBe(false);
+});
+
+test('format json wraps the text with status, exit code and unique refs, and is not sent to Python', async ($, on) => {
+  const f = fixture(on); await start($);
+  f.stdout = ' src 0123456789ab | tier A: SEC | sec_filing | 9 lines\n file sec-1.txt\n @ 1-3#deadbeef\n  sec-1.txt:1-3#deadbeef and sec-1.txt:1-3#deadbeef';
+  const plain = await call($, 'research_evidence', {query: 'x'});
+  const o = JSON.parse((await call($, 'research_evidence', {query: 'x', format: 'json'})).result);
+  expect(JSON.parse(f.runs[1].init.stdin)).toEqual({query: 'x'});
+  expect(o).toEqual({tool: 'research_evidence', ok: true, status: 'ok', exitCode: 0, text: plain.result, refs: ['0123456789ab', 'sec-1.txt:1-3#deadbeef']});
+});
+
+test('format json: refused and unavailable are results with their status; errors still deny', async ($, on) => {
+  const f = fixture(on); await start($);
+  f.exitCode = 1; f.stdout = 'REFUSED: no';
+  let o = JSON.parse((await call($, 'research_report', {inquiry: 'i', format: 'json'})).result);
+  expect([o.ok, o.status, o.exitCode]).toEqual([false, 'refused', 1]);
+  f.exitCode = 3; f.stdout = 'UNAVAILABLE[x]: HTTP 401';
+  o = JSON.parse((await call($, 'court_search', {query: 'miranda', format: 'json'})).result);
+  expect([o.ok, o.status, o.exitCode, o.tool]).toEqual([false, 'unavailable', 3, 'court_search']);
+  f.exitCode = 2; f.stdout = 'ERROR: bad';
+  expect((await call($, 'scholar_work', {id: 'zzz', format: 'json'})).deny).toBe('ERROR: bad');
+});

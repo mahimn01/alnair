@@ -98,3 +98,12 @@ Run `research_status` (with `live=true` to probe) for what is live right now.
 - market_earnings returns Nasdaq's EXPECTED next date and analyst EPS forecast (an estimate, `confirmed_by_company: false`) plus the company's own past release dates from SEC 8-K Item 2.02 filings. Say "expected" unless the issuer IR page confirms it; use SEC/issuer releases for actuals. It can still honestly report UNAVAILABLE. No paid APIs, keys, logins or scraping services (Yahoo, a last resort, gets only the anonymous visitor cookie its site gives everyone; it is never stored).
 - For sparse finance literature, use scholar_discover (synonyms + OpenAlex finance concept/keywords, Crossref incl. indexed SSRN, S2, arXiv q-fin). Read abstracts/full text; title matches do not show causal stock-return evidence.
 - New research notes go to _staging/Research, which the vault guard permits. Never overwrite or append to existing notes; choose a new filename. Reviewer prompts must name existing absolute paths; save the draft before dispatch.
+
+## Code Mode
+
+If this session has a REPL tool (Code Mode), tool calls can be scripted:
+- `describeTool('mcp__research__research_get')` shows a tool's description and schema. Pass only declared arguments.
+- Batch related searches, fetches and reads in one script. Pass `format:'json'` and `JSON.parse` the result: `{tool, ok, status, exitCode, text, refs}`; status `refused` and `unavailable` are answers, not throws.
+- Filter in code and return only the compact result (passages with their addresses).
+- A failed call throws, so wrap each call in try/catch.
+- research_report is still required before you state facts, and quotes still go through research_claim.

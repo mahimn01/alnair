@@ -32,3 +32,9 @@ starting with chrome-devtools audits: Lighthouse and performance traces, network
 - mcporter calls face only the Bash permission check, not the `mcp__*` allow and deny lists.
   Keep scripts read-only.
 - Codex stays on `codex exec` with its output written to a file.
+
+## When the session has a REPL tool (Code Mode)
+
+Use REPL instead of mcporter or throwaway scripts: it calls MCP tools as async functions, so chain,
+filter and return only the compact result from one script, with try/catch per call (errors throw).
+Do not fight the built-in REPL. mcporter stays the path when the session has no Code Mode.

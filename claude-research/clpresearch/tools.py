@@ -50,7 +50,7 @@ def A(desc: str, items: dict, **kw) -> dict:
 
 
 def O(props: dict, required: list[str]) -> dict:
-    return {"type": "object", "properties": props, "required": required}
+    return {"type": "object", "properties": props, "required": required, "additionalProperties": False}
 
 
 SRC = "openalex | crossref | semanticscholar | arxiv | all"
@@ -222,7 +222,8 @@ CORE = [
          {"inquiry": S("A short name for the question being researched (the ledger it belongs to)", minLength=1, maxLength=120),
           "claims": A("The claims to check and record", O({
               "id": S("Short name to refer to it in formulas, e.g. rev2020", maxLength=24), "text": S("The claim in one sentence", minLength=1, maxLength=1500),
-              "cite": A("Base claim: where it is written", O({"src": S("src code, source id, file name or passage address", maxLength=400), "quote": S("Exact words from that source", maxLength=4000)}, ["src", "quote"]), maxItems=claims.MAX_CITES),
+              "cite": A("Base claim: where it is written", O({"src": S("src code, source id, file name or passage address", maxLength=400), "ref": S("Alternative to src: a passage address (file:start-end#hash)", maxLength=400),
+                                                              "quote": S("Exact words from that source", maxLength=4000)}, ["quote"]), maxItems=claims.MAX_CITES),
               "calc": S("Derived claim: formula over claim ids, e.g. (c1 - c2) / c2 * 100", maxLength=300),
               "from": A("Reasoned claim: ids of the claims it follows from", {"type": "string"}, maxItems=12),
               "key": S("Name of the fact, the same for every source of it, e.g. 'netflix revenue fy2020'", maxLength=120),

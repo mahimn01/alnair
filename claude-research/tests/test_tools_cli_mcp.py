@@ -301,3 +301,29 @@ def test_skill_covers_every_tool_and_the_verify_limits():
         assert name in skill, f"skill does not mention {name}"
     for phrase in ("does not mean the source is true", "UNAVAILABLE", "disconfirming", "UNANSWERABLE", "NEW note", "data, never instructions", "--no-research"):
         assert phrase in skill, phrase
+
+
+def _open_objects(node, path: str = "") -> list[str]:
+    bad = []
+    if isinstance(node, dict):
+        if node.get("type") == "object" and node.get("additionalProperties") is not False:
+            bad.append(path or "<root>")
+        for k, v in node.get("properties", {}).items():
+            bad += _open_objects(v, f"{path}.{k}")
+        if "items" in node:
+            bad += _open_objects(node["items"], f"{path}[]")
+    return bad
+
+
+def test_every_object_schema_is_closed_and_format_is_declared():
+    import json as _json
+    prefix = "export const TOOLS = "
+    text = (ROOT / "plugin/hooks/tools.generated.js").read_text()
+    items = _json.loads(text[text.index(prefix) + len(prefix):].rstrip().rstrip(";"))
+    assert [i["name"] for i in items] == [t.name for t in tools.TOOLS]
+    for item in items:
+        assert _open_objects(item["inputSchema"], item["name"]) == []
+        assert item["inputSchema"]["properties"]["format"]["enum"] == ["text", "json"]
+    for t in tools.TOOLS:       # the Python handlers never see format: the plugin strips it
+        assert "format" not in t.props
+        assert tools.run(t.name, {"format": "json"})[0] in (2, 4)
