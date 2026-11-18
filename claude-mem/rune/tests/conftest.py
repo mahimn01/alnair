@@ -20,6 +20,18 @@ def _blocked(self, address):  # noqa: ANN001
 
 
 @pytest.fixture(autouse=True)
+def _keep_model_catalog():
+    """Dry runs through the real launcher run the lab's model sync, which copies the newest served-model
+    times from real lab runs into the tracked lab/plugin/hooks/model-catalog.js. Put the file back so a
+    test run leaves the repo as it found it."""
+    path = Path(__file__).resolve().parents[3] / "lab" / "plugin" / "hooks" / "model-catalog.js"
+    before = path.read_bytes() if path.is_file() else None
+    yield
+    if before is not None and path.read_bytes() != before:
+        path.write_bytes(before)
+
+
+@pytest.fixture(autouse=True)
 def _offline(monkeypatch):
     monkeypatch.setattr(socket.socket, "connect", _blocked)
     for k in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY"):
