@@ -147,3 +147,59 @@ def test_doctor_reports_without_starting_a_session(tmp_path, monkeypatch, capsys
     assert report["tools_python"]["version"].startswith("3.") and "no corpus yet" in " ".join(report["corpus"])
     assert "started no Claude session" in report["note"]
     assert L.main(["doctor"]) == 0 and json.loads(capsys.readouterr().out)["plugin"]["name"] == "clp"
+
+
+CODE_MODE_SHELL = ("ALNAIR_CODE_MODE", "ALNAIR_CONFIG", L.CODE_MODE.ENV, *L.CODE_MODE.RESTART_ENV,
+                   *L.CODE_MODE.OFF_SWITCHES, *L.CODE_MODE.LOGIN_OVERRIDES)
+
+
+@pytest.fixture
+def code_mode_home(tmp_path, monkeypatch) -> Path:
+    """A temporary HOME for config.env and a shell without Code Mode, telemetry or login override variables."""
+    home = tmp_path / "home"
+    (home / ".config/alnair").mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    for name in CODE_MODE_SHELL:
+        monkeypatch.delenv(name, raising=False)
+    return home
+
+
+def test_code_mode_reaches_only_the_child_env_and_the_guide(settings_files, code_mode_home, tmp_path, project, monkeypatch):
+    monkeypatch.setenv(L.CODE_MODE.RESTART_ENV[0], "1")
+    run, cfg = L.prepare(project, tmp_path / "on", code_mode=True)
+    argv, env = L.launch_command(run)
+    assert cfg["codeMode"] is True and env[L.CODE_MODE.ENV] == "1" and L.CODE_MODE.RESTART_ENV[0] not in env
+    assert "Code Mode is on" in argv[argv.index("--append-system-prompt") + 1]
+    assert L.CODE_MODE.ENV not in (run / "settings.json").read_text()
+    monkeypatch.setenv(L.CODE_MODE.ENV, "1")
+    run, _ = L.prepare(project, tmp_path / "off")
+    argv, env = L.launch_command(run)
+    assert env[L.CODE_MODE.ENV] == "0" and argv[argv.index("--append-system-prompt") + 1] == L.GUIDE
+
+
+def test_code_mode_defaults_from_config_env_and_a_blocker_turns_the_default_off(settings_files, code_mode_home, project, capsys, monkeypatch):
+    (code_mode_home / ".config/alnair/config.env").write_text("ALNAIR_CODE_MODE=1\n")
+    assert L.main(["--dry-run", "--project", str(project)]) == 0
+    shown = json.loads(capsys.readouterr().out)
+    shutil.rmtree(shown["run"])
+    assert shown["codeMode"] == {"enabled": True, "source": "ALNAIR_CODE_MODE", "env": "1", "notes": []}
+    monkeypatch.setenv("DISABLE_TELEMETRY", "1")
+    assert L.main(["--dry-run", "--project", str(project)]) == 0
+    out = capsys.readouterr()
+    shown = json.loads(out.out)
+    shutil.rmtree(shown["run"])
+    assert shown["codeMode"]["enabled"] is False and shown["codeMode"]["env"] == "0"
+    assert "Code Mode is off for this session: DISABLE_TELEMETRY is set" in out.err
+
+
+def test_an_explicit_code_mode_that_cannot_run_is_refused_before_any_folder_is_made(settings_files, code_mode_home, tmp_path, project, monkeypatch):
+    monkeypatch.setattr(L, "STATE", tmp_path / "runs")
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "x")
+    with pytest.raises(ValueError, match="ANTHROPIC_AUTH_TOKEN is set"):
+        L.main(["--project", str(project), "--code-mode"])
+    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN")
+    (project / ".claude").mkdir()
+    (project / ".claude/settings.local.json").write_text(json.dumps({"model": "claude-opus-4-7"}))
+    with pytest.raises(ValueError, match="claude-opus-4-7 is not Opus 5.5"):
+        L.main(["--project", str(project), "--code-mode"])
+    assert not (tmp_path / "runs").exists()
