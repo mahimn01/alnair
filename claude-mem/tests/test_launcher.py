@@ -65,6 +65,19 @@ def test_doctor_is_offline_and_reports_bili_off(capsys):
     assert protected_state() == before
 
 
+def test_version_prints_the_released_version_and_starts_nothing(tmp_path: Path, monkeypatch, capsys):
+    (tmp_path / "CHANGELOG.md").write_text("# Changelog\n\n## Unreleased\n\n- x\n\n## 1.4.2 (2026-11-18)\n\n## 1.4.1\n")
+    monkeypatch.setattr(L, "REPO", tmp_path)
+    assert L.alnair_version() == "1.4.2"  # not a git checkout: the CHANGELOG version alone
+    monkeypatch.setattr(L.os, "execve", lambda *a: pytest.fail("--version must not launch anything"))
+    with pytest.raises(SystemExit) as stop:
+        L.main(["--version"])
+    assert stop.value.code == 0
+    assert capsys.readouterr().out == "alnair 1.4.2\n"
+    (tmp_path / "CHANGELOG.md").unlink()
+    assert L.alnair_version() == "unknown"
+
+
 def test_merge_helper_omits_mcp_servers(tmp_path: Path):
     run = tmp_path / "run"
     run.mkdir()
