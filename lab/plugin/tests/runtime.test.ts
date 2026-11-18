@@ -534,6 +534,16 @@ test('Bash commands are checked part by part, so a cd prefix or a pipe cannot hi
   expect(nestedSessionDenial("cat > note.md <<'EOF'\nnever run claude -p here\nEOF")).toBe(null);
   expect(nestedSessionDenial('bash <<EOF\nclaude -p hi\nEOF')).toBeTruthy();
   expect(nestedSessionDenial("python3 - <<'EOF'\nimport subprocess; subprocess.run('claude -p x', shell=True)\nEOF")).toBeTruthy();
+  // Who reads the body is decided per here-document: a pipe into a shell runs it; an earlier python
+  // command on the line does not make a note's body code.
+  for (const command of ["cat <<'EOF' | sh\nclaude -p hi\nEOF", "cat <<'EOF' | bash -s\nalnair -p hi\nEOF", "cat <<EOF |& sudo bash\nclaude -p hi\nEOF",
+    "python3 - <<'EOF'\nimport subprocess\nsubprocess.run(['claude','-p','x'])\nEOF", "node -e \"require('child_process').spawn('alnair', ['-p', 'x'])\"",
+    "python3 -c \"import subprocess; subprocess.run(['claude', '-p', 'hi'])\""])
+    expect([command,nestedSessionDenial(command)]).toEqual([command,expect.stringContaining('Agent tool')]);
+  for (const command of ["python3 run.py && cat >> notes.md <<'EOF'\nnever run claude -p here\nEOF", "node --test && git commit -F - <<'EOF'\nGuard alnair -p\nEOF",
+    "python3 - <<'EOF'\nimport subprocess\nprint(subprocess.run(['claude','--version']).returncode)\nEOF", "python3 -c \"models = ['claude', 'gpt']; print(models)\"",
+    "cat <<'EOF' || true\nclaude -p hi\nEOF"])
+    expect([command,nestedSessionDenial(command)]).toEqual([command,null]);
   const f=fixture(on);await start($);
   const denied=await $.tool.call({tool:'Bash',command:"cd 'app' && claude -p hi",tool_use_id:'repl_1'});
   expect(denied.deny.includes('nested session')).toBe(true);
@@ -563,6 +573,27 @@ test('no tool call, direct or from a script, may write the user Claude settings 
   for (const command of ['cp ~/.claude.json /tmp/backup.json', 'cp a.json ~/.claude/', 'cp notes/settings.json ~', 'cat ~/.CLAUDE.json',
     'cd ~/.claude && cat settings.json && ls', "python3 -c \"import json;print(json.load(open('/home/u/.claude.json')))\"", 'diff ~/.claude.json /tmp/x 2>&1',
     "cat > note.md <<'EOF'\nnever write ~/.claude.json\nEOF", 'ln -s ~/.claude/settings.json /tmp/view.json', 'grep -c x ~/.claude/settings.json > /tmp/n'])
+    expect([command,settingsWriteDenial(command,HOME)]).toEqual([command,null]);
+  // Second review: a here-document a shell reads is commands; a variable, rm of the folder, a bare name
+  // in the folder, AppleScript's shell text and a copied .claude folder all reach the files.
+  for (const command of ["cat <<'EOF' | sh\necho {} > ~/.claude.json\nEOF", "cat <<'EOF' | bash -s\necho {} > ~/.claude/settings.json\nEOF",
+    "cat <<EOF | sudo -E bash\necho {} > ~/.claude.json\nEOF", "cat <<'EOF' | python3\nopen('/home/u/.claude.json','w').write('{}')\nEOF",
+    'p=~/.claude/settings.json; jq . "$p" > /tmp/t && mv /tmp/t "$p"', 'export P=$HOME/.claude.json && echo {} > "${P}"',
+    'rm -rf ~/.claude', 'rm ~/.claude/*.json', 'rm -rf ~/.c*', 'mv ~/.claude ~/.claude.old', 'rm -rf /',
+    "cd ~/.claude && python3 -c \"open('settings.json','w').write('{}')\"", "osascript -e 'do shell script \"echo x > ~/.claude.json\"'",
+    'cp -R /tmp/backup/.claude ~/', "python3 -m json.tool /tmp/in.json ~/.claude.json",
+    "python3 -c \"import json,os;json.dump({}, open(os.path.expanduser('~/.claude.json'), 'w'))\"", "node -e \"require('fs').writeFileSync('/home/u/.claude.json','{}')\""])
+    expect([command,settingsWriteDenial(command,HOME)]).toEqual([command,expect.stringContaining('unchanged')]);
+  expect(settingsWriteDenial('echo {} > settings.json',HOME,HOME + '/.claude')).toBeTruthy();
+  expect(settingsWriteDenial('echo {} > settings.json',HOME,'/project')).toBe(null);
+  // Reads through an interpreter, and heredoc notes after an earlier python or node command, stay allowed.
+  for (const command of ["python3 -c \"import json,os;print(json.dumps(json.load(open(os.path.expanduser('~/.claude/settings.json')))))\"",
+    "python3 - <<'EOF'\nimport json\nprint(json.dumps(json.load(open('/home/u/.claude/settings.json')), indent=2))\nEOF",
+    'python3 -m json.tool ~/.claude/settings.json', 'python3 -m json.tool ~/.claude.json /tmp/pretty.json',
+    "python3 -c \"import sys;sys.stdout.write(open('/home/u/.claude.json').read())\"", "python3 -c \"print(open('/home/u/.claude.json', 'r').read().replace('a','b'))\"",
+    "python3 -m pytest -q && git commit -F - <<'EOF'\nRefuse writes to ~/.claude/settings.json\nEOF",
+    "node --test && cat >> CHANGELOG.md <<'EOF'\n- refuse writes to ~/.claude.json\nEOF",
+    'rm -rf ~/.claude/projects/old', 'rm ~/*.log', 'rm ~/.claude/*.md', 'rm -rf ~/*', 'mv ~/.claude/notes.md /tmp/'])
     expect([command,settingsWriteDenial(command,HOME)]).toEqual([command,null]);
   const f=fixture(on,{},{},{HOME});await start($);
   expect((await $.tool.call({tool:'Write',file_path:'/home/u/.claude.json',content:'{}',tool_use_id:'repl_2'})).deny.includes('unchanged')).toBe(true);
@@ -600,6 +631,13 @@ test('a REPL script that starts a session or writes the settings files is refuse
   expect(scriptDenial('const hits = await $`grep -rn "claude -p" README.md`',HOME)).toBe(null);
   expect(scriptDenial("await Edit({file_path: '/project/README.md', old_string: 'a', new_string: 'never run claude -p or write ~/.claude.json'})",HOME)).toBe(null);
   expect(scriptDenial("const note = 'alnair -p is refused'; await Write({file_path: '/project/notes.md', content: note})",HOME)).toBe(null);
+  // A write call or a shell call that is only written inside a string or a comment is not made by the script.
+  expect(scriptDenial("await Write({file_path:'/p/notes.md', content:'Do not writeFileSync(\"~/.claude.json\")'})",HOME)).toBe(null);
+  expect(scriptDenial("// fs.writeFileSync('/home/u/.claude.json', '{}')\nconst x = 1",HOME)).toBe(null);
+  expect(scriptDenial("const tip = 'use $`claude -p hi` never'; await Write({file_path:'/p/a.md', content: tip})",HOME)).toBe(null);
+  expect(scriptDenial("const fs = require('fs'); fs.writeFileSync('/home/u/.claude.json', '{}')",HOME)).toBeTruthy();
+  // A settings read inside a script's shell call stays allowed.
+  expect(scriptDenial("await $`python3 -c \"import json;print(json.dumps(json.load(open('/home/u/.claude/settings.json'))))\"`",HOME)).toBe(null);
   const f=fixture(on,{},{},{HOME});await start($);
   const refused=await $.tool.call({tool:'REPL',code:'await $`claude -p hi`'});
   expect(refused.deny.includes('another Claude')).toBe(true);
