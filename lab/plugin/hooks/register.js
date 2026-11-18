@@ -126,6 +126,8 @@ const NESTED_SESSION = 'Use the lab specialists (the Agent tool) instead of star
 // rule, widened from claude/claude-rotate to every launcher and to `codex exec`.
 const LOOSE_NESTED = /(?:^|[;&|\s])(?:claude(?:-[a-z]+)*|alnair)(?=\s|$)|(?:^|[;&|\s])codex\s+(?:exec|e)(?=\s|$)/;
 const base = word => word.split('/').pop();
+// An interpreter fed a here-document (python3 - <<'EOF' ... EOF): its code is in the body, not in the words.
+const HEREDOC_CODE = /(?:^|[;&|\s(])(?:python[\d.]*|pypy[\d.]*|node|bun|deno|perl|ruby|php|osascript)\b[^\n]*<</;
 
 // Splits a shell command line into simple commands (words with quotes removed) at &&, ||, ;, |, &,
 // newlines and parentheses, so `cd 'app' && claude -p x` is read as two commands. Text inside $(...),
@@ -244,10 +246,27 @@ function commandDenial(words, subs, depth) {
   return null;
 }
 
+// Here-document bodies (cat > note.md <<'EOF' ... EOF) are data, not commands, unless a shell reads
+// them (bash <<EOF). The splitter would read every body line as a command, so the others are cut out,
+// keeping the << line itself (its redirections still count). `bodies` collects what was cut.
+const HEREDOC = /<<-?[ \t]*(['"]?)([A-Za-z_][\w.-]*)\1([^\n]*)\n[^]*?(?:\n[ \t]*\2[ \t]*(?=\n|$)|$)/g;
+const SHELL_READS = /(?:^|[;&|\s(])(?:sh|bash|zsh|dash|ksh)(?=[\s<]|$)/;
+export function withoutHeredocBodies(text, bodies = []) {
+  return String(text).replace(HEREDOC, (match, quote, delimiter, rest, at, whole) => {
+    const line = whole.slice(whole.lastIndexOf('\n', at) + 1, at);
+    if (SHELL_READS.test(line)) return match;
+    bodies.push(match.slice(match.indexOf('\n') + 1));
+    return '<<' + delimiter + rest;
+  });
+}
+
 // Why a Bash command line must not run because it starts a nested session, or null.
 export function nestedSessionDenial(command, depth = 0) {
-  const text = String(command || '');
+  const bodies = [];
+  const text = withoutHeredocBodies(String(command || ''), bodies);
   if (!text.trim()) return null;
+  // A body fed to an interpreter (python3 - <<EOF) is code that runs: it is still read word by word.
+  if (HEREDOC_CODE.test(text)) for (const body of bodies) { const reason = nestedSessionDenial(body, depth + 1); if (reason) return reason; }
   const lexed = depth < 4 ? splitShell(text) : null;
   if (!lexed) return LOOSE_NESTED.test(text) ? NESTED_SESSION : null;
   for (const inner of lexed.subs) { const reason = nestedSessionDenial(inner, depth + 1); if (reason) return reason; }
@@ -258,63 +277,180 @@ export function nestedSessionDenial(command, depth = 0) {
 // The user's own Claude settings files. The lab never changes them (Code Mode is enabled through the
 // child environment only), and neither may a tool call from the model or from a script.
 const SETTINGS_DENIAL = 'The lab leaves ~/.claude/settings.json and ~/.claude.json unchanged. Ask the user to change Claude settings themselves outside this session; use /lab-model for routing.';
-function protectedPaths(home) { return home ? [home + '/.claude/settings.json', home + '/.claude.json'] : []; }
-function expandHome(path, home) {
-  return String(path || '').replace(/^(?:~|\$HOME|\$\{HOME\})(?=\/|$)/, home || '~').replace(/\/{2,}/g, '/').replace(/\/(?:\.\/)+/g, '/');
-}
-export function isProtectedPath(path, home) {
-  return Boolean(home) && protectedPaths(home).includes(expandHome(path, home));
-}
-// Why a Bash command line writes one of the settings files, or null. Reads stay allowed.
-export function settingsWriteDenial(command, home) {
-  if (!home || !/\.claude/.test(command || '')) return null;
-  const lexed = splitShell(String(command));
-  if (!lexed) return /(?:>|\btee\b|\bmv\b|\bcp\b|\bln\b|\brm\b|\bsed\s+-i|\btruncate\b)[^\n;&|]*(?:~|\$\{?HOME\}?|\/)[^\s;&|]*\/\.claude(?:\/settings\.json|\.json)(?![\w.-])/.test(command) ? SETTINGS_DENIAL : null;
-  if (lexed.writes.some(w => isProtectedPath(w, home))) return SETTINGS_DENIAL;
-  for (const words of lexed.commands) {
-    const name = base(words[0] || ''), args = words.slice(1).filter(a => !a.startsWith('-'));
-    const hit = a => isProtectedPath(a, home);
-    if (['tee','rm','truncate','unlink','shred'].includes(name) && args.some(hit)) return SETTINGS_DENIAL;
-    if (['cp','ln','install','rsync','ditto'].includes(name) && hit(args[args.length - 1] || '')) return SETTINGS_DENIAL;
-    if (name === 'mv' && args.some(hit)) return SETTINGS_DENIAL;
-    if (['sed','gsed','perl'].includes(name) && words.some(a => /^-[a-zA-Z]*i/.test(a)) && args.some(hit)) return SETTINGS_DENIAL;
+// A path as the shell resolves it: ~ and $HOME expanded, a relative path taken from `cwd`, . and ..
+// folded, repeated slashes merged. Null when it can't be known (relative with no cwd, or built at run time).
+function resolvePath(path, home, cwd) {
+  let p = String(path ?? '');
+  if (!p || p.includes('\0')) return null;
+  p = p.replace(/^(?:~|\$HOME|\$\{HOME\})(?=\/|$)/, home || '~');
+  if (p.includes('$')) return null;
+  if (!p.startsWith('/')) { if (!cwd) return null; p = cwd + '/' + p; }
+  const parts = [];
+  for (const seg of p.split('/')) {
+    if (seg === '..') parts.pop();
+    else if (seg && seg !== '.') parts.push(seg);
   }
-  for (const inner of lexed.subs) { const reason = settingsWriteDenial(inner, home); if (reason) return reason; }
-  return null;
+  return '/' + parts.join('/');
+}
+const same = (a, b) => a !== null && b !== null && a.toLowerCase() === b.toLowerCase();  // macOS volumes ignore case
+function protectedPaths(home) { return home ? [resolvePath(home + '/.claude/settings.json', home, null), resolvePath(home + '/.claude.json', home, null)] : []; }
+export function isProtectedPath(path, home, cwd = null) {
+  if (!home) return false;
+  const p = resolvePath(path, home, cwd);
+  return protectedPaths(home).some(x => same(x, p));
 }
 
-// A first look at a whole REPL script, before any of its calls run. Each inner call is still
-// checked on its own (the authoritative check: it sees the real values, which code may build at
-// run time). This catches the plain cases early with one clear reason.
-const SCRIPT_NESTED = /(?<![\w.-])(?:claude(?:-[a-z]+)*|alnair)(?![\w-])[^\n'"`;|&]{0,200}?\s(?:-p|--print|--bare)(?![\w-])/;
-const SCRIPT_CODEX = /(?<![\w.-])codex\s+(?:exec|e)(?![\w-])/;
-const WRITE_CALLS = /^(?:Write|Edit|MultiEdit|NotebookEdit|edit|write|writeFile|writeFileSync|appendFile|appendFileSync|rename|renameSync|copyFile|copyFileSync|unlink|unlinkSync|rm|rmSync)$/;
-const SHELL_WRITE = /(?:>|\btee\b|\bmv\b|\bcp\b|\bln\b|\brm\b|\btruncate\b|\bsed\s+(?:-\S+\s+)*-[a-zA-Z]*i|\bperl\s+-\S*i)[^'"`]*$/;
-export function scriptDenial(code, home) {
-  const text = String(code || '');
-  if (SCRIPT_NESTED.test(text) || SCRIPT_CODEX.test(text)) return 'This script starts another Claude, Alnair or Codex session (-p, --print, --bare or codex exec). ' + NESTED_SESSION;
-  const homeRe = home ? '|' + home.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '';
-  const paths = new RegExp('(?:~|\\$\\{?HOME\\}?|process\\.env\\.HOME\\s*\\+\\s*[\'"`]' + homeRe + ')/\\.claude(?:/settings\\.json|\\.json)(?![\\w.-])'
-    + '|homedir\\(\\)\\s*,\\s*[\'"`]\\.claude(?:[\'"`]\\s*,\\s*[\'"`]settings\\.json|\\.json)[\'"`]', 'g');
-  for (const m of text.matchAll(paths)) {
-    // The string the path sits in: a shell write before it in the same string (`cp x ~/.claude.json`).
-    const before = text.slice(Math.max(0, m.index - 400), m.index);
-    const quote = Math.max(before.lastIndexOf("'"), before.lastIndexOf('"'), before.lastIndexOf('`'));
-    if (quote >= 0 && SHELL_WRITE.test(before.slice(quote + 1))) return SETTINGS_DENIAL;
-    // The calls the path sits inside: Write({file_path: '~/.claude.json', ...}) and the like.
-    let depth = 0;
-    for (let j = m.index - 1, seen = 0; j >= 0 && j > m.index - 2000 && seen < 3; j--) {
-      const c = text[j];
-      if (')]}'.includes(c)) depth++;
-      else if ('([{'.includes(c)) {
-        if (depth > 0) { depth--; continue; }
-        if (c !== '(') continue;
-        seen++;
-        const callee = /([A-Za-z_$][\w$]*)\s*$/.exec(text.slice(Math.max(0, j - 60), j))?.[1] || '';
-        if (WRITE_CALLS.test(callee)) return SETTINGS_DENIAL;
-      }
+// Programs that only read the files they are given. Any other program handed one of the settings files
+// (an editor, tee, rm, chmod, touch, sponge, an unknown tool, a script) is treated as writing it.
+const READ_ONLY = new Set(['cat','head','tail','less','more','grep','egrep','fgrep','rg','ag','jq','wc','diff','cmp',
+  'ls','stat','file','readlink','realpath','shasum','sha1sum','sha256sum','md5','md5sum','test','[','echo','printf',
+  'strings','xxd','od','hexdump','sort','uniq','cut','tr','column','du','bat','git','cd','pushd','popd']);
+const IN_PLACE = new Set(['sed','gsed','awk','gawk']);  // read-only unless -i / --in-place
+const COPIERS = new Set(['cp','ln','install','rsync','ditto','scp','mv']);  // write their last argument
+// Programs that run the command after their own options: env X=1 cp ..., timeout 5 tee ..., xargs rm ...
+const WRAPPERS = new Set(['env','nohup','nice','timeout','gtimeout','xargs','sudo','doas','command','builtin','exec','time','stdbuf','caffeinate']);
+const INTERPRETER = /^(?:python[\d.]*|pypy[\d.]*|node|bun|deno|perl|ruby|php|lua|osascript|swift)$/;
+const NAMES_SETTINGS = /\.claude(?:\.json|['"`]?\s*(?:,|\+|\/)\s*['"`]?\/?settings\.json)/i;
+const CODE_WRITES = /\bopen\s*\([^)]*,\s*['"][^'"]*[wax+]|write|dump|unlink|rename|remove|rmtree|truncate|copy|move|replace|symlink|open\s*\([^)]*['"]\s*\+?>/i;
+const LOOSE_SETTINGS = /(?:>|\btee\b|\bmv\b|\bcp\b|\bln\b|\brm\b|\bdd\b|\bsed\s+-i|\btruncate\b)[^\n;&|]*(?:~|\$\{?HOME\}?|\/)[^\s;&|]*\/\.claude(?:\/settings\.json|\.json)(?![\w.-])/i;
+
+// Whether one simple command (its words) writes a settings file. `dirs` are the folders a relative path
+// may be taken from: the session's folder and every folder the line cds into.
+function writesSettings(words, home, dirs, depth) {
+  let i = 0;
+  while (i < words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]) || KEYWORDS.has(words[i]))) i++;
+  if (i >= words.length) return false;
+  const name = base(words[i]), rest = words.slice(i + 1);
+  const hit = a => dirs.some(d => isProtectedPath(a, home, d));
+  const named = a => hit(a) || (a.includes('=') && hit(a.slice(a.indexOf('=') + 1)));
+  if (WRAPPERS.has(name)) {
+    let j = 0;
+    while (j < rest.length && (rest[j].startsWith('-') || /^[A-Za-z_][A-Za-z0-9_]*=/.test(rest[j]) || /^\d+(?:\.\d+)?[smhd]?$/.test(rest[j]))) j++;
+    return j < rest.length && writesSettings(rest.slice(j), home, dirs, depth);
+  }
+  if (SHELLS.has(name) || name === 'eval') {
+    const flag = rest.findIndex(a => /^-[a-z]*c[a-z]*$/.test(a));
+    const code = name === 'eval' ? rest.join(' ') : (flag >= 0 ? rest[flag + 1] : undefined);
+    return code !== undefined && shellWritesSettings(code, home, dirs, depth + 1);
+  }
+  if (name === 'dd') return rest.some(a => a.startsWith('of=') && hit(a.slice(3)));
+  if (INTERPRETER.test(name)) {
+    const flag = rest.findIndex(a => ['-c','-e','-E','--eval','-r','-x'].includes(a) || /^-[A-Za-z]*e$/.test(a));
+    const code = flag >= 0 ? rest[flag + 1] || '' : '';
+    if (code && NAMES_SETTINGS.test(code) && CODE_WRITES.test(code)) return true;
+    return rest.some((a, k) => k !== (flag >= 0 ? flag + 1 : -1) && named(a));  // a settings file handed to a script
+  }
+  if (COPIERS.has(name)) {
+    const args = rest.filter(a => !a.startsWith('-'));
+    const t = rest.indexOf('-t');
+    const target = t >= 0 ? rest[t + 1] : (rest.find(a => a.startsWith('--target-directory='))?.split('=')[1] ?? args[args.length - 1]);
+    const sources = args.filter(a => a !== target);
+    if (name === 'mv' && sources.some(hit)) return true;
+    if (target === undefined || sources.length === 0 && name !== 'ln') return false;
+    if (hit(target)) return true;
+    // Copying into ~ or ~/.claude: a source with the settings file's name (or one only known at run
+    // time: a glob, a variable, {} from xargs, a folder's contents) lands on it.
+    const unknown = s => /[{}*?$\0[\]]|\/$/.test(s);
+    const into = (dir, file) => dirs.some(d => same(resolvePath(target, home, d), resolvePath(dir, home, null)))
+      && sources.some(s => unknown(s) || base(s).toLowerCase() === file);
+    return into(home, '.claude.json') || into(home + '/.claude', 'settings.json');
+  }
+  if (IN_PLACE.has(name)) return rest.some(a => /^-[a-zA-Z]*i/.test(a) || a.startsWith('--in-place')) && rest.some(named);
+  if (name === 'find') return rest.some(a => /^-(?:delete|exec|execdir|ok|okdir)$/.test(a)) && rest.some(a => /\.claude/i.test(a)) && rest.some(a => /settings\.json|\.claude\.json/i.test(a));
+  if (READ_ONLY.has(name)) return false;
+  return rest.some(named);
+}
+
+function shellWritesSettings(command, home, dirs, depth) {
+  const bodies = [];
+  const text = withoutHeredocBodies(command, bodies);
+  if (HEREDOC_CODE.test(text) && bodies.some(b => NAMES_SETTINGS.test(b) && CODE_WRITES.test(b))) return true;
+  const lexed = depth < 4 ? splitShell(text) : null;
+  if (!lexed) return LOOSE_SETTINGS.test(text);
+  const known = [...dirs];
+  for (const words of lexed.commands) {
+    if (!['cd','pushd'].includes(base(words[0] || ''))) continue;
+    const target = words.slice(1).filter(a => a !== '-P' && a !== '-L')[0] ?? '~';
+    if (target === '-') continue;
+    for (const d of [...known]) { const r = resolvePath(target, home, d); if (r && !known.includes(r)) known.push(r); }
+  }
+  if (lexed.writes.some(w => known.some(d => isProtectedPath(w, home, d)))) return true;
+  if (lexed.commands.some(words => writesSettings(words, home, known, depth))) return true;
+  return lexed.subs.some(inner => shellWritesSettings(inner, home, known, depth + 1));
+}
+
+// Why a Bash command line writes one of the settings files, or null. Reads stay allowed. `cwd` is the
+// folder the command runs in, when known, for relative paths.
+export function settingsWriteDenial(command, home, cwd = null) {
+  const text = String(command || '');
+  if (!home || !/\.claude/i.test(text)) return null;
+  return shellWritesSettings(text, home, [cwd], 0) ? SETTINGS_DENIAL : null;
+}
+
+// A first look at a whole REPL script, before any of its calls run. Each inner call is still checked on
+// its own (the authoritative check: it sees the real values, which code may build at run time). This
+// reads only what the script hands to the shell and the paths its write calls name, so a script that
+// greps for a launcher or edits a note mentioning the settings files is not refused for that text.
+function scriptShellTexts(text) {
+  const out = [];
+  for (const m of text.matchAll(/\$`((?:\\[^]|\$\{[^}]*\}|[^`\\])*)`/g)) out.push(m[1]);
+  for (const m of text.matchAll(/\b(?:Bash|Monitor)\s*\(\s*\{[^}]*?\bcommand\s*:\s*(['"`])((?:\\[^]|(?!\1)[^\\])*)\1/g)) out.push(m[2]);
+  // A ${...} part is one placeholder word: its value is known only when the call runs.
+  return out.map(t => t.replace(/\$\{[^}]*\}/g, 'X'));
+}
+// The top-level arguments of the call whose ( is at `open` (or the properties of the { at `open`).
+function callArgs(text, open) {
+  const args = [];
+  let depth = 0, from = open + 1;
+  for (let j = open + 1; j < text.length; j++) {
+    const c = text[j];
+    if (c === '\\') { j++; continue; }
+    if (c === "'" || c === '"' || c === '`') { j++; while (j < text.length && text[j] !== c) j += text[j] === '\\' ? 2 : 1; continue; }
+    if ('([{'.includes(c)) depth++;
+    else if (')]}'.includes(c)) { if (depth === 0) { args.push(text.slice(from, j)); return args; } depth--; }
+    else if (c === ',' && depth === 0) { args.push(text.slice(from, j)); from = j + 1; }
+  }
+  return args;
+}
+// A path expression as text: string literals, joined with + or path.join, with os.homedir() and
+// process.env.HOME read as ~. Null when part of it is a variable (known only at run time).
+function jsPath(expr) {
+  const e = String(expr).trim().replace(/\b(?:os\.)?homedir\(\)|\bprocess\.env\.HOME\b|\bprocess\.env\[['"]HOME['"]\]/g, "'~'");
+  const join = /^(?:path\.)?(?:join|resolve)\s*\(([^]*)\)$/.exec(e);
+  const parts = join ? callArgs('(' + join[1] + ')', 0) : e.split('+');
+  let out = '';
+  for (const raw of parts) {
+    const lit = /^(['"`])([^]*)\1$/.exec(raw.trim());
+    if (!lit) return null;
+    const value = lit[2].replace(/\$\{\s*'~'\s*\}/g, '~');
+    if (value.includes('${')) return null;
+    out += join && out && !out.endsWith('/') ? '/' + value : value;
+  }
+  return out;
+}
+const WRITE_TOOL = /\b(?:Write|Edit|MultiEdit|NotebookEdit)\s*\(/g;
+const WRITE_FS = /\b(?:writeFile|writeFileSync|appendFile|appendFileSync|rename|renameSync|copyFile|copyFileSync|cp|cpSync|unlink|unlinkSync|rm|rmSync|truncate|truncateSync|symlink|symlinkSync|link|linkSync|createWriteStream)\s*\(/g;
+function scriptWritePaths(text) {
+  const out = [];
+  for (const m of text.matchAll(WRITE_TOOL)) {
+    const [arg] = callArgs(text, m.index + m[0].length - 1);
+    const brace = arg ? arg.indexOf('{') : -1;
+    if (brace < 0) continue;
+    for (const prop of callArgs(arg, brace)) {
+      const kv = /^\s*['"]?(?:file_path|notebook_path)['"]?\s*:\s*([^]*)$/.exec(prop);
+      if (kv) out.push(jsPath(kv[1]));
     }
   }
+  for (const m of text.matchAll(WRITE_FS)) for (const a of callArgs(text, m.index + m[0].length - 1)) out.push(jsPath(a));
+  return out.filter(Boolean);
+}
+export function scriptDenial(code, home, cwd = null) {
+  const text = String(code || '');
+  for (const shell of scriptShellTexts(text)) {
+    if (nestedSessionDenial(shell)) return 'This script starts another Claude, Alnair or Codex session. ' + NESTED_SESSION;
+    if (settingsWriteDenial(shell, home, cwd)) return SETTINGS_DENIAL;
+  }
+  if (scriptWritePaths(text).some(path => isProtectedPath(path, home, cwd))) return SETTINGS_DENIAL;
   return null;
 }
 
@@ -331,8 +467,15 @@ export function codeUsage(state = {}) {
 const NON_USER_ORIGINS = new Set(['task-notification','peer','peer-send-message','projects-relay','channel','observer',
   'observer-activity','auto-continuation','plugin']);
 const CODE_MODE_CONTEXT = 'Code Mode is on (the REPL tool runs your JavaScript). Batch related reads, searches and lookups into one script, filter and summarise in code, and return only the compact result. The lab rules still hold inside scripts: record checkpoints with mcp__harness-lab__checkpoint, run acceptance checks through mcp__harness-lab__verify, start specialists with Agent, and never start another Claude, Alnair or Codex session.';
+// The folder this hook's commands run in (a subagent's own inside its hook), for relative paths; null when
+// the engine can't say, which leaves relative paths unresolved rather than guessed.
+async function sessionCwd($) {
+  try { return await $.session.cwd(); } catch { return null; }
+}
 export function isUserPrompt(e) {
   if (e?.source === 'poll_event' || e?.source === 'system') return false;
+  // Code Mode script output comes back as an <event kind="repl-..."> turn, whatever origin it is given.
+  if (/^\s*<event kind="repl-/.test(String(e?.text ?? ''))) return false;
   const kind = e?.origin?.kind;
   if (e?.isMeta && kind !== 'composer' && kind !== 'bridge') return false;
   return !NON_USER_ORIGINS.has(kind);
@@ -666,7 +809,7 @@ export function register(on) {
       }
     });
     if (script) {
-      const denial = scriptDenial(e.code, home);
+      const denial = scriptDenial(e.code, home, /\.claude/i.test(e.code || '') ? await sessionCwd($) : null);
       if (denial) return {deny:denial};
     }
     if (e.tool === 'mcp__harness-lab__checkpoint') {
@@ -695,7 +838,8 @@ export function register(on) {
       return {deny:SETTINGS_DENIAL};
     if (['Bash','Monitor'].includes(e.tool)) {
       const command = e.command || '';
-      const denial = nestedSessionDenial(command) || settingsWriteDenial(command, home) || mcporterDenial(command);
+      const denial = nestedSessionDenial(command) || mcporterDenial(command)
+        || settingsWriteDenial(command, home, /\.claude/i.test(command) ? await sessionCwd($) : null);
       if (denial) return {deny:denial};
     }
     // Pass on the original event. This never changes a permission decision.

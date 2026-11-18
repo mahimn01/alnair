@@ -530,6 +530,10 @@ test('Bash commands are checked part by part, so a cd prefix or a pipe cannot hi
   expect(nestedSessionDenial('claude plugin test /p -p x')).toBeTruthy();
   expect(splitShell("cd 'a b' && ls > out.txt 2>&1 | wc -l")).toEqual({commands:[['cd','a b'],['ls'],['wc','-l']],subs:[],writes:['out.txt']});
   expect(splitShell("echo 'unclosed")).toBe(null);
+  // A here-document body is data unless a shell reads it.
+  expect(nestedSessionDenial("cat > note.md <<'EOF'\nnever run claude -p here\nEOF")).toBe(null);
+  expect(nestedSessionDenial('bash <<EOF\nclaude -p hi\nEOF')).toBeTruthy();
+  expect(nestedSessionDenial("python3 - <<'EOF'\nimport subprocess; subprocess.run('claude -p x', shell=True)\nEOF")).toBeTruthy();
   const f=fixture(on);await start($);
   const denied=await $.tool.call({tool:'Bash',command:"cd 'app' && claude -p hi",tool_use_id:'repl_1'});
   expect(denied.deny.includes('nested session')).toBe(true);
@@ -543,6 +547,23 @@ test('no tool call, direct or from a script, may write the user Claude settings 
   expect(settingsWriteDenial('sed -i "" s/a/b/ /home/u/.claude/settings.json',HOME)).toBeTruthy();
   expect(settingsWriteDenial('cat ~/.claude/settings.json; jq . ~/.claude.json > /tmp/copy',HOME)).toBe(null);
   expect(settingsWriteDenial('echo {} > ./project/.claude/settings.json',HOME)).toBe(null);
+  // Writes that reach the files some other way: a cd first, a folder as the copy target, dd, a wrapper,
+  // a nested shell, an interpreter one-liner or here-document, .. in the path, other letter case.
+  for (const command of ["cd ~/.claude && printf '{}' > settings.json", "cd '/home/u/.claude' && sed -i '' s/a/b/ settings.json",
+    'cp /tmp/x/settings.json ~/.claude/', 'mv /tmp/x/settings.json ~/.claude', 'cp -t ~/.claude settings.json', 'cp /tmp/x/.claude.json ~',
+    'rsync -a backup/ ~/.claude/', 'dd if=/tmp/x of=~/.claude.json', "python3 -c \"open('/home/u/.claude.json','w').write('{}')\"",
+    'echo {} > ~/.claude/../.claude.json', 'echo {} > ~/.CLAUDE.json', 'timeout 5 tee ~/.claude.json', 'env X=1 cp /tmp/x ~/.claude.json',
+    'bash -c "cd ~/.claude && echo {} > settings.json"', 'touch ~/.claude.json', 'code ~/.claude/settings.json', 'xargs -I{} cp {} ~/.claude/',
+    "perl -pi -e 's/a/b/' ~/.claude.json", "python3 - <<'EOF'\nimport json\njson.dump({}, open('/home/u/.claude.json','w'))\nEOF"])
+    expect([command,settingsWriteDenial(command,HOME)]).toEqual([command,expect.stringContaining('unchanged')]);
+  // A relative path is taken from the folder the command runs in.
+  expect(settingsWriteDenial('echo {} > .claude.json',HOME,HOME)).toBeTruthy();
+  expect(settingsWriteDenial('echo {} > .claude.json',HOME,'/project')).toBe(null);
+  // Reads, and writes that only look close, stay allowed.
+  for (const command of ['cp ~/.claude.json /tmp/backup.json', 'cp a.json ~/.claude/', 'cp notes/settings.json ~', 'cat ~/.CLAUDE.json',
+    'cd ~/.claude && cat settings.json && ls', "python3 -c \"import json;print(json.load(open('/home/u/.claude.json')))\"", 'diff ~/.claude.json /tmp/x 2>&1',
+    "cat > note.md <<'EOF'\nnever write ~/.claude.json\nEOF", 'ln -s ~/.claude/settings.json /tmp/view.json', 'grep -c x ~/.claude/settings.json > /tmp/n'])
+    expect([command,settingsWriteDenial(command,HOME)]).toEqual([command,null]);
   const f=fixture(on,{},{},{HOME});await start($);
   expect((await $.tool.call({tool:'Write',file_path:'/home/u/.claude.json',content:'{}',tool_use_id:'repl_2'})).deny.includes('unchanged')).toBe(true);
   expect((await $.tool.call({tool:'Edit',file_path:'~/.claude/settings.json',old_string:'a',new_string:'b'})).deny).toBeTruthy();
@@ -550,6 +571,16 @@ test('no tool call, direct or from a script, may write the user Claude settings 
   expect((await $.tool.call({tool:'Read',file_path:'/home/u/.claude/settings.json'})).deny).toBe(undefined);
   expect((await $.tool.call({tool:'Write',file_path:'/project/.claude/settings.json',content:'{}'})).deny).toBe(undefined);
   expect(f.calls).toEqual(['Read','Write']);
+});
+
+test('a relative settings path is read from the folder the session runs in',async ($,on) => {
+  const f=fixture(on,{},{},{HOME});
+  on('session.cwd',() => ({value:HOME}));
+  await start($);
+  expect((await $.tool.call({tool:'Bash',command:'echo {} > .claude.json'})).deny).toBeTruthy();
+  expect((await $.tool.call({tool:'REPL',code:'await $`printf x > .claude/settings.json`'})).deny).toBeTruthy();
+  expect((await $.tool.call({tool:'Bash',command:'cat .claude.json'})).deny).toBe(undefined);
+  expect(f.calls).toEqual(['Bash']);
 });
 
 test('a REPL script that starts a session or writes the settings files is refused before it runs',async ($,on) => {
@@ -561,6 +592,14 @@ test('a REPL script that starts a session or writes the settings files is refuse
   expect(scriptDenial("await Write({file_path: path.join(os.homedir(), '.claude.json'), content: ''})",HOME)).toBeTruthy();
   expect(scriptDenial("const s = await Read({file_path: '~/.claude/settings.json'}); await Write({file_path: '/tmp/x', content: s.file.content})",HOME)).toBe(null);
   expect(scriptDenial('await $`git clone --bare repo && claude --version`',HOME)).toBe(null);
+  expect(scriptDenial('await Write({file_path: `${os.homedir()}/.claude.json`, content: ""})',HOME)).toBeTruthy();
+  expect(scriptDenial("await Edit({file_path: process.env.HOME + '/.claude/settings.json', old_string: 'a', new_string: 'b'})",HOME)).toBeTruthy();
+  expect(scriptDenial('await $`cd ~/.claude && echo {} > settings.json`',HOME)).toBeTruthy();
+  expect(scriptDenial("await Bash({command: 'cd ${dir} && claude -p hi'})",HOME)).toBeTruthy();
+  // Text that only mentions a launcher or the settings files is not a launch or a write.
+  expect(scriptDenial('const hits = await $`grep -rn "claude -p" README.md`',HOME)).toBe(null);
+  expect(scriptDenial("await Edit({file_path: '/project/README.md', old_string: 'a', new_string: 'never run claude -p or write ~/.claude.json'})",HOME)).toBe(null);
+  expect(scriptDenial("const note = 'alnair -p is refused'; await Write({file_path: '/project/notes.md', content: note})",HOME)).toBe(null);
   const f=fixture(on,{},{},{HOME});await start($);
   const refused=await $.tool.call({tool:'REPL',code:'await $`claude -p hi`'});
   expect(refused.deny.includes('another Claude')).toBe(true);
@@ -610,6 +649,10 @@ test('script output and other machine-made prompts pass through untouched and ar
   expect(isUserPrompt({source:'poll_event'})).toBe(false);
   expect(isUserPrompt({origin:{kind:'task-notification'}})).toBe(false);
   expect(isUserPrompt({isMeta:true,origin:{kind:'peer'}})).toBe(false);
+  // Script output is recognised by its text too, whatever origin the engine gives it.
+  expect(isUserPrompt({text:'<event kind="repl-eval">done</event>',origin:{kind:'unclassified'}})).toBe(false);
+  expect(isUserPrompt({text:'  <event kind="repl-output">x</event>',origin:{kind:'composer'}})).toBe(false);
+  expect(isUserPrompt({text:'why does <event kind="repl-eval"> show up?',origin:{kind:'composer'}})).toBe(true);
   const f=fixture(on);await start($);
   for (const origin of [{kind:'task-notification'},{kind:'peer'},{kind:'auto-continuation'}]) {
     const passed=await $.prompt.submit({text:'<event kind="repl-eval">Investigate a race condition</event>',origin,wait:false});
