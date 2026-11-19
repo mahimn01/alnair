@@ -972,11 +972,76 @@ test('a shell -c hands its $0 and $@ words on, and they are checked as a command
     expect([c, nestedSessionDenial(c)]).toEqual([c, null]);
   for (const c of [`bash -c 'echo hi' _ a`, `sh -c 'ls "$1"' _ ~/Documents`])
     expect([c, settingsWriteDenial(c,HOME)]).toEqual([c, null]);
-  // A chain of -c shells stays cheap.
+  // A chain of -c shells stays cheap. Each layer runs its words ("$@"); a layer that doesn't (bash -c 'x' _ rm ...)
+  // never runs them, and with the words put back into its text that reads as no write.
   const begun = Date.now();
-  expect(settingsWriteDenial("bash -c 'x' _ ".repeat(200) + 'rm ~/.claude.json', HOME)).toBeTruthy();
+  expect(settingsWriteDenial("bash -c '\"$@\"' _ ".repeat(200) + 'rm ~/.claude.json', HOME)).toBeTruthy();
   expect(nestedSessionDenial("bash -c 'x' _ ".repeat(200) + 'claude -p x')).toBeTruthy();
   expect(Date.now() - begun < 1000).toBe(true);
+});
+
+test('a shell -c text is read with its $0 and $@ words put back, and so is what xargs builds from input on the line', async () => {
+  // Focused re-review of da532c5: the positional words were matched only as the settings file itself, so
+  // removing or moving a folder or glob through "$1" got through; xargs input the line shows was never read.
+  for (const c of ["bash -c 'rm -rf \"$1\"' _ ~/.claude", "bash -c 'mv \"$1\" /tmp/x' _ ~/.claude", "bash -c 'rm -rf \"$0\"' ~/.claude",
+    "bash -c 'rm -rf \"$1\"' _ ~/.c*", "bash -c 'rm -rf \"$1\"/settings.json' _ ~/.claude", "zsh -c 'rm -rf $1' _ /home/u/.claude",
+    "bash -c 'shift; rm -rf \"$@\"' _ x ~/.claude", "bash -c 'for f; do rm -rf \"$f\"; done' _ ~/.claude", "bash -c 'rm -rf \"$" + "{1:-x}\"' _ ~/.claude",
+    "sh -c 'echo {} > \"$1\"' _ ~/.claude.json", "xargs bash -c 'rm -rf \"$1\"' _ <<< ~/.claude", "echo ~/.claude | xargs bash -c 'rm -rf \"$1\"' _",
+    "xargs rm -rf <<< ~/.claude", "echo ~/.claude | xargs rm -rf", "cat <<< ~/.claude | xargs -n1 rm -rf", "xargs -I{} mv {} /tmp/x <<< ~/.claude",
+    "p=~/.claude; echo $p | xargs rm -rf", "xargs rm -rf <<EOF\n~/.claude\nEOF", "echo ~/.claude | sudo xargs rm -rf"])
+    expect([c, Boolean(settingsWriteDenial(c,HOME))]).toEqual([c, true]);
+  for (const c of ["bash -c '\"$1$2\" -p x' _ cla ude", "bash -c '$1 -p x' _ claude", "echo claude | xargs bash -c '$1 -p x' _", "xargs -I{} sh -c '{} -p x' <<< claude"])
+    expect([c, Boolean(nestedSessionDenial(c))]).toEqual([c, true]);
+  // Reading the positional words, or input the line doesn't show, is not a write.
+  for (const c of ["sh -c 'ls \"$1\"' _ ~/.claude.json", "bash -c 'cat \"$1\"' _ ~/.claude/settings.json", "bash -c 'jq . \"$1\"' _ ~/.claude.json",
+    "bash -c 'cp \"$1\" \"$2\"' _ ~/.claude.json /tmp/backup.json", "find . -name '*.tmp' | xargs rm", "echo a.txt | xargs rm",
+    "xargs cat <<< ~/.claude.json", "echo ~/.claude | xargs ls"])
+    expect([c, settingsWriteDenial(c,HOME)]).toEqual([c, null]);
+});
+
+test('nested -c shells past the depth limit are refused, not let through', async () => {
+  // Focused re-review: past four levels the loose text tests missed a quoted launcher and any folder removal.
+  const q = (s: string) => "bash -c '" + s.replace(/'/g, "'\\''") + "'";
+  const nest = (s: string, n: number) => { for (let k = 0; k < n; k++) s = q(s); return s; };
+  for (const n of [4, 5, 6]) expect([n, Boolean(nestedSessionDenial(nest('claude -p x', n)))]).toEqual([n, true]);
+  expect(Boolean(nestedSessionDenial(nest('"claude" -p x', 4)))).toBe(true);
+  for (const n of [4, 5]) expect([n, Boolean(settingsWriteDenial(nest('rm -rf ~/.claude', n), HOME))]).toEqual([n, true]);
+  expect(Boolean(settingsWriteDenial(nest("python3 -c \"open('/home/u/.claude.json','w')\"", 4), HOME))).toBe(true);
+  expect(nestedSessionDenial(nest('ls -la', 5))).toBe(null);
+  expect(settingsWriteDenial(nest('ls -la', 5), HOME)).toBe(null);
+});
+
+test('a long run of cd commands is read in linear time and still finds the folder a failed cd leaves', async () => {
+  // Focused re-review: every relative cd doubled the folders tried, so 16 of them took over 4 s.
+  const cds = (n: number) => Array.from({length:n}, (_, k) => 'cd d' + k + '; ').join('');
+  let begun = Date.now();
+  expect(Boolean(settingsWriteDenial('cd ~/.claude; ' + cds(16) + 'rm settings.json', HOME))).toBe(true);
+  expect(Date.now() - begun < 1000).toBe(true);
+  begun = Date.now();
+  expect(Boolean(settingsWriteDenial('cd ~/.claude; ' + cds(24) + 'rm settings.json', HOME))).toBe(true);
+  expect(settingsWriteDenial('cd ~/.claude; ' + cds(200) + 'rm x', HOME)).toBe(null);
+  expect(settingsWriteDenial(Array.from({length:2000}, (_, k) => 'cd /tmp/d' + k + '; ').join('') + 'rm x', HOME)).toBe(null);
+  expect(Date.now() - begun < 2000).toBe(true);
+});
+
+test('groups are matched opener to closer, so a here-string inside nested compound commands still reaches its shell', async () => {
+  // Focused re-review: an opener after do, then, ! or time was not counted while its closer still ended the
+  // outer group; a case pattern's ) closed the group; a >(...) after a group's ) was dropped.
+  for (const c of ["while true; do if true; then cat <<< 'claude -p x'; fi; break; done | sh", "if true; then if true; then :; fi; cat <<< 'claude -p x'; fi | sh",
+    "for i in 1; do for j in 1; do :; done; cat <<< 'claude -p x'; done | sh", "{ if true; then :; fi; cat <<< 'claude -p x'; } | sh",
+    "! { cat <<< 'claude -p x'; } | sh", "time { cat <<< 'claude -p x'; } | sh", "if true; then { cat <<< 'claude -p x'; }; echo; fi | sh",
+    "{ case x in x) cat <<< 'claude -p x';; esac; } | sh", "(case x in x) cat <<< 'claude -p x';; esac) | sh", "(cat <<< 'claude -p x') > >(sh)"])
+    expect([c, Boolean(nestedSessionDenial(c))]).toEqual([c, true]);
+  for (const c of ["{ echo a; echo b; } | sort", "case $x in a) echo a;; b) echo b;; esac", "f() { echo hi; }; f", "for f in *.md; do wc -l \"$f\"; done",
+    "jq . <<< '{\"a\": 1}'", "git commit -q -F - <<< 'notes about claude -p'"])
+    expect([c, nestedSessionDenial(c)]).toEqual([c, null]);
+});
+
+test('a long run of wrapper words neither overflows the stack nor hides a write', async () => {
+  // Focused re-review: each wrapper word was one more recursive call, so 3000 env words threw RangeError.
+  expect(Boolean(settingsWriteDenial('env '.repeat(25000) + 'rm ~/.claude.json', HOME))).toBe(true);
+  expect(Boolean(settingsWriteDenial('sudo nice '.repeat(10000) + 'rm -rf ~/.claude', HOME))).toBe(true);
+  expect(settingsWriteDenial('env '.repeat(25000) + 'cat .claude', HOME)).toBe(null);
 });
 
 test('a wrapper does not hide the shell or interpreter it runs', async () => {

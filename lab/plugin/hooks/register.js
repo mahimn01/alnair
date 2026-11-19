@@ -196,6 +196,7 @@ const SHELLS = new Set(['sh','bash','zsh','dash','ksh','fish','csh','tcsh']);
 const NESTED_SESSION = 'Use the lab specialists (the Agent tool) instead of starting another Claude, Alnair or Codex session: a nested session bypasses the lab routing, worker budget and handoffs. Version, help and `claude plugin validate|test` are allowed.';
 // Whole-text check for commands the splitter cannot read (an unbalanced quote): the pre-Code-Mode
 // rule, widened from claude/claude-rotate to every launcher and to `codex exec`.
+const DEEP_NESTED = /(?:^|[^\w.-])(?:claude(?:-[a-z]+)*|alnair)(?![\w.-])|(?:^|[^\w.-])codex\s+(?:exec|e)(?![\w.-])/i;
 const LOOSE_NESTED = /(?:^|[;&|\s])(?:claude(?:-[a-z]+)*|alnair)(?=\s|$)|(?:^|[;&|\s])codex\s+(?:exec|e)(?=\s|$)/;
 const base = word => word.split('/').pop();
 
@@ -219,21 +220,39 @@ export function splitShell(text) {
   // across a newline too. A group, ( ... ), { ...; }, if ... fi or while/until/for/select ... done, is one
   // stage: every command inside it, at any depth, shares the group's number, so (cat <<< x; true) | sh and
   // cat <<< x | { read l; sh; } read as feeding the shell. procs are the >(...) bodies a command writes to.
-  let joined = false, depth = 0, group = 0;
-  const open = () => { if (depth++ === 0) group = line; };
-  const close = () => { if (depth > 0 && --depth === 0) { line = group; joined = false; } };
+  // The stack holds the closer each open group waits for, so a closer ends only its own group, an opener
+  // after do, then, else, ! or time still counts, and inside case ... esac a pattern's ) closes nothing.
+  // A here-string or >(...) written after a group's ) (with no command of its own) belongs to that group.
+  let joined = false, group = 0, closedGroup = false;
+  const stack = [];
+  const open = closer => { if (!stack.length) group = line; stack.push(closer); };
+  const close = closer => {
+    if (stack[stack.length - 1] !== closer) return false;
+    stack.pop();
+    if (!stack.length) { line = group; joined = false; }
+    return true;
+  };
   const endCommand = (piped = false) => {
     endWord(); pendingWrite = pendingInput = pendingString = false;
     const ended = words.length > 0;
+    let closer = null;
     if (ended) {
-      if (GROUP_OPENS.has(words[0])) open();
-      commands.push(words); pipeline.push(depth > 0 ? group : line);
-      for (const t of owned) strings.push({text:t, command:commands.length - 1});
-      for (const t of ownedProcs) procs.push({text:t, command:commands.length - 1});
-      if (GROUP_CLOSES.has(words[0])) close();
+      for (const w of words) {
+        if (GROUP_OPENS[w]) { open(GROUP_OPENS[w]); if (!KEYWORDS.has(w)) break; }
+        else if (GROUP_CLOSES.has(w)) { closer = w; break; }
+        else if (!KEYWORDS.has(w) && !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w)) break;
+      }
+      commands.push(words); pipeline.push(stack.length ? group : line);
     }
+    const owner = ended ? commands.length - 1 : closedGroup && commands.length ? commands.length - 1 : -1;
+    if (owner >= 0) {
+      for (const t of owned) strings.push({text:t, command:owner});
+      for (const t of ownedProcs) procs.push({text:t, command:owner});
+    }
+    if (closer) close(closer);
+    if (ended) closedGroup = false;
     words = []; owned = []; ownedProcs = [];
-    if (depth > 0) return;
+    if (stack.length) return;
     if (piped) joined = true;
     else if (ended || !joined) { line++; joined = false; }
   };
@@ -302,7 +321,7 @@ export function splitShell(text) {
     if (';&|()'.includes(c)) {
       const piped = c === '|' && text[i + 1] !== '|' && text[i - 1] !== '|';
       endCommand(piped);
-      if (c === '(') open(); else if (c === ')') close();
+      if (c === '(') open(')'); else if (c === ')' && close(')')) closedGroup = true;
       i += piped && text[i + 1] === '&' ? 2 : 1;   // |& pipes stderr too
       continue;
     }
@@ -350,10 +369,21 @@ function ansiC(text, at) {
   return null;
 }
 
+// A shell -c text with the words after it put back: $0, $1..$9, ${N}, $@, $*, "$@", "$*", ${@} and ${*}.
+// A word of only path characters goes in as it is (a glob still globs); any other is single-quoted.
+function withPositionals(code, positional) {
+  const word = w => /^[\w@%+=:,./~*?[\]{}-]+$/.test(w) ? w : "'" + w.replace(/'/g, "'\\''") + "'";
+  const at = k => positional[k] === undefined ? '' : word(positional[k]);
+  return String(code).replace(/"\$[@*]"|"\$\{[@*]\}"|\$\{[@*]\}|\$[@*]|\$\{(\d+)\}|\$(\d)/g, (m, b, d) =>
+    b !== undefined || d !== undefined ? at(Number(b ?? d)) : positional.slice(1).map(word).join(' '));
+}
+// Uses of the positional words that withPositionals can't put back.
+const UNEXPANDED = /\$\{[@*#!]|\$\{\d+[^\d}]|\$#|\bshift\b|\bgetopts\b|\bBASH_ARGV\b|\bfor\s+\w+\s*(?:;|\n|do\b)/;
 // Where each shell or interpreter word stands among a command's arguments.
 const runStarts = args => args.flatMap((a, k) => SHELLS.has(base(a)) || INTERPRETER.test(base(a)) ? [k] : []);
-// First words that open and close a group of commands (case ... esac is left out: its patterns end in ).
-const GROUP_OPENS = new Set(['{','if','while','until','for','select']), GROUP_CLOSES = new Set(['}','fi','done']);
+// First words that open a group of commands, with the word that closes it.
+const GROUP_OPENS = {'{':'}', if:'fi', while:'done', until:'done', for:'done', select:'done', case:'esac'};
+const GROUP_CLOSES = new Set(['}','fi','done','esac']);
 // Why one simple command (its words) must not run, or null.
 function commandDenial(words, subs, depth, scan = true) {
   let i = 0;
@@ -377,7 +407,9 @@ function commandDenial(words, subs, depth, scan = true) {
   if (SHELLS.has(name)) {
     const flag = args.findIndex(a => /^-[a-z]*c[a-z]*$/.test(a));
     if (flag >= 0 && args[flag + 1] !== undefined) {
-      const reason = nestedSessionDenial(args[flag + 1], depth + 1);
+      const positional = args.slice(flag + 2);
+      const reason = nestedSessionDenial(args[flag + 1], depth + 1)
+        || (positional.length ? nestedSessionDenial(withPositionals(args[flag + 1], positional), depth + 1) : null);
       if (reason) return reason;
       // The words after the -c text become $0 and $@, which it may run (bash -c '"$@"' _ claude -p x,
       // bash -c '$0 "$@"' claude -p x): they are checked below as the arguments of a wrapper.
@@ -480,6 +512,45 @@ function readerOf(stage) {
   if (x >= 0 && words.slice(x + 1).some(w => SHELLS.has(w) || WRAPPERS.has(w))) return 'shell';
   return words.some(w => SHELLS.has(w)) ? 'shell' : words.some(w => INTERPRETER.test(w)) ? 'code' : 'data';
 }
+// The commands xargs builds when the line shows what it reads: a here-string it owns, or the words of an
+// earlier stage of its pipeline (echo ~/.claude | xargs rm -rf, cat <<< ~/.claude | xargs ...), or of a
+// here-document. They go after its own words, or in place of its -I/-J/--replace word, one command per line.
+// Input the line doesn't show (find . | xargs rm) builds nothing to check.
+const XARGS_VALUE = new Set(['-L','-n','-P','-s','-E','-d','-a','-R','-S','-e','-l','--max-args','--max-procs','--delimiter','--arg-file','--eof','--max-lines','--max-chars']);
+function xargsRuns(commands, lexed, bodies) {
+  const runs = [];
+  commands.forEach((words, k) => {
+    let x = 0;
+    while (x < words.length && base(words[x]) !== 'xargs' && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[x]) || KEYWORDS.has(words[x])
+      || WRAPPERS.has(base(words[x])) || words[x].startsWith('-') || /^\d+(?:\.\d+)?[smhd]?$/.test(words[x]))) x++;
+    if (base(words[x] || '') !== 'xargs') return;
+    let i = x + 1, repl = null;
+    while (i < words.length && words[i].startsWith('-') && words[i] !== '--') {
+      const w = words[i];
+      if (w === '-I' || w === '-J' || w === '--replace') { repl = words[i + 1] ?? '{}'; i += 2; }
+      else if (/^-[IJi]./.test(w)) { repl = w.slice(2); i++; }
+      else if (w === '-i') { repl = '{}'; i++; }
+      else if (w.startsWith('--replace=')) { repl = w.slice(10); i++; }
+      else i += XARGS_VALUE.has(w) ? 2 : 1;
+    }
+    if (words[i] === '--') i++;
+    const command = words.slice(i);
+    if (!command.length) return;
+    const texts = lexed.strings.filter(s => s.command === k).map(s => s.text).concat(bodies.map(b => b.text));
+    for (let j = 0; j < k; j++) {
+      if (lexed.pipeline[j] !== lexed.pipeline[k]) continue;
+      if (['echo','printf'].includes(base(commands[j][0] || ''))) texts.push(commands[j].slice(1).join(' '));
+      for (const s of lexed.strings) if (s.command === j) texts.push(s.text);
+    }
+    const input = texts.join('\n');
+    if (!input.trim()) return;
+    if (repl) {
+      for (const row of input.split('\n').map(r => r.trim()).filter(Boolean).slice(0, 256))
+        runs.push(command.map(a => a.split(repl).join(row)));
+    } else runs.push([...command, ...input.split(/\s+/).filter(Boolean).map(w => w.replace(/^(['"])(.*)\1$/, '$2'))]);
+  });
+  return runs;
+}
 // Here-strings (cmd <<< 'text') are judged the same way, by the command that owns the <<< and every
 // command it pipes into: their text is 'shell' (bash <<< '...'), 'code' (python3 <<< '...') or 'data'
 // (git commit -F - <<< 'message').
@@ -513,10 +584,14 @@ export function nestedSessionDenial(command, depth = 0) {
   if (!text.trim()) return null;
   // A body an interpreter runs (python3 - <<EOF) is code: it is still read word by word.
   for (const body of bodies) if (body.code) { const reason = codeListDenial(body.text, depth) || nestedSessionDenial(body.text, depth + 1); if (reason) return reason; }
-  const lexed = depth < 4 ? splitShell(text) : null;
+  // Past four levels of nesting the text is not read word by word: it is refused when, with quotes and
+  // backslashes taken out, it still names a launcher (a fifth bash -c around claude -p x).
+  if (depth >= 4) return DEEP_NESTED.test(text.replace(/["'\\]/g, '')) ? NESTED_SESSION : null;
+  const lexed = splitShell(text);
   if (!lexed) return LOOSE_NESTED.test(text) ? NESTED_SESSION : null;
   for (const inner of lexed.subs) { const reason = nestedSessionDenial(inner, depth + 1); if (reason) return reason; }
   for (const words of lexed.commands) { const reason = commandDenial(words, lexed.subs, depth); if (reason) return reason; }
+  for (const words of xargsRuns(lexed.commands, lexed, bodies)) { const reason = commandDenial(words, lexed.subs, depth); if (reason) return reason; }
   for (const s of hereStrings(lexed)) {
     const reason = s.reader === 'shell' ? nestedSessionDenial(s.text, depth + 1)
       : s.reader === 'code' ? codeListDenial(s.text, depth) || nestedSessionDenial(s.text, depth + 1) : null;
@@ -595,7 +670,14 @@ const LOOSE_SETTINGS = /(?:>|\btee\b|\bmv\b|\bcp\b|\bln\b|\brm\b|\bdd\b|\bsed\s+
 // may be taken from: the session's folder and every folder the line cds into.
 function writesSettings(words, home, dirs, depth, scan = true) {
   let i = 0;
-  while (i < words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]) || KEYWORDS.has(words[i]))) i++;
+  // Past assignments, keywords and wrappers with their options (env A=1 nohup timeout 5 rm ...), in a loop
+  // so a long run of wrapper words costs no stack.
+  for (;;) {
+    while (i < words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]) || KEYWORDS.has(words[i]))) i++;
+    if (i >= words.length || !WRAPPERS.has(base(words[i]))) break;
+    i++;
+    while (i < words.length && (words[i].startsWith('-') || /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]) || /^\d+(?:\.\d+)?[smhd]?$/.test(words[i]))) i++;
+  }
   if (i >= words.length) return false;
   const name = base(words[i]), rest = words.slice(i + 1);
   const hit = a => dirs.some(d => isProtectedPath(a, home, d));
@@ -611,11 +693,6 @@ function writesSettings(words, home, dirs, depth, scan = true) {
     // A glob removes what its last segment matches in `folder`: the file itself or the folder above it.
     return protectedPaths(home).some(x => x.toLowerCase().startsWith(folder.toLowerCase()) && globMatches(last, x.slice(folder.length).split('/')[0]));
   });
-  if (WRAPPERS.has(name)) {
-    let j = 0;
-    while (j < rest.length && (rest[j].startsWith('-') || /^[A-Za-z_][A-Za-z0-9_]*=/.test(rest[j]) || /^\d+(?:\.\d+)?[smhd]?$/.test(rest[j]))) j++;
-    return j < rest.length && writesSettings(rest.slice(j), home, dirs, depth, scan);
-  }
   // Any other program that runs a shell or interpreter among its words (uv run python3 -c, npx node -e):
   // each is checked once, with the words up to the next one, as commandDenial does.
   if (scan && !DATA_PROGRAMS.has(name)) {
@@ -627,14 +704,12 @@ function writesSettings(words, home, dirs, depth, scan = true) {
     const flag = rest.findIndex(a => /^-[a-z]*c[a-z]*$/.test(a));
     const code = name === 'eval' ? rest.join(' ') : (flag >= 0 ? rest[flag + 1] : undefined);
     if (code === undefined) return false;
-    if (shellWritesSettings(code, home, dirs, depth + 1)) return true;
-    // The words after the -c text become $0 and $@, which it may run ("$@", $0 "$@") or hand on as files
-    // (cp "$1" "$2"): a settings file among them, or a command they spell that writes one, is a write.
-    // Nested -c chains stop at depth 4, which keeps the two readings below from multiplying.
+    // The words after the -c text become $0 and $@: they are put back where the text uses them, so
+    // bash -c 'rm -rf "$1"' _ ~/.claude reads as rm -rf ~/.claude and bash -c 'cat "$1"' _ ~/.claude.json
+    // as a read. Uses that can't be put back (shift, ${@:2}, for x; do) judge the words as paths instead.
     const positional = name === 'eval' ? [] : rest.slice(flag + 2);
-    if (positional.some(named)) return true;
-    return positional.length > 0 && depth < 4
-      && (writesSettings(positional, home, dirs, depth + 1) || writesSettings(positional.slice(1), home, dirs, depth + 1));
+    if (shellWritesSettings(positional.length ? withPositionals(code, positional) : code, home, dirs, depth + 1)) return true;
+    return positional.length > 0 && UNEXPANDED.test(code) && positional.some(a => named(a) || covers(a));
   }
   if (name === 'dd') return rest.some(a => a.startsWith('of=') && hit(a.slice(3)));
   if (INTERPRETER.test(name)) {
@@ -674,7 +749,10 @@ function writesSettings(words, home, dirs, depth, scan = true) {
 function shellWritesSettings(command, home, dirs, depth) {
   const bodies = [];
   const text = withoutHeredocBodies(command, bodies);
-  const lexed = depth < 4 ? splitShell(text) : null;
+  // Past four levels of nesting the text is refused when, quotes and backslashes taken out, it names the
+  // settings files or removes or moves anything.
+  if (depth >= 4) return /\.claude|settings\.json|\b(?:rm|mv|trash|srm|shred|unlink)\b/i.test(command.replace(/["'\\]/g, ''));
+  const lexed = splitShell(text);
   if (!lexed) return LOOSE_SETTINGS.test(text) || bodies.some(b => b.code && codeWritesSettings(b.text, home, dirs));
   // Variables set on the line (p=~/.claude/settings.json; ... "$p") are put back where they are used.
   const vars = new Map();
@@ -685,12 +763,20 @@ function shellWritesSettings(command, home, dirs, depth) {
   }
   const expand = w => vars.size ? w.replace(/\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))/g, (m, a, b) => vars.get(a || b) ?? m) : w;
   const commands = lexed.commands.map(words => words.map(expand)), writes = lexed.writes.map(expand);
-  const known = [...dirs];
+  // Each cd is taken from every folder known so far (a cd may have failed) while there are at most 64;
+  // past that only from the folders the last cd reached, so a long run of cds stays linear.
+  const known = [...dirs], seen = new Set(dirs);
+  let last = [...dirs];
   for (const words of commands) {
     if (!['cd','pushd'].includes(base(words[0] || ''))) continue;
     const target = words.slice(1).filter(a => a !== '-P' && a !== '-L')[0] ?? '~';
     if (target === '-') continue;
-    for (const d of [...known]) { const r = resolvePath(target, home, d); if (r && !known.includes(r)) known.push(r); }
+    const reached = [];
+    for (const d of known.length <= 64 ? [...known] : last) {
+      const r = resolvePath(target, home, d);
+      if (r && !seen.has(r)) { seen.add(r); known.push(r); reached.push(r); }
+    }
+    if (reached.length) last = reached;
   }
   if (bodies.some(b => b.code && codeWritesSettings(b.text, home, known))) return true;
   for (const s of hereStrings(lexed)) {
@@ -699,6 +785,7 @@ function shellWritesSettings(command, home, dirs, depth) {
   }
   if (writes.some(w => known.some(d => isProtectedPath(w, home, d)))) return true;
   if (commands.some(words => writesSettings(words, home, known, depth))) return true;
+  if (xargsRuns(commands, lexed, bodies).some(words => writesSettings(words, home, known, depth))) return true;
   return lexed.subs.some(inner => shellWritesSettings(inner, home, known, depth + 1));
 }
 
@@ -813,11 +900,16 @@ function scriptWritePaths(text) {
   for (const m of code.matchAll(WRITE_FS)) for (const a of callArgs(text, m.index + m[0].length - 1)) out.push(jsPath(a));
   return out.filter(Boolean);
 }
+// A guard that fails while reading a command refuses it: a crash must not let the command through.
+export const guardFailed = error => 'The lab could not check this command safely (' + String(error?.message || error).slice(0, 120)
+  + '), so it is refused. Split it into shorter commands.';
 export function scriptDenial(code, home, cwd = null) {
   const text = String(code || '');
   for (const shell of scriptShellTexts(text)) {
-    if (nestedSessionDenial(shell)) return 'This script starts another Claude, Alnair or Codex session. ' + NESTED_SESSION;
-    if (settingsWriteDenial(shell, home, cwd)) return SETTINGS_DENIAL;
+    try {
+      if (nestedSessionDenial(shell)) return 'This script starts another Claude, Alnair or Codex session. ' + NESTED_SESSION;
+      if (settingsWriteDenial(shell, home, cwd)) return SETTINGS_DENIAL;
+    } catch (error) { return guardFailed(error); }
   }
   if (scriptWritePaths(text).some(path => isProtectedPath(path, home, cwd))) return SETTINGS_DENIAL;
   return null;
@@ -962,7 +1054,8 @@ let lock = Promise.resolve();
       const argv = check?.argv;
       if (!Array.isArray(argv) || !argv.length || !argv.every(a => typeof a === 'string')) return [];
       const line = argv.map(shellQuote).join(' ');
-      const reason = nestedSessionDenial(line) || settingsWriteDenial(line, home, cwd);
+      let reason;
+      try { reason = nestedSessionDenial(line) || settingsWriteDenial(line, home, cwd); } catch (error) { reason = guardFailed(error); }
       return reason ? [{index,argv,reason:'the lab guards refuse it: ' + reason}] : [];
     });
   }
@@ -1259,8 +1352,11 @@ export function register(on) {
       return {deny:SETTINGS_DENIAL};
     if (['Bash','Monitor'].includes(e.tool)) {
       const command = e.command || '';
-      const denial = nestedSessionDenial(command) || mcporterDenial(command)
-        || settingsWriteDenial(command, home, /\.claude/i.test(command) ? await sessionCwd($) : null);
+      let denial;
+      try {
+        denial = nestedSessionDenial(command) || mcporterDenial(command)
+          || settingsWriteDenial(command, home, /\.claude/i.test(command) ? await sessionCwd($) : null);
+      } catch (error) { denial = guardFailed(error); }
       if (denial) return {deny:denial};
     }
     // Pass on the original event. This never changes a permission decision.
