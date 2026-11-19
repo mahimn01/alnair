@@ -200,12 +200,16 @@ export function splitShell(text) {
     }
     word = ''; inWord = false;
   };
-  // pipeline[k] numbers the pipeline of commands[k]; `piped` means the next command joins this one's.
+  // pipeline[k] numbers the pipeline of commands[k]; `piped` means the next command joins this one's,
+  // across a newline or an opening ( too (cat <<< x |<newline>sh, cat <<< x | (sh)).
+  let joined = false;
   const endCommand = (piped = false) => {
     endWord(); pendingWrite = pendingInput = pendingString = false;
-    if (words.length) { commands.push(words); pipeline.push(line); for (const t of owned) strings.push({text:t, command:commands.length - 1}); }
+    const ended = words.length > 0;
+    if (ended) { commands.push(words); pipeline.push(line); for (const t of owned) strings.push({text:t, command:commands.length - 1}); }
     words = []; owned = [];
-    if (!piped) line++;
+    if (piped) joined = true;
+    else if (ended || !joined) { line++; joined = false; }
   };
   // Index just past the ) that closes the ( at `open`, skipping quoted text; -1 when unclosed.
   const closeParen = open => {
@@ -269,7 +273,8 @@ export function splitShell(text) {
     if (c === '\n') { endCommand(); i++; continue; }
     if (/\s/.test(c)) { endWord(); i++; continue; }
     if (';&|()'.includes(c)) {
-      const piped = c === '|' && text[i + 1] !== '|' && text[i - 1] !== '|';
+      // A subshell that pipes on ((cat <<< x) | sh) joins the pipeline after it.
+      const piped = c === '|' ? text[i + 1] !== '|' && text[i - 1] !== '|' : c === ')' && /^[ \t]*\|(?!\|)/.test(text.slice(i + 1));
       endCommand(piped);
       i += piped && text[i + 1] === '&' ? 2 : 1;   // |& pipes stderr too
       continue;
@@ -318,8 +323,10 @@ function ansiC(text, at) {
   return null;
 }
 
+// Where each shell or interpreter word stands among a command's arguments.
+const runStarts = args => args.flatMap((a, k) => SHELLS.has(base(a)) || INTERPRETER.test(base(a)) ? [k] : []);
 // Why one simple command (its words) must not run, or null.
-function commandDenial(words, subs, depth) {
+function commandDenial(words, subs, depth, scan = true) {
   let i = 0;
   while (i < words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]) || KEYWORDS.has(words[i]))) i++;
   if (i >= words.length) return null;
@@ -343,11 +350,18 @@ function commandDenial(words, subs, depth) {
   }
   if (INTERPRETER.test(name)) for (const a of args) { const reason = /[[(]/.test(a) && codeListDenial(a, depth); if (reason) return reason; }
   if (DATA_PROGRAMS.has(name) && !(name === 'find' && args.some(a => /^-(?:exec|execdir|ok|okdir)$/.test(a)))) return null;
-  // A program that runs another one (env, sudo, timeout, xargs, uv run, npx, poetry run, arch...): the
-  // first shell or interpreter among its words is checked as the start of the command it runs, so
-  // env A=1 python3 -c '...' and uv run python3 -c '...' read as python3.
-  const runs = args.findIndex(a => SHELLS.has(base(a)) || INTERPRETER.test(base(a)));
-  if (runs >= 0) { const reason = commandDenial(args.slice(runs), subs, depth + 1); if (reason) return reason; }
+  // A program that runs another one (env, sudo, timeout, xargs, uv run, npx, poetry run, arch...): each
+  // shell or interpreter among its words is checked as the start of a command it may run, so
+  // env A=1 python3 -c '...' and uv run python3 -c '...' read as python3, and so does the python3 that
+  // bash -c 'exec "$@"' _ python3 -c '...' hands on. Each is checked once, with the words up to the next
+  // one, from the outermost call only, so the work stays linear in the length of the line.
+  if (scan) {
+    const starts = runStarts(args);
+    for (let s = 0; s < starts.length; s++) {
+      const reason = commandDenial(args.slice(starts[s], starts[s + 1] ?? args.length), subs, depth + 1, false);
+      if (reason) return reason;
+    }
+  }
   // Any other program (xargs, env, nohup, timeout, ssh, an unknown wrapper) that names a launcher
   // is treated as running it, and an argument that is itself a command line is read as one.
   for (const a of args) {
@@ -533,7 +547,7 @@ const LOOSE_SETTINGS = /(?:>|\btee\b|\bmv\b|\bcp\b|\bln\b|\brm\b|\bdd\b|\bsed\s+
 
 // Whether one simple command (its words) writes a settings file. `dirs` are the folders a relative path
 // may be taken from: the session's folder and every folder the line cds into.
-function writesSettings(words, home, dirs, depth) {
+function writesSettings(words, home, dirs, depth, scan = true) {
   let i = 0;
   while (i < words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]) || KEYWORDS.has(words[i]))) i++;
   if (i >= words.length) return false;
@@ -554,12 +568,14 @@ function writesSettings(words, home, dirs, depth) {
   if (WRAPPERS.has(name)) {
     let j = 0;
     while (j < rest.length && (rest[j].startsWith('-') || /^[A-Za-z_][A-Za-z0-9_]*=/.test(rest[j]) || /^\d+(?:\.\d+)?[smhd]?$/.test(rest[j]))) j++;
-    return j < rest.length && writesSettings(rest.slice(j), home, dirs, depth);
+    return j < rest.length && writesSettings(rest.slice(j), home, dirs, depth, scan);
   }
-  // Any other program that runs a shell or interpreter among its words (uv run python3 -c, npx node -e).
-  if (!DATA_PROGRAMS.has(name)) {
-    const runs = rest.findIndex(a => SHELLS.has(base(a)) || INTERPRETER.test(base(a)));
-    if (runs >= 0 && writesSettings(rest.slice(runs), home, dirs, depth)) return true;
+  // Any other program that runs a shell or interpreter among its words (uv run python3 -c, npx node -e):
+  // each is checked once, with the words up to the next one, as commandDenial does.
+  if (scan && !DATA_PROGRAMS.has(name)) {
+    const starts = runStarts(rest);
+    for (let s = 0; s < starts.length; s++)
+      if (writesSettings(rest.slice(starts[s], starts[s + 1] ?? rest.length), home, dirs, depth, false)) return true;
   }
   if (SHELLS.has(name) || name === 'eval') {
     const flag = rest.findIndex(a => /^-[a-z]*c[a-z]*$/.test(a));

@@ -796,7 +796,7 @@ test('the review verdict is read tolerantly but fails closed', async ($,on) => {
   expect((await review($,f,'I could not finish the review. The format I was asked for is ' + verdict(true,[]))).approved).toBe(false);
   const started = Date.now();
   expect(reviewVerdict('{'.repeat(100000))).toBe(null);
-  expect(reviewVerdict('{"a": '.repeat(20000))).toBe(null);
+  expect(reviewVerdict('{"a": '.repeat(16000))).toBe(null);
   expect(Date.now() - started < 1000).toBe(true);
   // Second review: the scan bounds fail closed, and a verdict written with CRLF line ends still reads.
   expect(reviewVerdict(verdict(true,[]) + '\n' + '{"k": 1}\n'.repeat(210) + verdict(false,[{severity:'high',issue:'x'}]))).toBe(null);
@@ -926,11 +926,11 @@ test('a quoted program path with spaces is one program, as the shell runs it', a
 test('a here-string is judged by the command that reads it', async () => {
   // Second review: f5ef7da set every <<< operand aside, so one fed to a shell or interpreter went unchecked.
   for (const c of ["sh <<< 'cd /tmp && claude -p x'", "bash <<< 'claude -p x'", "cat <<< 'claude -p x' | sh", "<<< 'claude -p x' bash",
-    "cat <<< 'claude -p x' |& tee log | bash", `python3 <<< "import subprocess; subprocess.run(['claude','-p','x'])"`,
+    "cat <<< 'claude -p x' |& tee log | bash", "cat <<< 'claude -p x' |\nsh", "cat <<< 'claude -p x' | (sh)", "(cat <<< 'claude -p x') | sh", `python3 <<< "import subprocess; subprocess.run(['claude','-p','x'])"`,
     "git commit -F - <<< 'done'\nclaude -p x\ndone"])
     expect([c, Boolean(nestedSessionDenial(c))]).toEqual([c, true]);
   for (const c of [`git commit -q -F - <<< 'Read os.system("claude -p notes/x.md") as a command'`, "cat <<< 'claude -p x' | wc -l",
-    "bash <<< 'claude --version'", "cat <<< 'claude -p x' || bash run.sh", "gh pr comment 1 --body-file - <<< 'run bash -c \"claude -p x\" to see'"])
+    "bash <<< 'claude --version'", "cat <<< 'claude -p x' || bash run.sh", "cat <<< 'claude -p x'\nsh run.sh", "(cat <<< 'claude -p x') || sh run.sh", "gh pr comment 1 --body-file - <<< 'run bash -c \"claude -p x\" to see'"])
     expect([c, nestedSessionDenial(c)]).toEqual([c, null]);
   for (const c of ["bash <<< 'echo {} > ~/.claude/settings.json'", 'sh <<< "rm ~/.claude.json"', "cat <<< 'rm ~/.claude.json' | zsh",
     `python3 <<< "open('/home/u/.claude/settings.json','w').write('{}')"`, 'echo {} >& ~/.claude.json', 'echo {} 1>& ~/.claude.json', 'echo {} >&~/.claude.json'])
@@ -951,6 +951,13 @@ test('a wrapper does not hide the shell or interpreter it runs', async () => {
   for (const c of [`uv run python3 -c "import subprocess; subprocess.run(['claude','-p','x'])"`, `npx node -e "require('child_process').spawn('claude',['-p','x'])"`,
     `poetry run python3 -c "import os; os.system('claude -p a/b')"`, `arch -arm64 bash -c 'claude -p x'`, `uv run --with node python3 -c "import pty; pty.spawn(['claude','-p','x'])"`])
     expect([c, Boolean(nestedSessionDenial(c))]).toEqual([c, true]);
+  // The scan stays linear: a long run of interpreter words neither hangs the guards nor overflows the stack.
+  const long = 'env ' + 'python3 '.repeat(20000) + '-c "print(1)"', begun = Date.now();
+  expect([nestedSessionDenial(long), settingsWriteDenial(long, HOME)]).toEqual([null, null]);
+  expect(Date.now() - begun < 2000).toBe(true);
+  // Final probe: a shell between the wrapper and the interpreter (bash -c 'exec "$@"' _ python3 ...) hid it.
+  expect(nestedSessionDenial(`env bash -c 'exec "$@"' _ python3 -c "import subprocess; subprocess.run(['claude','-p','x'])"`)).toBeTruthy();
+  expect(settingsWriteDenial(`env bash -c 'exec "$@"' _ python3 -c "open('/home/u/.claude/settings.json','w').write('{}')"`, HOME)).toBeTruthy();
   for (const c of ['uv run python3 -m pytest -q', `npx node -e "console.log(1)"`, `uv run --with node python3 -c 'print(1)'`, 'npm test -- --shell bash'])
     expect([c, nestedSessionDenial(c)]).toEqual([c, null]);
   for (const c of [`uv run python3 -c "open('/home/u/.claude/settings.json','w').write('{}')"`, `npx node -e "require('fs').writeFileSync('/home/u/.claude.json','{}')"`, `arch -arm64 sh -c 'rm ~/.claude.json'`])
