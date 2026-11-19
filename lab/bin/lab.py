@@ -762,6 +762,12 @@ def check_problem(argv: object) -> str | None:
         if words[0].startswith('-'):
             return f'env option {words[0]} is not supported; write env NAME=value ... program'
     program = Path(words[0]).name
+    if program == 'claude':
+        # The plugin test runner and validator start no session, so they may be checks; nothing else may.
+        rest = words[1:]
+        if len(rest) == 3 and rest[0] == 'plugin' and rest[1] in ('test', 'validate') and not rest[2].startswith('-'):
+            return None
+        return 'claude may run only as claude plugin test <folder> or claude plugin validate <folder>; anything else starts a session'
     if program not in CHECK_PROGRAMS:
         return (f'{program} is not an allowed check program; use one of ' + ', '.join(sorted(CHECK_PROGRAMS))
                 + ', optionally after env NAME=value')

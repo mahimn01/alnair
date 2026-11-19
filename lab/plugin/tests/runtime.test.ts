@@ -530,7 +530,7 @@ test('Bash commands are checked part by part, so a cd prefix or a pipe cannot hi
     'ln -sfn /repo/claude-mem/bin/claude-lab-clp ~/.local/bin/alnair','codex --version'])
     expect(nestedSessionDenial(c)).toBe(null);
   expect(nestedSessionDenial('claude plugin test /p -p x')).toBeTruthy();
-  expect(splitShell("cd 'a b' && ls > out.txt 2>&1 | wc -l")).toEqual({commands:[['cd','a b'],['ls'],['wc','-l']],subs:[],writes:['out.txt'],strings:[],pipeline:[0,2,2]});
+  expect(splitShell("cd 'a b' && ls > out.txt 2>&1 | wc -l")).toEqual({commands:[['cd','a b'],['ls'],['wc','-l']],subs:[],writes:['out.txt'],strings:[],pipeline:[0,2,2],procs:[]});
   expect(splitShell("echo 'unclosed")).toBe(null);
   // A here-document body is data unless a shell reads it.
   expect(nestedSessionDenial("cat > note.md <<'EOF'\nnever run claude -p here\nEOF")).toBe(null);
@@ -798,6 +798,9 @@ test('the review verdict is read tolerantly but fails closed', async ($,on) => {
   expect(reviewVerdict('{'.repeat(100000))).toBe(null);
   expect(reviewVerdict('{"a": '.repeat(16000))).toBe(null);
   expect(Date.now() - started < 1000).toBe(true);
+  // Third review: a disagreeing verdict nested in another object cancels the placed one.
+  expect(reviewVerdict(verdict(true,[]) + '\n{"review": {"approved": false, "findings": [{"severity": "high"}]}}')).toBe(null);
+  expect(reviewVerdict('{"approved": true, "findings": [], "notes": {"approved": true}}')).toEqual({approved:true, findings:[]});
   // Second review: the scan bounds fail closed, and a verdict written with CRLF line ends still reads.
   expect(reviewVerdict(verdict(true,[]) + '\n' + '{"k": 1}\n'.repeat(210) + verdict(false,[{severity:'high',issue:'x'}]))).toBe(null);
   expect(reviewVerdict(verdict(true,[]) + '\n' + 'x'.repeat(100001) + '\n' + verdict(false,[{severity:'high',issue:'x'}]))).toBe(null);
@@ -937,6 +940,43 @@ test('a here-string is judged by the command that reads it', async () => {
     expect([c, Boolean(settingsWriteDenial(c,HOME))]).toEqual([c, true]);
   for (const c of ["git commit -F - <<< 'rm ~/.claude.json is refused now'", 'cat ~/.claude.json 2>&1 | head', 'cat ~/.claude/settings.json >&2', 'jq . ~/.claude.json 2>&-'])
     expect([c, settingsWriteDenial(c,HOME)]).toEqual([c, null]);
+  // Third review: a group is one pipeline stage, a >(...) body reads what is written to it, and these readers
+  // run their input: source or . /dev/stdin, eval "$(cat)", xargs with a wrapper, csh and tcsh.
+  for (const c of ["{ cat <<< 'claude -p x'; } | sh", "(cat <<< 'claude -p x'; true) | sh", "if true; then cat <<< 'claude -p x'; fi | sh",
+    "(cat <<< 'claude -p x') 2>&1 | sh", "(cat <<< 'claude -p x') > /dev/stdout | sh", "cat <<< 'claude -p x' | (true; sh)",
+    "cat <<< 'claude -p x' | { read -r l; sh; }", "cat <<< 'claude -p x' | tee >(sh)", "while read -r l; do sh -c \"$l\"; done <<< 'claude -p x'",
+    "source /dev/stdin <<< 'claude -p x'", ". /dev/stdin <<< 'claude -p x'", `eval "$(cat)" <<< 'claude -p x'`, "xargs env <<< 'claude -p x'",
+    "xargs nohup <<< 'claude -p x'", "cat <<< 'claude -p x' | csh", "cat <<< 'claude -p x' | tcsh"])
+    expect([c, Boolean(nestedSessionDenial(c))]).toEqual([c, true]);
+  expect(settingsWriteDenial("{ cat <<< 'rm ~/.claude.json'; } | sh", HOME)).toBeTruthy();
+  for (const c of ["{ echo a; echo b; } | sort", "if [ -f x ]; then cat x; fi | wc -l", `for f in *.md; do wc -l "$f"; done`,
+    "(cd sub && git commit -F - <<< 'claude -p is documented') && python3 -m pytest -q", "jq . <<< '{\"a\": 1}'"])
+    expect([c, nestedSessionDenial(c)]).toEqual([c, null]);
+  // Each pipeline's reader is worked out once, so many here-strings or a long pipeline stay linear.
+  const begun = Date.now();
+  for (const c of ['cat <<< a |\n'.repeat(8000) + 'sh', 'cat <<< a | '.repeat(8000) + 'cat', 'true <<< a; '.repeat(8000)]) nestedSessionDenial(c);
+  settingsWriteDenial('cat <<< a |\n'.repeat(8000) + 'sh', HOME);
+  expect(Date.now() - begun < 2000).toBe(true);
+});
+
+test('a shell -c hands its $0 and $@ words on, and they are checked as a command', async () => {
+  // Third review: the -c text alone was judged, so bash -c '"$@"' _ claude -p x ran claude in both guards.
+  for (const c of [`bash -c '"$@"' _ claude -p x`, `bash -lc '"$@"' _ claude -p x`, `bash -c '$0 "$@"' claude -p x`, `sh -c '"$@"' _ alnair run`,
+    `zsh -c 'exec "$@"' z codex exec hi`, `bash -c 'exec "$@"' _ env claude -p x`, `sh -c 'exec "$@"' sh python3 -c "import subprocess; subprocess.run(['claude','-p','x'])"`,
+    `bash -c 'exec "$@"' _ python3 -c "import subprocess; subprocess.run(['claude','-p','x'])"`])
+    expect([c, Boolean(nestedSessionDenial(c))]).toEqual([c, true]);
+  for (const c of [`bash -c '"$@"' _ rm ~/.claude.json`, `env bash -c '"$@"' _ rm ~/.claude.json`, `sh -c 'exec "$@"' _ tee ~/.claude.json`,
+    `bash -c 'cp "$1" "$2"' _ /tmp/x ~/.claude/settings.json`, `bash -c '"$@"' _ rm -rf ~/.claude`])
+    expect([c, Boolean(settingsWriteDenial(c,HOME))]).toEqual([c, true]);
+  for (const c of [`bash -c 'echo hi'`, `bash -c 'for f in "$@"; do wc -l "$f"; done' _ a.txt b.txt`, `docker run img bash -c 'pytest -q'`])
+    expect([c, nestedSessionDenial(c)]).toEqual([c, null]);
+  for (const c of [`bash -c 'echo hi' _ a`, `sh -c 'ls "$1"' _ ~/Documents`])
+    expect([c, settingsWriteDenial(c,HOME)]).toEqual([c, null]);
+  // A chain of -c shells stays cheap.
+  const begun = Date.now();
+  expect(settingsWriteDenial("bash -c 'x' _ ".repeat(200) + 'rm ~/.claude.json', HOME)).toBeTruthy();
+  expect(nestedSessionDenial("bash -c 'x' _ ".repeat(200) + 'claude -p x')).toBeTruthy();
+  expect(Date.now() - begun < 1000).toBe(true);
 });
 
 test('a wrapper does not hide the shell or interpreter it runs', async () => {
@@ -949,7 +989,7 @@ test('a wrapper does not hide the shell or interpreter it runs', async () => {
     expect([c, nestedSessionDenial(c)]).toEqual([c, null]);
   // Second review: a launcher on the check allow-list (uv, npx) hid the interpreter it runs, in both guards.
   for (const c of [`uv run python3 -c "import subprocess; subprocess.run(['claude','-p','x'])"`, `npx node -e "require('child_process').spawn('claude',['-p','x'])"`,
-    `poetry run python3 -c "import os; os.system('claude -p a/b')"`, `arch -arm64 bash -c 'claude -p x'`, `uv run --with node python3 -c "import pty; pty.spawn(['claude','-p','x'])"`])
+    `poetry run python3 -c "import subprocess; subprocess.run(['claude','-p','x'])"`, `arch -arm64 python3 -c "import pty; pty.spawn(['claude','-p','x'])"`, `uv run --with node python3 -c "import pty; pty.spawn(['claude','-p','x'])"`])
     expect([c, Boolean(nestedSessionDenial(c))]).toEqual([c, true]);
   // The scan stays linear: a long run of interpreter words neither hangs the guards nor overflows the stack.
   const long = 'env ' + 'python3 '.repeat(20000) + '-c "print(1)"', begun = Date.now();

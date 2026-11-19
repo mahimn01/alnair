@@ -83,6 +83,17 @@ class VerifyChecksTest(unittest.TestCase):
                 self.assertEqual(self.evidence()["rejected"], report["rejected"])
                 self.assertIn(reason, (self.run_dir / "verification.md").read_text())
 
+    def test_the_plugin_test_runner_may_be_a_check_but_no_other_claude_command(self):
+        """Third review: the guard tests could not be recorded evidence, because claude was refused outright."""
+        for argv in (["claude", "plugin", "test", "lab/plugin"], ["/Users/u/.local/bin/claude", "plugin", "validate", "lab/plugin"],
+                     ["env", "A=1", "claude", "plugin", "test", "lab/plugin"]):
+            with self.subTest(argv=argv):
+                self.assertIsNone(lab.check_problem(argv))
+        for argv in (["claude", "-p", "hi"], ["claude", "plugin", "install", "x"], ["claude", "plugin", "test", "--print", "x"],
+                     ["claude", "plugin", "test", "lab/plugin", "-p"], ["claude"], ["claude", "plugin", "test"]):
+            with self.subTest(argv=argv):
+                self.assertIn("claude may run only as claude plugin test", lab.check_problem(argv))
+
     def test_a_refused_check_replaces_older_passing_evidence(self):
         self.checks(["python3", "-c", "0"])
         self.assertTrue(lab.verify(self.run_dir)["passed"])

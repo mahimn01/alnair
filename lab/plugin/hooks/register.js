@@ -91,7 +91,7 @@ export function reviewVerdict(answer) {
   const raw = String(answer ?? '');
   // An answer too long to read whole has no verdict: one past the cut could disagree.
   if (raw.length > 100000) return null;
-  const text = raw.replace(/\r\n?/g, '\n'), verdicts = [];
+  const text = raw.replace(/\r\n?/g, '\n'), verdicts = [], nested = [];
   let read = 0, tried = 0;
   // An object starts with { and a JSON key, so prose and code braces cost nothing. Past 200 objects the
   // answer has no verdict (fails closed), for the same reason.
@@ -111,12 +111,27 @@ export function reviewVerdict(answer) {
     let value;
     try { value = JSON.parse(text.slice(i, end)); } catch { continue; }
     read = end;
-    if (value && typeof value === 'object' && !Array.isArray(value) && 'approved' in value) verdicts.push({value, placed:verdictPlaced(text, i, end)});
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+    if ('approved' in value) verdicts.push({value, placed:verdictPlaced(text, i, end)});
+    nested.push(...innerApprovals(value));
   }
-  if (!verdicts.some(v => v.placed) || verdicts.some(v => v.value.approved !== verdicts[0].value.approved)) return null;
+  // A verdict nested in another object is no verdict, but it must still agree with the placed one.
+  if (!verdicts.some(v => v.placed) || verdicts.some(v => v.value.approved !== verdicts[0].value.approved)
+    || nested.some(a => a !== verdicts[0].value.approved)) return null;
   const findings = verdicts.every(v => Array.isArray(v.value.findings))
     ? [...new Map(verdicts.flatMap(v => v.value.findings).map(f => [JSON.stringify(f), f])).values()] : null;
   return {approved:verdicts[0].value.approved, findings};
+}
+// The "approved" values of objects nested anywhere below `value` (not `value` itself), read without recursion.
+function innerApprovals(value) {
+  const found = [], stack = Object.values(value);
+  while (stack.length) {
+    const v = stack.pop();
+    if (!v || typeof v !== 'object') continue;
+    if (!Array.isArray(v) && 'approved' in v) found.push(v.approved);
+    stack.push(...Object.values(v));
+  }
+  return found;
 }
 function verdictPlaced(text, start, end) {
   const before = text.slice(0, start), after = text.slice(end);
@@ -177,7 +192,7 @@ const DATA_PROGRAMS = new Set(['grep','egrep','fgrep','rg','ag','cat','head','ta
   'readlink','realpath','file','stat','basename','dirname','diff','git','jq','sort','uniq','cut','tr','cd','pushd','test','[',
   'mkdir','cp','mv','rm','ln','chmod','touch','du','less','more','find']);
 const KEYWORDS = new Set(['!','{','}','if','then','else','elif','fi','do','done','while','until','time']);
-const SHELLS = new Set(['sh','bash','zsh','dash','ksh','fish']);
+const SHELLS = new Set(['sh','bash','zsh','dash','ksh','fish','csh','tcsh']);
 const NESTED_SESSION = 'Use the lab specialists (the Agent tool) instead of starting another Claude, Alnair or Codex session: a nested session bypasses the lab routing, worker budget and handoffs. Version, help and `claude plugin validate|test` are allowed.';
 // Whole-text check for commands the splitter cannot read (an unbalanced quote): the pre-Code-Mode
 // rule, widened from claude/claude-rotate to every launcher and to `codex exec`.
@@ -189,8 +204,8 @@ const base = word => word.split('/').pop();
 // backticks and <(...) is returned separately for the same check; redirection targets are returned
 // as `writes`. Returns null for text it cannot read with certainty (an unclosed quote or paren).
 export function splitShell(text) {
-  const commands = [], subs = [], writes = [], strings = [], pipeline = [];
-  let words = [], word = '', inWord = false, pendingWrite = false, pendingInput = false, pendingString = false, owned = [], line = 0, i = 0;
+  const commands = [], subs = [], writes = [], strings = [], pipeline = [], procs = [];
+  let words = [], word = '', inWord = false, pendingWrite = false, pendingInput = false, pendingString = false, owned = [], ownedProcs = [], line = 0, i = 0;
   // The word after > or >> is a file written. The word after <<< is a here-string, kept with the command
   // that reads it (strings). The word after < or << (a file read, a here-document's delimiter) is set aside.
   const endWord = () => {
@@ -200,14 +215,25 @@ export function splitShell(text) {
     }
     word = ''; inWord = false;
   };
-  // pipeline[k] numbers the pipeline of commands[k]; `piped` means the next command joins this one's,
-  // across a newline or an opening ( too (cat <<< x |<newline>sh, cat <<< x | (sh)).
-  let joined = false;
+  // pipeline[k] numbers the pipeline of commands[k]. A pipe joins the next command to this one's pipeline,
+  // across a newline too. A group, ( ... ), { ...; }, if ... fi or while/until/for/select ... done, is one
+  // stage: every command inside it, at any depth, shares the group's number, so (cat <<< x; true) | sh and
+  // cat <<< x | { read l; sh; } read as feeding the shell. procs are the >(...) bodies a command writes to.
+  let joined = false, depth = 0, group = 0;
+  const open = () => { if (depth++ === 0) group = line; };
+  const close = () => { if (depth > 0 && --depth === 0) { line = group; joined = false; } };
   const endCommand = (piped = false) => {
     endWord(); pendingWrite = pendingInput = pendingString = false;
     const ended = words.length > 0;
-    if (ended) { commands.push(words); pipeline.push(line); for (const t of owned) strings.push({text:t, command:commands.length - 1}); }
-    words = []; owned = [];
+    if (ended) {
+      if (GROUP_OPENS.has(words[0])) open();
+      commands.push(words); pipeline.push(depth > 0 ? group : line);
+      for (const t of owned) strings.push({text:t, command:commands.length - 1});
+      for (const t of ownedProcs) procs.push({text:t, command:commands.length - 1});
+      if (GROUP_CLOSES.has(words[0])) close();
+    }
+    words = []; owned = []; ownedProcs = [];
+    if (depth > 0) return;
     if (piped) joined = true;
     else if (ended || !joined) { line++; joined = false; }
   };
@@ -236,6 +262,7 @@ export function splitShell(text) {
     const end = closeParen(at + 1);
     if (end < 0) return -1;
     subs.push(text.slice(at + 2, end - 1));
+    if (text[at] === '>') ownedProcs.push(text.slice(at + 2, end - 1));
     return end;
   };
   const opensSub = at => text[at] === '`' || ('$<>'.includes(text[at]) && text[at + 1] === '(');
@@ -273,9 +300,9 @@ export function splitShell(text) {
     if (c === '\n') { endCommand(); i++; continue; }
     if (/\s/.test(c)) { endWord(); i++; continue; }
     if (';&|()'.includes(c)) {
-      // A subshell that pipes on ((cat <<< x) | sh) joins the pipeline after it.
-      const piped = c === '|' ? text[i + 1] !== '|' && text[i - 1] !== '|' : c === ')' && /^[ \t]*\|(?!\|)/.test(text.slice(i + 1));
+      const piped = c === '|' && text[i + 1] !== '|' && text[i - 1] !== '|';
       endCommand(piped);
+      if (c === '(') open(); else if (c === ')') close();
       i += piped && text[i + 1] === '&' ? 2 : 1;   // |& pipes stderr too
       continue;
     }
@@ -299,7 +326,7 @@ export function splitShell(text) {
     word += c; inWord = true; i++;
   }
   endCommand();
-  return {commands, subs, writes, strings, pipeline};
+  return {commands, subs, writes, strings, pipeline, procs};
 }
 
 // The text of an ANSI-C quoted word ($'...') whose body starts at `at`, decoded as bash does, and the index
@@ -325,12 +352,15 @@ function ansiC(text, at) {
 
 // Where each shell or interpreter word stands among a command's arguments.
 const runStarts = args => args.flatMap((a, k) => SHELLS.has(base(a)) || INTERPRETER.test(base(a)) ? [k] : []);
+// First words that open and close a group of commands (case ... esac is left out: its patterns end in ).
+const GROUP_OPENS = new Set(['{','if','while','until','for','select']), GROUP_CLOSES = new Set(['}','fi','done']);
 // Why one simple command (its words) must not run, or null.
 function commandDenial(words, subs, depth, scan = true) {
   let i = 0;
   while (i < words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]) || KEYWORDS.has(words[i]))) i++;
   if (i >= words.length) return null;
-  const program = words[i], name = base(program), args = words.slice(i + 1);
+  const program = words[i], name = base(program);
+  let args = words.slice(i + 1);
   // A program name built at run time from a substitution that names a launcher: $(which claude) -p.
   if (program.includes('\0') && subs.some(s => [...s.matchAll(/[^\s;&|()'"`]+/g)].some(m => LAUNCHERS.has(base(m[0]))))) return NESTED_SESSION;
   // A word holding a whole command line ('claude -p a/b' in interpreter code that hands it to a shell) is
@@ -346,7 +376,13 @@ function commandDenial(words, subs, depth, scan = true) {
   if (name === 'eval') return nestedSessionDenial(args.join(' '), depth + 1);
   if (SHELLS.has(name)) {
     const flag = args.findIndex(a => /^-[a-z]*c[a-z]*$/.test(a));
-    if (flag >= 0 && args[flag + 1] !== undefined) return nestedSessionDenial(args[flag + 1], depth + 1);
+    if (flag >= 0 && args[flag + 1] !== undefined) {
+      const reason = nestedSessionDenial(args[flag + 1], depth + 1);
+      if (reason) return reason;
+      // The words after the -c text become $0 and $@, which it may run (bash -c '"$@"' _ claude -p x,
+      // bash -c '$0 "$@"' claude -p x): they are checked below as the arguments of a wrapper.
+      args = args.slice(flag + 2);
+    }
   }
   if (INTERPRETER.test(name)) for (const a of args) { const reason = /[[(]/.test(a) && codeListDenial(a, depth); if (reason) return reason; }
   if (DATA_PROGRAMS.has(name) && !(name === 'find' && args.some(a => /^-(?:exec|execdir|ok|okdir)$/.test(a)))) return null;
@@ -434,19 +470,29 @@ const TEXT_READERS = new Set(['cat','tee','git','gh','pbcopy','mail','jq','yq','
 // How one pipeline stage reads its input: 'data' when its program is a known text reader; otherwise
 // any shell or interpreter word in it decides (sudo -u root bash, uv run python -, ssh host bash -s).
 function readerOf(stage) {
-  if (TEXT_READERS.has(programOf(stage))) return 'data';
+  const program = programOf(stage);
+  if (TEXT_READERS.has(program)) return 'data';
   const words = String(stage).trim().split(/\s+/).map(w => base(w.replace(/^['"]+|['"]+$/g, '')));
+  // source /dev/stdin, . /dev/stdin and eval "$(cat)" run their input; so does xargs when the command it
+  // builds from its input is a shell or a wrapper (xargs env, xargs sudo).
+  if (['source','.','eval'].includes(program)) return 'shell';
+  const x = words.indexOf('xargs');
+  if (x >= 0 && words.slice(x + 1).some(w => SHELLS.has(w) || WRAPPERS.has(w))) return 'shell';
   return words.some(w => SHELLS.has(w)) ? 'shell' : words.some(w => INTERPRETER.test(w)) ? 'code' : 'data';
 }
 // Here-strings (cmd <<< 'text') are judged the same way, by the command that owns the <<< and every
 // command it pipes into: their text is 'shell' (bash <<< '...'), 'code' (python3 <<< '...') or 'data'
 // (git commit -F - <<< 'message').
+// Every stage of the pipeline counts as a reader (a group is one stage), and the reader of each pipeline is
+// worked out once, so the cost stays linear in the length of the line.
+const READER_RANK = {data:0, code:1, shell:2};
 function hereStrings(lexed) {
-  return lexed.strings.map(({text, command}) => {
-    const readers = lexed.commands.filter((_, k) => k >= command && lexed.pipeline[k] === lexed.pipeline[command])
-      .map(words => readerOf(words.map(w => /\s/.test(w) ? base(w).replace(/\s+/g, '_') : w).join(' ')));
-    return {text, reader:readers.includes('shell') ? 'shell' : readers.includes('code') ? 'code' : 'data'};
-  });
+  if (!lexed.strings.length) return [];
+  const best = new Map();
+  const note = (id, reader) => { if (READER_RANK[reader] > (READER_RANK[best.get(id)] ?? -1)) best.set(id, reader); };
+  lexed.commands.forEach((words, k) => note(lexed.pipeline[k], readerOf(words.map(w => /\s/.test(w) ? base(w).replace(/\s+/g, '_') : w).join(' '))));
+  for (const p of lexed.procs) note(lexed.pipeline[p.command], readerOf(p.text));
+  return lexed.strings.map(({text, command}) => ({text, reader:best.get(lexed.pipeline[command]) ?? 'data'}));
 }
 export function withoutHeredocBodies(text, bodies = []) {
   return String(text).replace(HEREDOC, (match, quote, delimiter, rest, at, whole) => {
@@ -580,7 +626,15 @@ function writesSettings(words, home, dirs, depth, scan = true) {
   if (SHELLS.has(name) || name === 'eval') {
     const flag = rest.findIndex(a => /^-[a-z]*c[a-z]*$/.test(a));
     const code = name === 'eval' ? rest.join(' ') : (flag >= 0 ? rest[flag + 1] : undefined);
-    return code !== undefined && shellWritesSettings(code, home, dirs, depth + 1);
+    if (code === undefined) return false;
+    if (shellWritesSettings(code, home, dirs, depth + 1)) return true;
+    // The words after the -c text become $0 and $@, which it may run ("$@", $0 "$@") or hand on as files
+    // (cp "$1" "$2"): a settings file among them, or a command they spell that writes one, is a write.
+    // Nested -c chains stop at depth 4, which keeps the two readings below from multiplying.
+    const positional = name === 'eval' ? [] : rest.slice(flag + 2);
+    if (positional.some(named)) return true;
+    return positional.length > 0 && depth < 4
+      && (writesSettings(positional, home, dirs, depth + 1) || writesSettings(positional.slice(1), home, dirs, depth + 1));
   }
   if (name === 'dd') return rest.some(a => a.startsWith('of=') && hit(a.slice(3)));
   if (INTERPRETER.test(name)) {
