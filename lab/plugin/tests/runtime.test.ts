@@ -530,7 +530,7 @@ test('Bash commands are checked part by part, so a cd prefix or a pipe cannot hi
     'ln -sfn /repo/claude-mem/bin/claude-lab-clp ~/.local/bin/alnair','codex --version'])
     expect(nestedSessionDenial(c)).toBe(null);
   expect(nestedSessionDenial('claude plugin test /p -p x')).toBeTruthy();
-  expect(splitShell("cd 'a b' && ls > out.txt 2>&1 | wc -l")).toEqual({commands:[['cd','a b'],['ls'],['wc','-l']],subs:[],writes:['out.txt']});
+  expect(splitShell("cd 'a b' && ls > out.txt 2>&1 | wc -l")).toEqual({commands:[['cd','a b'],['ls'],['wc','-l']],subs:[],writes:['out.txt'],strings:[],pipeline:[0,2,2]});
   expect(splitShell("echo 'unclosed")).toBe(null);
   // A here-document body is data unless a shell reads it.
   expect(nestedSessionDenial("cat > note.md <<'EOF'\nnever run claude -p here\nEOF")).toBe(null);
@@ -798,6 +798,10 @@ test('the review verdict is read tolerantly but fails closed', async ($,on) => {
   expect(reviewVerdict('{'.repeat(100000))).toBe(null);
   expect(reviewVerdict('{"a": '.repeat(20000))).toBe(null);
   expect(Date.now() - started < 1000).toBe(true);
+  // Second review: the scan bounds fail closed, and a verdict written with CRLF line ends still reads.
+  expect(reviewVerdict(verdict(true,[]) + '\n' + '{"k": 1}\n'.repeat(210) + verdict(false,[{severity:'high',issue:'x'}]))).toBe(null);
+  expect(reviewVerdict(verdict(true,[]) + '\n' + 'x'.repeat(100001) + '\n' + verdict(false,[{severity:'high',issue:'x'}]))).toBe(null);
+  expect((await review($,f,'Checked.\r\n' + verdict(true,[{severity:'low',issue:'nit'}]) + '\r\n')).approved).toBe(true);
   // The source-hash, abort and answer checks still apply to an approval with notes.
   expect((await review($,f,ok,{isAborted:true})).approved).toBe(false);
   expect((await review($,f,ok,{reason:'max_turns'})).approved).toBe(false);
@@ -919,6 +923,22 @@ test('a quoted program path with spaces is one program, as the shell runs it', a
     expect([c, Boolean(nestedSessionDenial(c))]).toEqual([c, true]);
 });
 
+test('a here-string is judged by the command that reads it', async () => {
+  // Second review: f5ef7da set every <<< operand aside, so one fed to a shell or interpreter went unchecked.
+  for (const c of ["sh <<< 'cd /tmp && claude -p x'", "bash <<< 'claude -p x'", "cat <<< 'claude -p x' | sh", "<<< 'claude -p x' bash",
+    "cat <<< 'claude -p x' |& tee log | bash", `python3 <<< "import subprocess; subprocess.run(['claude','-p','x'])"`,
+    "git commit -F - <<< 'done'\nclaude -p x\ndone"])
+    expect([c, Boolean(nestedSessionDenial(c))]).toEqual([c, true]);
+  for (const c of [`git commit -q -F - <<< 'Read os.system("claude -p notes/x.md") as a command'`, "cat <<< 'claude -p x' | wc -l",
+    "bash <<< 'claude --version'", "cat <<< 'claude -p x' || bash run.sh", "gh pr comment 1 --body-file - <<< 'run bash -c \"claude -p x\" to see'"])
+    expect([c, nestedSessionDenial(c)]).toEqual([c, null]);
+  for (const c of ["bash <<< 'echo {} > ~/.claude/settings.json'", 'sh <<< "rm ~/.claude.json"', "cat <<< 'rm ~/.claude.json' | zsh",
+    `python3 <<< "open('/home/u/.claude/settings.json','w').write('{}')"`, 'echo {} >& ~/.claude.json', 'echo {} 1>& ~/.claude.json', 'echo {} >&~/.claude.json'])
+    expect([c, Boolean(settingsWriteDenial(c,HOME))]).toEqual([c, true]);
+  for (const c of ["git commit -F - <<< 'rm ~/.claude.json is refused now'", 'cat ~/.claude.json 2>&1 | head', 'cat ~/.claude/settings.json >&2', 'jq . ~/.claude.json 2>&-'])
+    expect([c, settingsWriteDenial(c,HOME)]).toEqual([c, null]);
+});
+
 test('a wrapper does not hide the shell or interpreter it runs', async () => {
   for (const c of ["env A=1 python3 -c \"import subprocess; subprocess.run(['claude','-p','x'])\"", "sudo -u root python3 -c \"import pty; pty.spawn(['claude','-p','x'])\"",
     "timeout 5 node -e \"require('child_process').spawn('alnair', ['-p', 'x'])\"", "nohup env PYTHONPATH=. python3 -c \"import os; os.execlp('claude', 'claude', '-p', 'x')\"",
@@ -927,6 +947,16 @@ test('a wrapper does not hide the shell or interpreter it runs', async () => {
   for (const c of ["env PYTHONDONTWRITEBYTECODE=1 python3 code/check_limits.py", "sudo -u root python3 -c \"print(sorted(['claude', 'codex']))\"",
     "timeout 60 python3 -m pytest -q", "env A=1 node -e \"console.log(['claude'].length)\""])
     expect([c, nestedSessionDenial(c)]).toEqual([c, null]);
+  // Second review: a launcher on the check allow-list (uv, npx) hid the interpreter it runs, in both guards.
+  for (const c of [`uv run python3 -c "import subprocess; subprocess.run(['claude','-p','x'])"`, `npx node -e "require('child_process').spawn('claude',['-p','x'])"`,
+    `poetry run python3 -c "import os; os.system('claude -p a/b')"`, `arch -arm64 bash -c 'claude -p x'`, `uv run --with node python3 -c "import pty; pty.spawn(['claude','-p','x'])"`])
+    expect([c, Boolean(nestedSessionDenial(c))]).toEqual([c, true]);
+  for (const c of ['uv run python3 -m pytest -q', `npx node -e "console.log(1)"`, `uv run --with node python3 -c 'print(1)'`, 'npm test -- --shell bash'])
+    expect([c, nestedSessionDenial(c)]).toEqual([c, null]);
+  for (const c of [`uv run python3 -c "open('/home/u/.claude/settings.json','w').write('{}')"`, `npx node -e "require('fs').writeFileSync('/home/u/.claude.json','{}')"`, `arch -arm64 sh -c 'rm ~/.claude.json'`])
+    expect([c, Boolean(settingsWriteDenial(c,HOME))]).toEqual([c, true]);
+  for (const c of [`uv run python3 -c "print(open('/home/u/.claude.json').read())"`, `echo python3 -c "open('/home/u/.claude.json','w')"`])
+    expect([c, settingsWriteDenial(c,HOME)]).toEqual([c, null]);
 });
 
 test('the settings guard sees through quotes and escapes, and leaves paths with spaces alone', async () => {

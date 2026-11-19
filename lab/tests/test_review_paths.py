@@ -135,3 +135,14 @@ def test_a_symlink_keeps_its_own_name(ab):
     (project / "LINK.md").symlink_to(project / "notes/Plan.md")
     out = m.resolve_prompt("LINK.md is a symlink to notes/Plan.md", project, run)
     assert out == f"{project / 'LINK.md'} is a symlink to {project / 'notes/Plan.md'}"
+
+
+def test_a_path_through_a_linked_folder_names_the_file_that_was_found(ab, tmp_path):
+    """Second review: .. was folded by text, so linkdir/../x.md was printed as a file that does not exist."""
+    project, run = ab
+    m = load()
+    (tmp_path / "other/sub").mkdir(parents=True)
+    (tmp_path / "other/x.md").write_text("x\n")
+    (project / "linkdir").symlink_to(tmp_path / "other/sub")
+    out = m.resolve_prompt("Read linkdir/../x.md", project, run)
+    assert out == f"Read {(tmp_path / 'other/x.md').resolve()}"

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 import unicodedata
@@ -44,7 +43,7 @@ def locate(name: str, roots: list[Path]) -> list[Path]:
                 if candidate.is_file():
                     # One file reached by two spellings (NFC and NFD on macOS) is still one file.
                     stat = candidate.stat()
-                    found.setdefault((stat.st_dev, stat.st_ino), Path(os.path.abspath(candidate)))   # a link keeps its own name
+                    found.setdefault((stat.st_dev, stat.st_ino), candidate.parent.resolve() / candidate.name)   # a link keeps its own name
         except (OSError, RuntimeError, ValueError):
             continue   # an unknown ~user, a name too long or with a NUL byte is simply not a file
     return sorted(found.values(), key=str)

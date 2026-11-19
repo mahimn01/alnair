@@ -88,13 +88,17 @@ export function evidenceComplete(state, checks) {
 // start or end of the answer (or as all of it), or in a ```json block that opens or closes the answer.
 // One only quoted inside a sentence or in the middle of prose is no verdict either.
 export function reviewVerdict(answer) {
-  const text = String(answer ?? '').slice(0, 100000), verdicts = [];
+  const raw = String(answer ?? '');
+  // An answer too long to read whole has no verdict: one past the cut could disagree.
+  if (raw.length > 100000) return null;
+  const text = raw.replace(/\r\n?/g, '\n'), verdicts = [];
   let read = 0, tried = 0;
-  // An object starts with { and a JSON key, so prose and code braces cost nothing; at most 200 are tried.
+  // An object starts with { and a JSON key, so prose and code braces cost nothing. Past 200 objects the
+  // answer has no verdict (fails closed), for the same reason.
   for (const start of text.matchAll(/\{(?=\s*")/g)) {
     const i = start.index;
     if (i < read) continue;   // inside an object already read
-    if (++tried > 200) break;
+    if (++tried > 200) return null;
     let depth = 0, inString = false, end = -1;
     for (let j = i; j < text.length && end < 0; j++) {
       const c = text[j];
@@ -185,14 +189,24 @@ const base = word => word.split('/').pop();
 // backticks and <(...) is returned separately for the same check; redirection targets are returned
 // as `writes`. Returns null for text it cannot read with certainty (an unclosed quote or paren).
 export function splitShell(text) {
-  const commands = [], subs = [], writes = [];
-  let words = [], word = '', inWord = false, pendingWrite = false, pendingInput = false, i = 0;
-  // The word after > or >> is a file written; the word after <, << or <<< is input, not a command word.
+  const commands = [], subs = [], writes = [], strings = [], pipeline = [];
+  let words = [], word = '', inWord = false, pendingWrite = false, pendingInput = false, pendingString = false, owned = [], line = 0, i = 0;
+  // The word after > or >> is a file written. The word after <<< is a here-string, kept with the command
+  // that reads it (strings). The word after < or << (a file read, a here-document's delimiter) is set aside.
   const endWord = () => {
-    if (inWord) { if (pendingWrite) writes.push(word); else if (!pendingInput) words.push(word); pendingWrite = pendingInput = false; }
+    if (inWord) {
+      if (pendingWrite) writes.push(word); else if (pendingString) owned.push(word); else if (!pendingInput) words.push(word);
+      pendingWrite = pendingInput = pendingString = false;
+    }
     word = ''; inWord = false;
   };
-  const endCommand = () => { endWord(); pendingWrite = pendingInput = false; if (words.length) commands.push(words); words = []; };
+  // pipeline[k] numbers the pipeline of commands[k]; `piped` means the next command joins this one's.
+  const endCommand = (piped = false) => {
+    endWord(); pendingWrite = pendingInput = pendingString = false;
+    if (words.length) { commands.push(words); pipeline.push(line); for (const t of owned) strings.push({text:t, command:commands.length - 1}); }
+    words = []; owned = [];
+    if (!piped) line++;
+  };
   // Index just past the ) that closes the ( at `open`, skipping quoted text; -1 when unclosed.
   const closeParen = open => {
     let depth = 0;
@@ -254,23 +268,33 @@ export function splitShell(text) {
     if (c === '#' && !inWord) { const j = text.indexOf('\n', i); i = j < 0 ? text.length : j; continue; }
     if (c === '\n') { endCommand(); i++; continue; }
     if (/\s/.test(c)) { endWord(); i++; continue; }
-    if (';&|()'.includes(c)) { endCommand(); i++; continue; }
+    if (';&|()'.includes(c)) {
+      const piped = c === '|' && text[i + 1] !== '|' && text[i - 1] !== '|';
+      endCommand(piped);
+      i += piped && text[i + 1] === '&' ? 2 : 1;   // |& pipes stderr too
+      continue;
+    }
     if (c === '<' || c === '>') {
       // A redirection: `>`/`>>` targets are files written; `<`, `<<` and `<<<` take no command word.
       // A number written against it (the 2 of 2>&1) names a file descriptor, not an argument.
       if (inWord && /^\d+$/.test(word) && /\d/.test(text[i - 1])) { word = ''; inWord = false; }
       endWord();
-      const op = /^(?:\d*>>?\|?|<<-?|<<<|<>|<)/.exec(text.slice(i))?.[0] || c;
+      const op = /^(?:\d*>>?\|?|<<<|<<-?|<>|<)/.exec(text.slice(i))?.[0] || c;
       i += op.length;
-      if (text[i] === '&') { i++; while (/[\d-]/.test(text[i] || '')) i++; continue; }  // 2>&1
-      // The operand is read as one shell word (quotes, escapes and substitutions included), then set aside.
-      pendingWrite = op.includes('>'); pendingInput = !pendingWrite;
+      if (text[i] === '&') {
+        // 2>&1, >&2 and >&- duplicate a descriptor; >& file (no number) writes the file, as &> does.
+        const fd = /^(?:\d+|-)(?=$|[\s;&|()<>])/.exec(text.slice(i + 1));
+        i += 1 + (fd ? fd[0].length : 0);
+        if (fd) continue;
+      }
+      // The operand is read as one shell word (quotes, escapes and substitutions included).
+      pendingWrite = op.includes('>'); pendingString = op === '<<<'; pendingInput = !pendingWrite && !pendingString;
       continue;
     }
     word += c; inWord = true; i++;
   }
   endCommand();
-  return {commands, subs, writes};
+  return {commands, subs, writes, strings, pipeline};
 }
 
 // The text of an ANSI-C quoted word ($'...') whose body starts at `at`, decoded as bash does, and the index
@@ -319,13 +343,11 @@ function commandDenial(words, subs, depth) {
   }
   if (INTERPRETER.test(name)) for (const a of args) { const reason = /[[(]/.test(a) && codeListDenial(a, depth); if (reason) return reason; }
   if (DATA_PROGRAMS.has(name) && !(name === 'find' && args.some(a => /^-(?:exec|execdir|ok|okdir)$/.test(a)))) return null;
-  // A wrapper (env, sudo, timeout, xargs...) runs the command after its options: a shell or interpreter
-  // among its words is checked as the start of that command, so env A=1 python3 -c '...' reads as python3.
-  if (WRAPPERS.has(name)) for (let j = 0; j < args.length; j++) {
-    if (!SHELLS.has(base(args[j])) && !INTERPRETER.test(base(args[j]))) continue;
-    const reason = commandDenial(args.slice(j), subs, depth + 1);
-    if (reason) return reason;
-  }
+  // A program that runs another one (env, sudo, timeout, xargs, uv run, npx, poetry run, arch...): the
+  // first shell or interpreter among its words is checked as the start of the command it runs, so
+  // env A=1 python3 -c '...' and uv run python3 -c '...' read as python3.
+  const runs = args.findIndex(a => SHELLS.has(base(a)) || INTERPRETER.test(base(a)));
+  if (runs >= 0) { const reason = commandDenial(args.slice(runs), subs, depth + 1); if (reason) return reason; }
   // Any other program (xargs, env, nohup, timeout, ssh, an unknown wrapper) that names a launcher
   // is treated as running it, and an argument that is itself a command line is read as one.
   for (const a of args) {
@@ -374,7 +396,7 @@ function codeListDenial(code, depth) {
 // - Anything else (cat > note.md <<EOF, git commit -F - <<EOF): the body is text; it is cut out and kept
 //   as data, so a note that mentions a launcher or the settings files is not read as doing so.
 // The << line itself stays, so its redirections still count.
-const HEREDOC = /<<-?[ \t]*(['"]?)([A-Za-z_][\w.-]*)\1([^\n]*)\n[^]*?(?:\n[ \t]*\2[ \t]*(?=\n|$)|$)/g;
+const HEREDOC = /(?<!<)<<(?!<)-?[ \t]*(['"]?)([A-Za-z_][\w.-]*)\1([^\n]*)\n[^]*?(?:\n[ \t]*\2[ \t]*(?=\n|$)|$)/g;
 // The program a simple command's text runs, past assignments, keywords and wrappers with their options:
 // "sudo -E bash -s" gives bash.
 function programOf(text) {
@@ -402,6 +424,16 @@ function readerOf(stage) {
   const words = String(stage).trim().split(/\s+/).map(w => base(w.replace(/^['"]+|['"]+$/g, '')));
   return words.some(w => SHELLS.has(w)) ? 'shell' : words.some(w => INTERPRETER.test(w)) ? 'code' : 'data';
 }
+// Here-strings (cmd <<< 'text') are judged the same way, by the command that owns the <<< and every
+// command it pipes into: their text is 'shell' (bash <<< '...'), 'code' (python3 <<< '...') or 'data'
+// (git commit -F - <<< 'message').
+function hereStrings(lexed) {
+  return lexed.strings.map(({text, command}) => {
+    const readers = lexed.commands.filter((_, k) => k >= command && lexed.pipeline[k] === lexed.pipeline[command])
+      .map(words => readerOf(words.map(w => /\s/.test(w) ? base(w).replace(/\s+/g, '_') : w).join(' ')));
+    return {text, reader:readers.includes('shell') ? 'shell' : readers.includes('code') ? 'code' : 'data'};
+  });
+}
 export function withoutHeredocBodies(text, bodies = []) {
   return String(text).replace(HEREDOC, (match, quote, delimiter, rest, at, whole) => {
     const before = whole.slice(whole.lastIndexOf('\n', at) + 1, at);
@@ -425,6 +457,11 @@ export function nestedSessionDenial(command, depth = 0) {
   if (!lexed) return LOOSE_NESTED.test(text) ? NESTED_SESSION : null;
   for (const inner of lexed.subs) { const reason = nestedSessionDenial(inner, depth + 1); if (reason) return reason; }
   for (const words of lexed.commands) { const reason = commandDenial(words, lexed.subs, depth); if (reason) return reason; }
+  for (const s of hereStrings(lexed)) {
+    const reason = s.reader === 'shell' ? nestedSessionDenial(s.text, depth + 1)
+      : s.reader === 'code' ? codeListDenial(s.text, depth) || nestedSessionDenial(s.text, depth + 1) : null;
+    if (reason) return reason;
+  }
   return null;
 }
 
@@ -519,6 +556,11 @@ function writesSettings(words, home, dirs, depth) {
     while (j < rest.length && (rest[j].startsWith('-') || /^[A-Za-z_][A-Za-z0-9_]*=/.test(rest[j]) || /^\d+(?:\.\d+)?[smhd]?$/.test(rest[j]))) j++;
     return j < rest.length && writesSettings(rest.slice(j), home, dirs, depth);
   }
+  // Any other program that runs a shell or interpreter among its words (uv run python3 -c, npx node -e).
+  if (!DATA_PROGRAMS.has(name)) {
+    const runs = rest.findIndex(a => SHELLS.has(base(a)) || INTERPRETER.test(base(a)));
+    if (runs >= 0 && writesSettings(rest.slice(runs), home, dirs, depth)) return true;
+  }
   if (SHELLS.has(name) || name === 'eval') {
     const flag = rest.findIndex(a => /^-[a-z]*c[a-z]*$/.test(a));
     const code = name === 'eval' ? rest.join(' ') : (flag >= 0 ? rest[flag + 1] : undefined);
@@ -581,6 +623,10 @@ function shellWritesSettings(command, home, dirs, depth) {
     for (const d of [...known]) { const r = resolvePath(target, home, d); if (r && !known.includes(r)) known.push(r); }
   }
   if (bodies.some(b => b.code && codeWritesSettings(b.text, home, known))) return true;
+  for (const s of hereStrings(lexed)) {
+    if (s.reader === 'shell' && shellWritesSettings(s.text, home, known, depth + 1)) return true;
+    if (s.reader === 'code' && codeWritesSettings(s.text, home, known)) return true;
+  }
   if (writes.some(w => known.some(d => isProtectedPath(w, home, d)))) return true;
   if (commands.some(words => writesSettings(words, home, known, depth))) return true;
   return lexed.subs.some(inner => shellWritesSettings(inner, home, known, depth + 1));
