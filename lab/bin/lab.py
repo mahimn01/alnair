@@ -179,8 +179,9 @@ def auth_policy() -> str:
     return policy
 
 
-def auth_environment(env: dict, source: str | None = None) -> dict:
-    """Select a lab-only token in memory; never change the saved native login."""
+def auth_environment(env: dict, source: str | None = None, token: bool = True) -> dict:
+    """Select a lab-only token in memory; never change the saved native login. token=False (a preview) makes
+    the same clean-up of inherited logins without reading the Keychain, so it shows what the launch gets."""
     env = dict(env)
     if source is None and not AUTH.exists():
         return env
@@ -191,6 +192,8 @@ def auth_environment(env: dict, source: str | None = None) -> dict:
                  'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY',
                  'ANTHROPIC_FEDERATION_RULE_ID', 'ANTHROPIC_ORGANIZATION_ID']:
         env.pop(name, None)
+    if not token:
+        return env
     spec=importlib.util.spec_from_file_location('selected_accounts',ROOT/'bin/accounts.py')
     accounts=importlib.util.module_from_spec(spec);spec.loader.exec_module(accounts)
     account=accounts.keychain_account(accounts.load(ACCOUNT_REGISTRY),source)
@@ -310,11 +313,12 @@ def reject_headless_args(args: list[str]) -> None:
 
 _code_mode_spec = importlib.util.spec_from_file_location('lab_code_mode', ROOT / 'bin/code_mode.py')
 code_mode = importlib.util.module_from_spec(_code_mode_spec); _code_mode_spec.loader.exec_module(code_mode)
-# Code Mode (experimental): turned on only through the child's environment, never by writing
-# ~/.claude/settings.json or ~/.claude.json. The run records the choice (runtime.json codeMode), because
-# a session started in Code Mode resumes only with Code Mode on. See bin/code_mode.py.
+# Code Mode (experimental, on by default): turned on only through the child's environment, never by writing
+# ~/.claude/settings.json or ~/.claude.json. The run records how it was launched (runtime.json codeModeStatus and
+# codeMode), because a session started in Code Mode resumes only with Code Mode on. See bin/code_mode.py.
 CODE_MODE_ENV = code_mode.ENV
 code_mode_choice = code_mode.choice
+BILI_REASON = 'bili is on, and it routes the session through ANTHROPIC_BASE_URL (use --no-bili for Code Mode)'
 
 
 def run_models(cfg: dict) -> list[str]:
@@ -326,48 +330,71 @@ def run_models(cfg: dict) -> list[str]:
     return [models['sonnet']['id'], models['opus']['id']] + ([models['fable']['id']] if cfg.get('fableAvailable') else [])
 
 
-def settings_layers(run: Path, cfg: dict) -> list[dict]:
-    """The settings files a lab session loads: its own layer, plus the project's when it is not a home launch."""
-    paths = [run / 'settings.json']
-    if not cfg.get('homeWorkspace'):
-        base = Path(cfg.get('launchCwd') or cfg['project'])
-        paths += [base / '.claude/settings.json', base / '.claude/settings.local.json']
-    layers = []
-    for path in paths:
+def settings_layers(run: Path, cfg: dict) -> tuple[list[dict], list[dict]]:
+    """The settings files a lab session loads: its own layer (the --settings file), and the project's own
+    settings files when it is not a home launch. Returned apart, because Claude Code ignores some variables
+    in a project's files."""
+    def read(path: Path) -> list[dict]:
         try:
             value = json.loads(path.read_text())
         except (OSError, ValueError):
-            continue
-        if isinstance(value, dict):
-            layers.append(value)
-    return layers
+            return []
+        return [value] if isinstance(value, dict) else []
+    project = []
+    if not cfg.get('homeWorkspace'):
+        base = Path(cfg.get('launchCwd') or cfg['project'])
+        project = read(base / '.claude/settings.json') + read(base / '.claude/settings.local.json')
+    return read(run / 'settings.json'), project
 
 
-def settle_code_mode(run: Path, env: dict, *, source: str, resume: bool, args: list[str] | None = None,
-                     remote_control: bool = False) -> tuple[bool, list[str]]:
-    """Check a run that wants Code Mode against what Code Mode needs, before anything starts.
+def plan_code_mode(run: Path, env: dict | None, *, request: tuple[bool, str], resume: bool, bili: bool = False,
+                   flag: bool | None = None, args: list[str] | None = None,
+                   remote_control: bool = False) -> tuple[dict, list[str]]:
+    """This launch's Code Mode record and the lines to show the person. It reads the run and writes nothing
+    (save_code_mode does); nothing is ever refused.
 
-    Returns (code mode stays on, notes for the person). An explicit --code-mode, or a resumed Code Mode
-    session, raises when Code Mode cannot start; a default from ALNAIR_CODE_MODE turns it off for this
-    run (recorded in runtime.json) so the session starts normally. The caller rebuilds the launch then.
-    """
+    A new session, or a resumed run with no record: the request (flag, shell, config.env, else on). When something
+    rules Code Mode out, the record turns it off with the variable removed and one line says why. env None skips
+    the environment checks: the first pass, before the launch is built; the caller checks again with the final env.
+    A resumed run with a record keeps how it was launched. When a Code Mode launch can't run here, one line warns
+    instead of refusing: only Claude Code knows whether the session really ran in Code Mode, and it resumes one
+    that didn't (the confirm prompt declined, the feature not open to the account yet)."""
     cfg = json.loads((run / 'runtime.json').read_text())
-    if not cfg.get('codeMode'):
-        return False, []
-    reasons = code_mode.blockers(env, settings_layers(run, cfg), run_models(cfg), args or [], remote_control)
-    if not reasons:
-        return True, []
-    detail = '; '.join(reasons)
-    if resume:
-        raise ValueError(f'This session was started in Code Mode, and Claude Code resumes it only with Code Mode on, which cannot start here: {detail}. Nothing was started.')
-    if source == 'flag':
-        # The run folder exists already; mark it so --resume latest never picks a session that never started.
-        cfg['launchRefused'] = True
-        dump(run / 'runtime.json', cfg)
-        raise ValueError(f'Code Mode cannot start: {detail}. Fix that or leave out --code-mode. Nothing was started.')
-    cfg['codeMode'] = False
+    own, project = settings_layers(run, cfg)
+    reasons = code_mode.blockers(env or {}, own, run_models(cfg), args or [], remote_control, project)
+    launched = code_mode.started(cfg) if resume else None
+    if launched is None:
+        if bili:  # bili's proxy is what sets ANTHROPIC_BASE_URL; say so once
+            reasons = [r for r in reasons if not r.startswith('ANTHROPIC_BASE_URL')] + [BILI_REASON]
+        status = code_mode.record(*request, reasons)
+        if resume:
+            status['enabled'] = None  # no record: Claude Code resumes the session in the mode it started in
+        return status, ([code_mode.OFF_NOTE + status['reason'] + '.'] if status['reason'] else [])
+    notes = []
+    if flag is not None and flag != launched['enabled']:
+        notes.append(f"Alnair: this session was launched with Code Mode {'on' if launched['enabled'] else 'off'} and resumes that way.")
+    if launched['enabled'] and reasons:
+        notes.append('Alnair: this session was launched with Code Mode, and Claude Code resumes a Code Mode session only with '
+                     f"Code Mode, which can't run here: {'; '.join(reasons)}. If Claude Code refuses to resume it, fix that and resume again.")
+    return launched, notes
+
+
+def save_code_mode(run: Path, status: dict) -> dict:
+    """Record a launch's Code Mode in runtime.json: codeModeStatus (requested, source, enabled, env, reason) and
+    codeMode, true when the session gets CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1 (the plugin and A/B kit read it)."""
+    cfg = json.loads((run / 'runtime.json').read_text())
+    cfg['codeModeStatus'] = status
+    cfg['codeMode'] = status['env'] == '1'
     dump(run / 'runtime.json', cfg)
-    return False, [code_mode.OFF_NOTE + detail + '.']
+    return cfg
+
+
+def code_mode_preview(status: dict, notes: list[str], env: dict, resume: bool) -> dict:
+    """The codeMode block of a --dry-run: the record, the lines shown, and the child-environment names that
+    decide Code Mode (login values redacted). A resumed run that has a record shows source 'run'."""
+    recorded = resume and status.get('enabled') is not None
+    return {**status, 'source': 'run' if recorded else status['source'], 'notes': notes,
+            'childEnv': code_mode.env_report(env)}
 
 FABLE_FLAG = USER / '.clp/fable-availability.json'
 FABLE_MODEL = model_catalog()['models']['fable']['id']
@@ -609,8 +636,16 @@ def latest_run() -> Path:
     raise ValueError('No lab session is available to resume')
 
 
-def launch_command(run: Path, prompt: str = '', resume: bool = False, load_auth: bool = True, auth_source: str | None = None, start_proxy: bool = True) -> tuple[list[str], dict]:
+def launch_command(run: Path, prompt: str = '', resume: bool = False, load_auth: bool = True, auth_source: str | None = None,
+                   start_proxy: bool = True, code_mode_status: dict | None = None) -> tuple[list[str], dict]:
+    """The claude argv and environment for a prepared run. Code Mode comes only from code_mode_status (a launch
+    being decided, or a preview that must not write the run) or else from the run's own record."""
     cfg = json.loads((run / 'runtime.json').read_text())
+    if code_mode_status is None:
+        recorded = cfg.get('codeModeStatus')
+        code_mode_status = recorded if isinstance(recorded, dict) else {
+            'env': code_mode.env_value(cfg), 'enabled': cfg['codeMode'] if isinstance(cfg.get('codeMode'), bool) else None}
+    code_env = code_mode.env_value({'codeModeStatus': code_mode_status})
     if cfg.get('executionMode','interactive') != 'interactive':
         raise ValueError(HEADLESS_DISABLED)
     metrics = json.loads((run / 'metrics.json').read_text())
@@ -645,20 +680,24 @@ def launch_command(run: Path, prompt: str = '', resume: bool = False, load_auth:
                               'to select the specific work folder. Never treat the whole home as one source tree. '
                               'Use absolute file paths and explicit project directories in Bash commands. '
                               'The user can also select the folder with /lab-project /absolute/path.')
-    if cfg.get('codeMode'):
+    if code_env == '1':
         task_instructions += '\n' + (ROOT / 'references/code-mode.md').read_text()
-    env = auth_environment(os.environ,auth_source) if load_auth else dict(os.environ)
-    # Code Mode follows the run's recorded choice only: 1 or 0, never the parent's value or restart markers.
-    env = code_mode.child_env(env, bool(cfg.get('codeMode')))
+    env = auth_environment(os.environ, auth_source, token=load_auth)
+    # Code Mode follows the run's record only: 1, 0 or removed, never the parent's value or restart markers.
+    env = code_mode.child_env(env, code_env)
+    env['CLAUDE_LAB_CODE_MODE'] = code_mode.label(code_mode_status)  # read by the status line
     # Cap the context at 300k so each call re-reads less; a window the user set in the shell wins.
     compact = [] if env.get('CLAUDE_CODE_AUTO_COMPACT_WINDOW') else ['--autocompact', COMPACT_WINDOW]
     # Opt-in bili: route only this child through the lab proxy and let bili own compaction.
     # A proxy that is down or won't start means a normal direct session with native auto-compact.
     env['CLAUDE_LAB_BILI'] = 'off'
     env['CLAUDE_LAB_COMPACT_AT'] = env.get('CLAUDE_CODE_AUTO_COMPACT_WINDOW') or '300000'  # read by the status line
-    if cfg.get('biliRequested') and cfg.get('codeMode'):
-        # Code Mode refuses a custom ANTHROPIC_BASE_URL, which is how bili routes a session.
-        print('Claude Lab: bili is skipped because Code Mode is on; this session runs direct with native auto-compact.', file=sys.stderr)
+    if cfg.get('biliRequested') and code_env == '1':
+        # Code Mode refuses a custom ANTHROPIC_BASE_URL, which is how bili routes a session. A new launch gets
+        # here only when the bili proxy was down (already said), and so does a resume of a run with no record;
+        # only a session recorded as launched with Code Mode is told why.
+        if resume and code_mode_status.get('enabled') is True:
+            print('Claude Lab: bili is skipped because this session was launched with Code Mode; it runs direct with native auto-compact.', file=sys.stderr)
     elif cfg.get('biliRequested'):
         proxy = bili()
         if proxy.start() if start_proxy else proxy.health():
@@ -784,7 +823,8 @@ def main() -> int:
     parser.add_argument('--no-bili', action='store_true', help='run this launch direct even if `claude-lab bili on` is set')
     parser.add_argument('--full-tools', action='store_true', help='keep every built-in tool and skill (undo the Oct 23 cuts for this session)')
     parser.add_argument('--code-mode', action=argparse.BooleanOptionalAction, default=None,
-                        help='turn Claude Code Code Mode (experimental) on or off for a new session (default: ALNAIR_CODE_MODE, else off)')
+                        help='Claude Code Code Mode (experimental) for a new session; on by default. --no-code-mode, or '
+                             'ALNAIR_CODE_MODE=0 in the shell or ~/.config/alnair/config.env, turns it off')
     opt = parser.parse_intermixed_args(args)
     if opt.command == 'bili':
         proxy, action = bili(), opt.text or 'status'
@@ -840,7 +880,7 @@ def main() -> int:
         opt.project = project
         opt.text = 'Fix the negative-value bug in totals.py. Preserve the public API and verify all test_totals.py cases. Use the lab handoff and acceptance checks.'
     # Resolved before any run folder is made, so a bad ALNAIR_CODE_MODE value leaves nothing behind.
-    wants_code_mode, code_source = code_mode_choice(opt.code_mode)
+    code_request = code_mode_choice(opt.code_mode)
     if opt.resume:
         run = latest_run() if str(opt.resume) == 'latest' else opt.resume.expanduser().resolve()
         cfg = json.loads((run / 'runtime.json').read_text())
@@ -857,29 +897,35 @@ def main() -> int:
         run, cfg = prepare(opt.project, opt.mode, opt.model, opt.run, opt.full_tools)
         os.chdir(cfg.get('launchCwd', cfg['project']))
     preview = opt.dry_run or opt.command == 'prepare'
-    notes = []
-    if opt.resume and opt.code_mode is not None and opt.code_mode != bool(cfg.get('codeMode')):
-        notes.append(f"Claude Lab: this session was started with Code Mode {'on' if cfg.get('codeMode') else 'off'} and resumes that way.")
-    if not (opt.resume and preview):
-        # Recorded in the run so account-fallback relaunches and resumes keep the same choice.
+    # A resume preview leaves the real run unwritten; everything else records its choices in the run, so
+    # account-fallback relaunches and later resumes keep them.
+    persist = not (opt.resume and preview)
+    if persist:
         cfg['biliRequested'] = use_bili
-        if not opt.resume:
-            cfg['codeMode'] = wants_code_mode
         dump(run / 'runtime.json', cfg)
-    argv, env = launch_command(run, opt.text, bool(opt.resume), load_auth=not preview, start_proxy=not preview)
-    kept, off = settle_code_mode(run, env, source=code_source, resume=bool(opt.resume))
-    if off:
-        notes += off
-        argv, env = launch_command(run, opt.text, bool(opt.resume), load_auth=not preview, start_proxy=not preview)
+    # Code Mode is decided before the launch is built (bili, the settings files, models) and checked again
+    # against the final child environment; the launch is rebuilt only when that changes it. A launch that asks
+    # for bili is first built without Code Mode so the proxy can be tried; Code Mode is ruled out only when the
+    # proxy really routes the session. A preview starts no proxy, so it shows what a launch that starts it gets.
+    plan = {'request': code_request, 'resume': bool(opt.resume), 'bili': use_bili, 'flag': opt.code_mode}
+    status, _ = plan_code_mode(run, None, **plan)
+    argv, env = launch_command(run, opt.text, bool(opt.resume), load_auth=not preview, start_proxy=not preview, code_mode_status=status)
+    if not preview:
+        plan['bili'] = use_bili and env['CLAUDE_LAB_BILI'] == 'on'
+    status, notes = plan_code_mode(run, env, **plan)
+    if status['env'] != env.get(CODE_MODE_ENV):
+        argv, env = launch_command(run, opt.text, bool(opt.resume), load_auth=not preview, start_proxy=not preview, code_mode_status=status)
+    if persist:
+        cfg = save_code_mode(run, status)
     for note in notes:
         print(note, file=sys.stderr)
     if preview:
         print(json.dumps({'run': str(run), 'project': cfg['project'], 'verificationProject':cfg.get('verificationProject',cfg['project']), 'limits': cfg['limits'],
                           'bili': {'requested': bool(cfg.get('biliRequested')), 'active': env['CLAUDE_LAB_BILI'] == 'on'},
-                          'codeMode': {'enabled': kept, 'source': 'run' if opt.resume else code_source, 'env': env[CODE_MODE_ENV], 'notes': notes},
+                          'codeMode': code_mode_preview(status, notes, env, bool(opt.resume)),
                           'argv': [x if x != argv[argv.index('--append-system-prompt')+1] else '[scoped personal instructions and lab workflow]' for x in argv],
                           'note': 'No Claude session or model request was started.'}, indent=2)); return 0
-    print(f'Claude Lab · {cfg["mode"]} · artifacts: {run}', flush=True)
+    print(f'Claude Lab · {cfg["mode"]} · {code_mode.WORDS[code_mode.label(status)]} · artifacts: {run}', flush=True)
     if auth_policy() == 'fallback':
         module_spec=importlib.util.spec_from_file_location('lab_fallback',ROOT/'bin/fallback.py')
         module=importlib.util.module_from_spec(module_spec);module_spec.loader.exec_module(module)

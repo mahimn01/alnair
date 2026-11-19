@@ -7,11 +7,26 @@ import os
 import shutil
 import socket
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lab" / "tests"))
+import protected_writes  # noqa: E402 - lab/tests/protected_writes.py, shared with the lab suite
+from clpload import launcher as _launcher  # noqa: E402
+
+# The user's real Claude files, from the real home, taken before any test points HOME elsewhere.
+PROTECTED = list(_launcher.PROTECTED)
 _REAL_RUN = subprocess.run
+
+
+@pytest.fixture(autouse=True)
+def no_writes_to_real_claude_files():
+    """No test may write the user's real Claude files; see lab/tests/protected_writes.py for how writes are seen."""
+    with protected_writes.recording(PROTECTED) as writes:
+        yield
+    assert writes == [], f"a test wrote the user's real Claude files: {writes}"
 
 
 def _no_security_tool(args, *rest, **kwargs):
@@ -34,6 +49,15 @@ def no_network_no_keys(monkeypatch, tmp_path_factory):
     for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE", "ANTHROPIC_BASE_URL", "CLP_STORE"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("ANTHROPIC_CONFIG_DIR", str(tmp_path_factory.mktemp("anthropic-config")))
+
+
+@pytest.fixture(autouse=True)
+def no_session_exec(monkeypatch):
+    """A test that reaches the launcher's real launch fails here instead of replacing pytest with claude."""
+    def refuse(*args, **kwargs):
+        raise AssertionError("a test must not exec a Claude session")
+
+    monkeypatch.setattr(os, "execve", refuse)
 
 
 @pytest.fixture(autouse=True)

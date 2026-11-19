@@ -13,8 +13,9 @@ How to run:
     claude-clp doctor           check claude, the plugin, the tools' Python and your corpus
     claude-clp demo             a session over a tiny demo corpus built inside its run folder
     --store DIR                 use a clp store other than ~/.clp (or $CLP_STORE)
-    --code-mode / --no-code-mode  Claude Code Code Mode (experimental) on or off for this session;
-                                the default is ALNAIR_CODE_MODE (shell or ~/.config/alnair/config.env), else off
+    --code-mode / --no-code-mode  Claude Code Code Mode (experimental), on by default; --no-code-mode or
+                                ALNAIR_CODE_MODE=0 (shell or ~/.config/alnair/config.env) turns it off. Where
+                                it can't run, it is turned off with a one-line note
 Install: ln -sf <this file> ~/.local/bin/claude-clp
 
 What it changes: writes only its run folder, ~/.local/state/claude-clp/runs/<id>/ (a session
@@ -77,9 +78,10 @@ or say the files do not answer it; never present a refused answer as fact.
 mcp__clp__ask spends the user's API key: use it only when they ask for the paper's L4
 harness (clp ask) by name."""
 CODE_MODE_GUIDE = """
-Code Mode is on: the REPL tool runs your JavaScript, and one script can make many tool calls. Batch the
-lookups and reads in one script, then read only the addresses you need. The CLP tools take format: 'json' and
-return one JSON object as text. Keep mcp__clp__verify a separate, visible call before stating a fact."""
+This session was launched with Code Mode. If you have the REPL tool, it runs your JavaScript, and one script can
+make many tool calls. Batch the lookups and reads in one script, then read only the addresses you need. The CLP
+tools take format: 'json' and return one JSON object as text. Keep mcp__clp__verify a separate, visible call
+before stating a fact."""
 DEMO_PROMPT = ("This is a claude-clp demo over a tiny notes folder (the demo corpus). Use the clp-memory skill and verify each "
                "answer before giving it: 1) What is the exit plan in [[AMZN]]? 2) What is the stop-loss in [[TSLA]]? "
                "(No TSLA note exists; show what the gate does.)")  # fmt: skip
@@ -157,7 +159,7 @@ def code_mode_blockers(project: Path, layer: dict, env: dict) -> list[str]:
     """Why Code Mode cannot start for this launch: the environment, the session layer, the project's own
     settings files (a home launch loads none) and the model the layer copies from your settings."""
     project = project.expanduser().resolve()
-    layers = [layer]
+    files = []
     if project != HOME.resolve():
         for path in (project / ".claude/settings.json", project / ".claude/settings.local.json"):
             try:
@@ -165,13 +167,15 @@ def code_mode_blockers(project: Path, layer: dict, env: dict) -> list[str]:
             except (OSError, ValueError):
                 continue
             if isinstance(value, dict):
-                layers.append(value)
-    models = [m for m in (lay.get("model") for lay in layers) if m]
-    return CODE_MODE.blockers(env, layers, models, [])
+                files.append(value)
+    # Kept apart from the session layer: Claude Code ignores some variables in a project's own files.
+    models = [m for m in (lay.get("model") for lay in [layer, *files]) if m]
+    return CODE_MODE.blockers(env, [layer], models, [], project=files)
 
 
-def prepare(project: Path, run: Path, store: Path | None = None, code_mode: bool = False) -> tuple[Path, dict]:
-    """Check the folders, then write the run's settings layer, run info and protected hashes."""
+def prepare(project: Path, run: Path, store: Path | None = None, code_mode: dict | None = None) -> tuple[Path, dict]:
+    """Check the folders, then write the run's settings layer, run info (with the Code Mode record from
+    lab/bin/code_mode.py record(), when given) and protected hashes."""
     project = project.expanduser().resolve()
     if not project.is_dir():
         raise ValueError(f"Project directory does not exist: {project}")
@@ -189,8 +193,9 @@ def prepare(project: Path, run: Path, store: Path | None = None, code_mode: bool
     except ValueError:
         session_id = str(uuid.uuid4())
     cfg = {"schema": 1, "runId": session_id, "project": str(project), "home": home, "root": str(ROOT),
-           "store": str(store) if store else None, "codeMode": code_mode,
-           "createdAt": datetime.now(timezone.utc).isoformat()}  # fmt: skip
+           "store": str(store) if store else None, "createdAt": datetime.now(timezone.utc).isoformat()}  # fmt: skip
+    if code_mode is not None:
+        cfg.update(codeModeStatus=code_mode, codeMode=code_mode["env"] == "1")
     dump(run / "runtime.json", cfg)
     dump(run / "settings.json", session_settings(run, home, store))
     dump(run / "source-hashes.json", hashes())
@@ -214,13 +219,14 @@ def launch_command(run: Path, prompt: str = "") -> tuple[list[str], dict[str, st
     # In ~ the "project" settings file IS ~/.claude/settings.json, which would bring back every plugin
     # the session layer leaves out, so a home launch loads no settings files besides the layer.
     sources = "" if cfg["home"] else "project,local"
-    guide = GUIDE + (CODE_MODE_GUIDE if cfg.get("codeMode") else "")
+    code_env = CODE_MODE.env_value(cfg)
+    guide = GUIDE + (CODE_MODE_GUIDE if code_env == "1" else "")
     argv = [claude_binary(), "--setting-sources", sources, "--settings", str(run / "settings.json"), "--plugin-dir", str(PLUGIN),
             "--append-system-prompt", guide, "--session-id", cfg["runId"], "--name", "Claude CLP"]  # fmt: skip
     if prompt:
         argv.append(prompt)
-    # Code Mode is set to exactly 1 or 0 from the run's choice, only in this child's environment.
-    return argv, CODE_MODE.child_env({**os.environ, **session_env(run, store)}, bool(cfg.get("codeMode")))
+    # Code Mode is 1, 0 or removed, from the run's record, only in this child's environment.
+    return argv, CODE_MODE.child_env({**os.environ, **session_env(run, store)}, code_env)
 
 
 def quiet(argv: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
@@ -259,7 +265,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--store", type=Path, help="clp store other than ~/.clp")
     p.add_argument("--dry-run", action="store_true", help="print the launch and write only a temporary preview")
     p.add_argument("--code-mode", action=argparse.BooleanOptionalAction, default=None,
-                   help="Claude Code Code Mode (experimental) on or off (default: ALNAIR_CODE_MODE, else off)")
+                   help="Claude Code Code Mode (experimental), on by default; --no-code-mode or ALNAIR_CODE_MODE=0 "
+                        "turns it off, and it is turned off with a note where it can't run")
     opt = p.parse_args(argv)
     if opt.task == "doctor":
         print(json.dumps(doctor(), indent=2))
@@ -267,36 +274,34 @@ def main(argv: list[str] | None = None) -> int:
     store = opt.store.expanduser().resolve() if opt.store else None
     run = (Path(tempfile.mkdtemp(prefix="claude-clp-preview-")) if opt.dry_run else STATE / str(uuid.uuid4())).resolve()
     project, prompt = opt.project, opt.task
-    # Check Code Mode before any folder is made: a refused launch leaves nothing behind.
-    code_mode, code_source = CODE_MODE.choice(opt.code_mode)
-    notes: list[str] = []
-    if code_mode:
+    # Decided before any folder is made (a bad ALNAIR_CODE_MODE value leaves nothing behind). Where Code Mode
+    # can't run it is turned off with one line, never refused.
+    requested, code_source = CODE_MODE.choice(opt.code_mode)
+    reasons: list[str] = []
+    if requested:
         home = opt.task != "demo" and project.expanduser().resolve() == HOME.resolve()
         layer = session_settings(run, home, store)
         reasons = code_mode_blockers(HOME if opt.task == "demo" else project, layer, {**os.environ, **layer["env"]})
-        if reasons and code_source == "flag":
-            raise ValueError(f"Code Mode cannot start: {'; '.join(reasons)}. Fix that or leave out --code-mode. Nothing was started.")
-        if reasons:
-            code_mode = False
-            notes.append(CODE_MODE.OFF_NOTE + "; ".join(reasons) + ".")
+    status = CODE_MODE.record(requested, code_source, reasons)
+    notes = [CODE_MODE.OFF_NOTE + status["reason"] + "."] if status["reason"] else []
     for note in notes:
         print(note, file=sys.stderr)
     if opt.task == "demo":
         run.mkdir(parents=True, exist_ok=True, mode=0o700)
         project, store = build_demo(run)
         prompt = DEMO_PROMPT
-    run, cfg = prepare(project, run, store, code_mode)
+    run, cfg = prepare(project, run, store, status)
     argv_, env = launch_command(run, prompt)
     if opt.dry_run:
         guide = argv_[argv_.index("--append-system-prompt") + 1]
         shown = [x if x != guide else "[claude-clp session guide]" for x in argv_]
         print(json.dumps({"run": str(run), "project": cfg["project"], "store": cfg["store"] or "default (~/.clp or $CLP_STORE)",
                           "settings": str(run / "settings.json"), "argv": shown,
-                          "codeMode": {"enabled": code_mode, "source": code_source, "env": env[CODE_MODE.ENV], "notes": notes},
+                          "codeMode": {**status, "notes": notes, "childEnv": CODE_MODE.env_report(env)},
                           "note": "No Claude session or model request was started; only this temporary preview folder was written."},
                          indent=2))  # fmt: skip
         return 0
-    print(f"Claude CLP · CLP tools on{' · code mode on' if code_mode else ''} · run files: {run}", flush=True)
+    print(f"Claude CLP · CLP tools on · {CODE_MODE.WORDS[CODE_MODE.label(status)]} · run files: {run}", flush=True)
     os.chdir(cfg["project"])
     os.execve(argv_[0], argv_, env)
     return 0

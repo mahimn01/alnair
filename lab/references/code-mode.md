@@ -1,6 +1,8 @@
 ## Code Mode (this session)
 
-Code Mode is on: the REPL tool runs your JavaScript, and one script can make many tool calls.
+This session was launched with Code Mode. If you have the REPL tool, it runs your JavaScript, and one script can
+make many tool calls. (Claude Code can still start without it, for example when the one-time confirm prompt is
+declined; then work with the ordinary tools and ignore this section.)
 - Batch related reads, searches, lookups and checks into one script; run independent calls in parallel.
 - Filter and summarise in code. Return only the compact result the next step needs, not raw output.
 - describeTool('<name>') shows a tool's full input schema; MCP tools refuse arguments they don't declare.

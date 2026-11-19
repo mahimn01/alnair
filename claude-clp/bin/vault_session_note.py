@@ -548,6 +548,36 @@ def save_marker(session_id: str, data: dict, store: Path | None = None) -> None:
     atomic_write(path, json.dumps(data, indent=2) + "\n")
 
 
+CODE_MODE_SOURCES = {"flag": "the command-line flag", "shell": "ALNAIR_CODE_MODE in the shell",
+                     "config.env": "ALNAIR_CODE_MODE in config.env", "default": "the default", "run": "the run's record"}
+
+
+def code_mode_summary(environ: dict | None = None) -> str | None:
+    """How the launcher set Code Mode for this session, in plain words, from the run's runtime.json (the folder
+    in CLAUDE_CLP_RUN_DIR or CLAUDE_LAB_RUN_DIR). None outside an Alnair run or when the run has no record.
+    Never raises: a missing or unreadable file leaves the line out."""
+    env = os.environ if environ is None else environ
+    for name in ("CLAUDE_CLP_RUN_DIR", "CLAUDE_LAB_RUN_DIR"):
+        try:
+            cfg = json.loads((Path(env[name]) / "runtime.json").read_text(encoding="utf-8")) if env.get(name) else None
+        except (OSError, ValueError):
+            continue
+        if not isinstance(cfg, dict):
+            continue
+        status = cfg.get("codeModeStatus")
+        if not isinstance(status, dict):
+            return {True: "on", False: "off"}.get(cfg.get("codeMode")) if isinstance(cfg.get("codeMode"), bool) else None
+        source = CODE_MODE_SOURCES.get(str(status.get("source")), str(status.get("source")))
+        if status.get("env") == "1":
+            if status.get("enabled") is True:
+                return f"on (requested by {source}; the REPL counts below show whether scripts ran)"
+            return f"as the session began (no record from its first launch; requested by {source})"
+        if status.get("env") == "0":
+            return f"off (turned off by {source})"
+        return redact(f"off (auto): requested by {source}, but {status.get('reason') or 'it could not run'}")
+    return None
+
+
 def render_note(
     *,
     session_id: str,
@@ -577,6 +607,7 @@ def render_note(
             seen.add(e)
             ev_list.append(e)
     codex = parsed.get("backend") == "codex" or os.environ.get("ALNAIR_BACKEND") == "codex"
+    code_mode = None if codex else code_mode_summary()
     lines = [
         "---",
         "tags: [codex-session, alnair]" if codex else "tags: [claude-session, claude-lab-clp]",
@@ -591,6 +622,7 @@ def render_note(
         f"# {'Codex' if codex else 'Claude'} Session · {session_id[:8]}",
         "",
         *([f"- **Model:** `{parsed['model']}`"] if parsed.get("model") else []),
+        *([f"- **Code Mode:** {code_mode}"] if code_mode else []),
         f"- **When ({TZ.key}):** {updated_at}",
         f"- **Working dir / project:** `{project or cwd or '(unknown)'}`",
         f"- **Session id:** `{session_id}`",

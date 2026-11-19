@@ -295,6 +295,31 @@ def test_the_note_shows_code_mode_tool_use(vsn, vault_env, tmp_path: Path):
     assert hashlib.sha256(pre.read_bytes()).hexdigest() == pre_hash
 
 
+def test_the_note_says_how_the_launcher_set_code_mode(vsn, vault_env, tmp_path: Path, monkeypatch):
+    vault, store, _, _ = vault_env
+    run = tmp_path / "run"
+    run.mkdir()
+    monkeypatch.delenv("CLAUDE_LAB_RUN_DIR", raising=False)
+    monkeypatch.delenv("ALNAIR_BACKEND", raising=False)
+    monkeypatch.setenv("CLAUDE_CLP_RUN_DIR", str(run))
+    cases = [({"requested": True, "source": "default", "enabled": True, "env": "1", "reason": None}, "on (requested by the default"),
+             ({"requested": False, "source": "shell", "enabled": False, "env": "0", "reason": None}, "off (turned off by ALNAIR_CODE_MODE in the shell)"),
+             ({"requested": True, "source": "flag", "enabled": False, "env": None, "reason": "DISABLE_TELEMETRY is set"},
+              "off (auto): requested by the command-line flag, but DISABLE_TELEMETRY is set"),
+             ({"requested": True, "source": "default", "enabled": None, "env": "1", "reason": None}, "as the session began")]
+    for status, words in cases:
+        (run / "runtime.json").write_text(json.dumps({"codeModeStatus": status}))
+        assert vsn.code_mode_summary().startswith(words)
+    transcript = tmp_path / "t.jsonl"
+    write_transcript(transcript, "s1", ["hello"], "hi")
+    out = vsn.run(transcript_path=transcript, session_id="c0de0000-0000-4000-8000-00000000c0d1", cwd="/tmp/p", event="Stop",
+                  vault=vault, store=store, refresh=False)
+    assert "- **Code Mode:** as the session began" in Path(out["path"]).read_text(encoding="utf-8")
+    (run / "runtime.json").write_text("not json")
+    assert vsn.code_mode_summary() is None  # a broken record leaves the line out, never fails the note
+    assert vsn.code_mode_summary({}) is None
+
+
 def test_a_session_without_tools_gets_no_tool_section(vsn, tmp_path: Path):
     transcript = tmp_path / "plain.jsonl"
     write_transcript(transcript, "s1", ["hello"], "hi")

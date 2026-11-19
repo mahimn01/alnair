@@ -88,7 +88,9 @@ class LauncherTest(unittest.TestCase):
 
     def test_launcher_accepts_a_prompt_after_flags_without_starting_claude(self):
         import os
-        env={k:v for k,v in os.environ.items() if k!='CLAUDE_CODE_AUTO_COMPACT_WINDOW'}
+        # A temporary HOME: the write recorder sees only this process, so the child must not reach the real files.
+        home=tempfile.TemporaryDirectory();self.addCleanup(home.cleanup)
+        env={**{k:v for k,v in os.environ.items() if k!='CLAUDE_CODE_AUTO_COMPACT_WINDOW'},'HOME':home.name}
         result=subprocess.run(['python3',str(ROOT/'bin/lab.py'),'--dry-run','--mode','deep','Implement pagination','--project',str(self.project)],text=True,capture_output=True,env=env)
         self.assertEqual(result.returncode,0,result.stderr)
         data=json.loads(result.stdout)

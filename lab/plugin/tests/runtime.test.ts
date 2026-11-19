@@ -732,7 +732,7 @@ test('script output and other machine-made prompts pass through untouched and ar
 test('Code Mode guidance reaches the lead only when the run has code mode on',async ($,on) => {
   const f=fixture(on,{},{codeMode:true});await start($);
   const on1=await prompt($,'Implement pagination');
-  expect(on1.context.join('\n').includes('Code Mode is on')).toBe(true);
+  expect(on1.context.join('\n').includes('launched with Code Mode')).toBe(true);
   expect(f.files.get('/lab/run/brief.md').includes('Implement pagination')).toBe(true);
 });
 

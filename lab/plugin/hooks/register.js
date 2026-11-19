@@ -625,7 +625,7 @@ export function codeUsage(state = {}) {
 // A prompt with no origin, or one of a kind this list does not name, keeps the normal lab handling.
 const NON_USER_ORIGINS = new Set(['task-notification','peer','peer-send-message','projects-relay','channel','observer',
   'observer-activity','auto-continuation','plugin']);
-const CODE_MODE_CONTEXT = 'Code Mode is on (the REPL tool runs your JavaScript). Batch related reads, searches and lookups into one script, filter and summarise in code, and return only the compact result. The lab rules still hold inside scripts: record checkpoints with mcp__harness-lab__checkpoint, run acceptance checks through mcp__harness-lab__verify, start specialists with Agent, and never start another Claude, Alnair or Codex session.';
+const CODE_MODE_CONTEXT = 'This session was launched with Code Mode (if you have the REPL tool, it runs your JavaScript). Batch related reads, searches and lookups into one script, filter and summarise in code, and return only the compact result. The lab rules still hold inside scripts: record checkpoints with mcp__harness-lab__checkpoint, run acceptance checks through mcp__harness-lab__verify, start specialists with Agent, and never start another Claude, Alnair or Codex session.';
 // The folder this hook's commands run in (a subagent's own inside its hook), for relative paths; null when
 // the engine can't say, which leaves relative paths unresolved rather than guessed.
 async function sessionCwd($) {
@@ -716,7 +716,17 @@ let lock = Promise.resolve();
     return `${cfg.mode} · ${state.route?.model || 'awaiting task'} · workers ${state.workers} · requests ${state.steps} · Opus ${usage.opusShare}% of ${usage.calls} calls · ${(usage.tokens / 1e6).toFixed(1)}M new tokens (+${(usage.cacheReads / 1e6).toFixed(1)}M cache reads) · revision ${state.revision}` +
       (warnings.length ? ' · OVER SOFT BUDGET: ' + warnings.join('; ') : '') +
       (cfg.homeWorkspace ? ` · code scope: ${state.verificationProject || 'choose with /lab-project'}` : '') +
-      (cfg.codeMode ? ` · code mode on · REPL scripts ${codeUsage(state).replCalls} (${codeUsage(state).innerToolCalls} inner calls)` : '');
+      codeModeText();
+  }
+  // How the launcher set Code Mode (runtime.json codeModeStatus; a run from before it has only codeMode true/false).
+  // The REPL counts show whether scripts really ran: a launch with Code Mode is a request Claude Code can decline.
+  function codeModeText() {
+    const used = codeUsage(state), scripts = ` · REPL scripts ${used.replCalls} (${used.innerToolCalls} inner calls)`;
+    const mode = cfg.codeModeStatus && typeof cfg.codeModeStatus === 'object' ? cfg.codeModeStatus : null;
+    if (!mode) return cfg.codeMode ? ' · code mode on' + scripts : '';
+    if (mode.env === '1') return (mode.enabled === true ? ' · code mode on' : ' · code mode as started') + scripts;
+    if (mode.env === '0') return ' · code mode off';
+    return mode.reason ? ' · code mode off (auto)' : '';
   }
   // One reasoner hint per task replaces the old automatic switch of the lead to Opus.
   function setHint(reason) { if (!state.reasonerHinted) state.reasonerHint = reason; }
@@ -1111,7 +1121,7 @@ export function register(on) {
       });
       return {text:'New task handoff ready. Use /clear before an unrelated task, then submit its request. Previous metrics are archived; the soft budget (4 workers, one review plus one re-review, ask at 2M tokens) starts again.'};
     }
-    return {text:JSON.stringify({status:status(),run,metrics:state},null,2)};
+    return {text:JSON.stringify({status:status(),run,codeMode:cfg.codeModeStatus || null,metrics:state},null,2)};
   });
 
   on('config.set', async () => ({deny:'This lab keeps saved Claude settings unchanged. Use /lab-model for routing, or launch a new --mode deep session. Configure ordinary Claude from its usual command.'}));

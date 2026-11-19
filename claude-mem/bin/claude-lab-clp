@@ -18,10 +18,13 @@ this repo — lab.py is imported from its absolute path at runtime.
   --full-tools               pass through to lab (undo Oct 23 tool cuts)
   --no-research              leave the research plugin out (controlled comparisons; same as CLAUDE_RESEARCH_DISABLE=1)
   --research-home DIR        research store other than ~/.clp/research (e.g. a fresh one per benchmark run)
-  --code-mode / --no-code-mode  Claude Code Code Mode (experimental) for a new session: the model writes JavaScript
-                             that makes many tool calls in one step. Default ALNAIR_CODE_MODE=1|0, else off. Set only
-                             in the child's environment (CLAUDE_CODE_EXPERIMENTAL_CODE_MODE); a resume keeps the
-                             run's own choice. Refused for --model gpt and --remote-control.
+  --code-mode / --no-code-mode  Claude Code Code Mode (experimental), ON by default: the model writes JavaScript
+                             that makes many tool calls in one step. --no-code-mode, or ALNAIR_CODE_MODE=0 in the
+                             shell or config.env, turns it off (flag > shell > config.env > on). Set only in the
+                             child's environment (CLAUDE_CODE_EXPERIMENTAL_CODE_MODE); a resume keeps how the run
+                             was launched. Where Code Mode can't run (--remote-control, telemetry switches, a custom
+                             ANTHROPIC_BASE_URL, an apiKeyHelper, ...) it is turned off with a one-line note.
+                             --model gpt (Codex) never uses it.
 
 Install: ./install.sh from the repo root (or ln -sf <this file> ~/.local/bin/alnair).
 Settings: ~/.config/alnair/config.env (ALNAIR_VAULT, ALNAIR_LAB_ROOT, ALNAIR_CODE_MODE, ALNAIR_LAB_LEGACY_ROOTS,
@@ -55,6 +58,11 @@ HOME = Path.home()
 CONFIG = Path(os.environ.get("ALNAIR_CONFIG") or HOME / ".config/alnair/config.env").expanduser()
 
 
+# Variables load_config copied from config.env into the environment (name -> value), so a setting can still
+# tell the shell's own value from config.env's (Code Mode: flag > shell > config.env > on).
+FROM_CONFIG: dict[str, str] = {}
+
+
 def load_config(path: Path = CONFIG) -> None:
     """Read KEY=VALUE lines from ~/.config/alnair/config.env. Variables already set in the shell win."""
     try:
@@ -67,8 +75,13 @@ def load_config(path: Path = CONFIG) -> None:
             continue
         key, value = line.split("=", 1)
         key, value = key.strip().removeprefix("export ").strip(), value.strip().strip('"').strip("'")
-        if key.isidentifier() and value:
-            os.environ.setdefault(key, os.path.expanduser(value))
+        if key.isidentifier() and value and key not in os.environ:
+            os.environ[key] = FROM_CONFIG[key] = os.path.expanduser(value)
+
+
+def shell_environ() -> dict[str, str]:
+    """The environment without the values load_config added: what the shell itself set."""
+    return {k: v for k, v in os.environ.items() if FROM_CONFIG.get(k) != v}
 
 
 load_config()
@@ -320,10 +333,12 @@ def inject_clp_plugin(argv: list[str], research: bool = False) -> list[str]:
 
 
 def finalize_run(lab, run: Path, store: Path | None, force_bili_off: bool = True, *, persist: bool = True,
-                 research: bool | None = None, research_home: Path | None = None, code_mode: bool | None = None) -> dict:
+                 research: bool | None = None, research_home: Path | None = None) -> dict:
     """Force bili off, merge CLP settings, open session ledger, record mem meta.
 
     persist=False (dry-run): only touch the run preview folder — not ~/.clp or ~/.local/state/claude-mem.
+    Code Mode is recorded by main (lab.save_code_mode) once the launch is decided, never here: a resume must
+    see whether the run has a record at all.
     """
     cfg = json.loads((run / "runtime.json").read_text())
     if force_bili_off:
@@ -337,9 +352,6 @@ def finalize_run(lab, run: Path, store: Path | None, force_bili_off: bool = True
         research_home = Path(cfg["researchHome"])
     cfg["research"] = bool(research)
     cfg["researchHome"] = str(research_home) if research_home else None
-    if code_mode is not None:  # None on a resume: Claude Code reopens a session only in the mode it started in
-        cfg["codeMode"] = bool(code_mode)
-    cfg.setdefault("codeMode", False)
     dump(run / "runtime.json", cfg)
     session_id = cfg["runId"]
     settings = json.loads((run / "settings.json").read_text())
@@ -469,6 +481,7 @@ def launch_argv_env(
     permission_mode: str | None = None,
     extra_claude_args: list[str] | None = None,
     preview: bool = False,
+    code_mode_status: dict | None = None,
 ) -> tuple[list[str], dict[str, str]]:
     if print_mode or output_format:
         raise ValueError(lab.HEADLESS_DISABLED)
@@ -478,7 +491,7 @@ def launch_argv_env(
     cfg_mode.update(executionMode=execution_mode, fableAvailable=lab.fable_available(execution_mode))
     dump(run / 'runtime.json', cfg_mode)
     argv, env = lab.launch_command(
-        run, prompt, resume=resume, load_auth=not preview, start_proxy=False
+        run, prompt, resume=resume, load_auth=not preview, start_proxy=False, code_mode_status=code_mode_status
     )
     cfg = json.loads((run / "runtime.json").read_text())
     argv = inject_clp_plugin(list(argv), research=bool(cfg.get("research")))
@@ -565,11 +578,13 @@ def run_codex(opt, passthrough: list[str]) -> int:
         env_updates["RESEARCH_HOME"] = str(opt.research_home.expanduser().resolve())
     argv_ = cb.launch(REPO, python, model=model, effort=effort, project=project, prompt=opt.task,
                       resume=opt.resume, extra=passthrough, research=research)
-    env = cb.session_env(dict(os.environ), env_updates)
+    # Codex has no Code Mode: its session gets no Code Mode variable at all, not even one the shell set.
+    env = {k: v for k, v in cb.session_env(dict(os.environ), env_updates).items() if not k.startswith("CLAUDE_CODE_EXPERIMENTAL_CODE_MODE")}
     if opt.dry_run:
         shown = [("developer_instructions=[alnair developer note]" if a.startswith("developer_instructions=") else a) for a in argv_]
         print(json.dumps({"backend": "codex", "model": model, "modelCheck": checked, "effort": effort or "Codex default",
                           "project": str(project), "sessionId": run_id, "research": research, "argv": shown,
+                          "codeModeEnv": env.get("CLAUDE_CODE_EXPERIMENTAL_CODE_MODE"),
                           "note": "No Codex session or model request was started."}, indent=2))
         return 0
     meta = {"schema": 1, "backend": "codex", "runId": run_id, "runDir": str(run), "project": str(project), "model": model,
@@ -649,8 +664,9 @@ def main(argv: list[str] | None = None) -> int:
                    help="start the session with Claude Code Remote Control on, optionally named (needs a claude.ai login); "
                         "use --remote-control=NAME when a prompt follows")
     p.add_argument("--code-mode", action=argparse.BooleanOptionalAction, default=None,
-                   help="Claude Code Code Mode (experimental): the model writes JavaScript that runs many tool calls "
-                        "in one step. Default: ALNAIR_CODE_MODE in ~/.config/alnair/config.env, else off")
+                   help="Claude Code Code Mode (experimental), on by default: the model writes JavaScript that runs "
+                        "many tool calls in one step. --no-code-mode, or ALNAIR_CODE_MODE=0 in the shell or "
+                        "~/.config/alnair/config.env, turns it off. Turned off with a note where it can't run")
     p.add_argument("--run", type=Path, help=argparse.SUPPRESS)
     # Split on -- so unknown Claude flags never steal our own options (REMAINDER footgun).
     raw = list(sys.argv[1:] if argv is None else argv)
@@ -679,19 +695,13 @@ def main(argv: list[str] | None = None) -> int:
     if codex and opt.task == "demo":
         raise ValueError("the demo runs on Claude; start it with plain alnair demo")
     session = opt.task not in {"doctor", "update", "fable-check"}
-    # Resolved only for a session launch and before any run folder is made (a bad value stops here).
-    code_mode, code_source = catalog_lab.code_mode_choice(opt.code_mode) if session else (False, "default")
-    if codex and code_mode:
-        if code_source == "flag":
-            raise ValueError("--code-mode is a Claude Code feature; Codex (--model gpt) has no Code Mode. Nothing was started.")
-        print("alnair: Code Mode is a Claude Code feature, so this Codex session runs without it.", file=sys.stderr)
     if codex and session:
+        # Codex has no Code Mode: the setting is never read, and only a typed --code-mode gets a word.
+        if opt.code_mode:
+            print("alnair: Code Mode is a Claude Code feature, so this Codex session runs without it.", file=sys.stderr)
         return run_codex(opt, passthrough)
-    if code_mode and code_source == "flag" and opt.resume is None:
-        # What the command line alone rules out is refused before any run folder is made.
-        early = catalog_lab.code_mode.blockers({}, [], [], opt.claude_args, opt.remote_control is not None)
-        if early:
-            raise ValueError(f"Code Mode cannot start: {'; '.join(early)}. Fix that or leave out --code-mode. Nothing was started.")
+    # Resolved only for a Claude session launch and before any run folder is made (a bad value stops here).
+    code_request = catalog_lab.code_mode_choice(opt.code_mode, shell_environ()) if session else (True, "default")
 
     if opt.task == "doctor":
         print(json.dumps(doctor(), indent=2))
@@ -705,7 +715,6 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     store = opt.store.expanduser().resolve() if opt.store else None
     prompt = opt.task if opt.task not in {"demo"} else ""
-    code_notes: list[str] = []
 
     if opt.resume is not None:
         run = lab.latest_run() if opt.resume in {"", "latest"} else Path(opt.resume).expanduser().resolve()
@@ -720,13 +729,9 @@ def main(argv: list[str] | None = None) -> int:
         # Prefer store recorded on a prior claude-mem launch
         if store is None and cfg.get("clpStore"):
             store = Path(cfg["clpStore"])
-        recorded = bool(cfg.get("codeMode"))
-        if opt.code_mode is not None and opt.code_mode != recorded:
-            code_notes.append(f"alnair: this session was started with Code Mode {'on' if recorded else 'off'} and resumes that way.")
         cfg = finalize_run(lab, run, store, force_bili_off=True, persist=False, **research_opts(opt, resume=True))
         if not opt.dry_run:
             os.chdir(cfg.get("launchCwd", cfg["project"]))
-        code_source = "run"
     else:
         if opt.task == "demo":
             # lab.prepare rejects a non-empty run dir. Create the lab demo project outside
@@ -748,21 +753,24 @@ def main(argv: list[str] | None = None) -> int:
         else:
             run, cfg = lab.prepare(opt.project, opt.mode, opt.model, opt.run, opt.full_tools, headless=opt.print_mode)
             os.chdir(cfg.get("launchCwd", cfg["project"]))
-        cfg = finalize_run(lab, run, store, force_bili_off=True, persist=False, code_mode=code_mode, **research_opts(opt))
+        cfg = finalize_run(lab, run, store, force_bili_off=True, persist=False, **research_opts(opt))
 
-    # Build the launch, then check a Code Mode run against what Code Mode needs (the final env after the
-    # bili/auth clean-up, the settings layers, the routed models, Remote Control and the passthrough flags).
+    # Decide Code Mode before the launch is built (settings files, routed models, Remote Control, the passthrough
+    # flags), then check it again against the final env after the bili/auth clean-up. Where it can't run it is
+    # turned off with one line, never refused; the launch is rebuilt only then.
     resume = opt.resume is not None
     launch = {"print_mode": opt.print_mode, "output_format": opt.output_format, "permission_mode": opt.permission_mode,
               "extra_claude_args": opt.claude_args, "preview": opt.dry_run}
-    argv_, env = launch_argv_env(lab, run, prompt, resume=resume, **launch)
-    kept, off = lab.settle_code_mode(run, env, source=code_source, resume=resume, args=opt.claude_args,
-                                     remote_control=opt.remote_control is not None)
-    if off:
-        code_notes += off
-        argv_, env = launch_argv_env(lab, run, prompt, resume=resume, **launch)
+    plan = {"request": code_request, "resume": resume, "flag": opt.code_mode, "args": opt.claude_args,
+            "remote_control": opt.remote_control is not None}
+    status, _ = lab.plan_code_mode(run, None, **plan)
+    argv_, env = launch_argv_env(lab, run, prompt, resume=resume, code_mode_status=status, **launch)
+    status, code_notes = lab.plan_code_mode(run, env, **plan)
+    if status["env"] != env.get(lab.CODE_MODE_ENV):
+        argv_, env = launch_argv_env(lab, run, prompt, resume=resume, code_mode_status=status, **launch)
     argv_ = with_remote_control(argv_, opt.remote_control)
-    cfg = json.loads((run / "runtime.json").read_text())
+    # A resume preview leaves the real run's record as it is; every other launch records its Code Mode.
+    cfg = json.loads((run / "runtime.json").read_text()) if resume and opt.dry_run else lab.save_code_mode(run, status)
     if not opt.dry_run:
         # Only now is the launch certain, so only now does state outside the run folder get written.
         persist_session(cfg, run, store)
@@ -792,7 +800,7 @@ def main(argv: list[str] | None = None) -> int:
                     "bili": {"requested": False, "active": env.get("CLAUDE_LAB_BILI") == "on"},
                     "pluginDirs": [shown[i + 1] for i, v in enumerate(shown) if v == "--plugin-dir"],
                     "research": {"enabled": bool(cfg.get("research")), "home": cfg.get("researchHome") or "default (~/.clp/research)"},
-                    "codeMode": {"enabled": kept, "source": code_source, "env": env.get(lab.CODE_MODE_ENV), "notes": code_notes},
+                    "codeMode": lab.code_mode_preview(status, code_notes, env, resume),
                     "settings": str(run / "settings.json"),
                     "argv": shown,
                     "note": "No Claude session or model request was started; bili forced off.",
@@ -802,7 +810,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
-    print(f"Alnair · interactive lab shell + CLP memory · bili off{' · code mode on' if kept else ''} · run: {run}", file=sys.stderr if opt.print_mode else sys.stdout, flush=True)
+    words = lab.code_mode.WORDS[lab.code_mode.label(status)]
+    print(f"Alnair · interactive lab shell + CLP memory · bili off · {words} · run: {run}", file=sys.stderr if opt.print_mode else sys.stdout, flush=True)
     os.execve(argv_[0], argv_, env)
     return 0
 

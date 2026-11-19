@@ -62,9 +62,14 @@ class StatusLineTest(unittest.TestCase):
         self.assertIn('compactions 0', lines[0])
         self.assertIn('bili off', lines[0])
 
-    def test_code_mode_shows_only_when_the_session_runs_it(self):
+    def test_code_mode_shows_how_the_launcher_set_it(self):
         self.write([reply(NOW - 600)])
-        self.assertIn('bili off · code mode', status.render(self.data(), {'CLAUDE_CODE_EXPERIMENTAL_CODE_MODE': '1'}, NOW)[0])
+        for label, words in [('on', 'code mode'), ('as-started', 'code mode as started'), ('off', 'code mode off'),
+                             ('auto-off', 'code mode off (auto)')]:
+            line = status.render(self.data(), {'CLAUDE_LAB_CODE_MODE': label}, NOW)[0]
+            self.assertTrue(line.endswith('bili off · ' + words), line)
+        # A session launched before the launcher set CLAUDE_LAB_CODE_MODE: only the variable itself counts.
+        self.assertTrue(status.render(self.data(), {'CLAUDE_CODE_EXPERIMENTAL_CODE_MODE': '1'}, NOW)[0].endswith('bili off · code mode'))
         self.assertNotIn('code mode', status.render(self.data(), {'CLAUDE_CODE_EXPERIMENTAL_CODE_MODE': '0'}, NOW)[0])
         self.assertNotIn('code mode', status.render(self.data(), {}, NOW)[0])
 

@@ -21,6 +21,8 @@ from datetime import datetime
 from pathlib import Path
 
 TTL_SECONDS = {'1h': 3600, '5m': 300}
+# CLAUDE_LAB_CODE_MODE (set by the launcher, see bin/code_mode.py label()) in plain words.
+CODE_MODE_WORDS = {'on': 'code mode', 'as-started': 'code mode as started', 'off': 'code mode off', 'auto-off': 'code mode off (auto)'}
 
 
 def parse_ts(text: str) -> float | None:
@@ -132,8 +134,10 @@ def render(data: dict, env: dict, now: float, cache_file: Path | None = None) ->
             name = '5-hour' if key == 'five_hour' else 'Weekly'
             warnings.append(f'{name} limit {pct}% used (resets {clock(window_info.get("resets_at"))}). Keep tasks small or wait.')
     parts.append('bili on' if bili else 'bili off')
-    if env.get('CLAUDE_CODE_EXPERIMENTAL_CODE_MODE') == '1':
-        parts.append('code mode')
+    # How the launcher set Code Mode (CLAUDE_LAB_CODE_MODE); a session launched before it existed shows only "on".
+    shown = CODE_MODE_WORDS.get(env.get('CLAUDE_LAB_CODE_MODE') or ('on' if env.get('CLAUDE_CODE_EXPERIMENTAL_CODE_MODE') == '1' else ''))
+    if shown:
+        parts.append(shown)
 
     if share >= 85:
         warnings.insert(0, 'Context nearly full: it compacts soon and loses detail. Finish this step, then /lab-new and /clear.')

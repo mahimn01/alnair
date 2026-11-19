@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -27,6 +28,15 @@ def _no_writes_to_real_claude_files() -> Iterator[None]:
     with protected_writes.recording(PROTECTED) as writes:
         yield
     assert writes == [], f"a test wrote the user's real Claude files: {writes}"
+
+
+@pytest.fixture(autouse=True)
+def _no_session_exec(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A test that reaches a launcher's real launch fails here instead of replacing pytest with claude."""
+    def refuse(*args: object, **kwargs: object) -> None:
+        raise AssertionError("a test must not exec a Claude session")
+
+    monkeypatch.setattr(os, "execve", refuse)
 
 
 @pytest.fixture(autouse=True)

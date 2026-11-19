@@ -4,9 +4,18 @@
 
 Added:
 
-- `alnair --code-mode` / `--no-code-mode` (also on `claude-lab` and `claude-clp`), defaulting from `ALNAIR_CODE_MODE=1|0` in `config.env`. It runs Claude Code's experimental Code Mode, where the model writes JavaScript that makes many tool calls in one step. Alnair sets `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE` only in the session's environment, saves the choice in the run, and keeps it on `--resume`
-- checks before launch for what Code Mode can't run with (telemetry switches, `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN`, `apiKeyHelper`, cloud providers, unsupported models, `--remote-control`, flags that remove `REPL`). An explicit `--code-mode` is refused; a `config.env` default is turned off for that session with a one-line reason. `--model gpt` refuses the flag, and bili is skipped while Code Mode is on
-- `code mode` in `--dry-run` output, the status line and `/lab-status` (which also counts scripts run and calls made inside them), and a Code Mode note in the session's system prompt
+- Claude Code's experimental Code Mode, **on by default** for every new Claude session from `alnair`, `claude-lab` and `claude-clp`. In Code Mode the model writes JavaScript that makes many tool calls in one step. Turn it off:
+  - for one session with `--no-code-mode`;
+  - for every session with `ALNAIR_CODE_MODE=0` in `config.env` or the shell.
+
+  The flag wins over the shell, which wins over `config.env`. Alnair sets `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE` only in the session's environment: `1` when on, `0` when you turned it off, and removed when it was turned off automatically. The first launch shows Claude Code's one-time "Yes, turn on Code Mode" prompt, which you answer yourself
+- automatic turn-off, with one line saying why, where Code Mode can't run. It is never a refusal, even for an explicit `--code-mode`. The causes:
+  - telemetry and feature-flag switches, `DISABLE_TELEMETRY` included at any value;
+  - a login that isn't a direct Claude subscription: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `apiKeyHelper`, an auth header in `ANTHROPIC_CUSTOM_HEADERS`, or a cloud provider;
+  - bili when its proxy routes the session, an unsupported model, `--remote-control`, flags or settings that remove `REPL`, or a project settings file that sets the variable to `0`.
+
+  `--model gpt` never reads the setting and gives Codex no Code Mode variable
+- the Code Mode record in each run's `runtime.json` (`codeModeStatus`: requested, source, enabled, env, reason). `--resume` keeps how the run was launched, and a run with no record follows the new default. The record shows in `--dry-run` output (with the session's Code Mode-related variables, login values redacted), the banner, the status line, `/lab-status` (which also counts scripts run and calls made inside them) and the session note. A Code Mode note goes in the session's system prompt only when Code Mode is on
 - lab guards that hold inside Code Mode scripts: the nested-session check now parses shell commands (including `$(…)`, `eval` and `sh -c`) instead of matching one pattern, writes to `~/.claude/settings.json` and `~/.claude.json` are refused from Bash and the edit tools, and script text that would start a headless session or write those files is refused before it runs
 - `format: "json"` on the CLP and research tools, which returns one JSON object a script can parse, plus complete input schemas and Code Mode notes in the clp-memory, research-loop, work-task and code-first-data skills
 - a tool section in session notes: direct calls, Code Mode scripts, calls made inside them, and commands run. The parser handles the transcript shapes it can't be sure of without failing
@@ -16,7 +25,8 @@ Added:
 Changed:
 
 - prompts the person didn't type (Code Mode script results, task notifications, other machine-made turns) skip lab routing and the readiness check, so they're never held back
-- `alnair --resume latest` skips a run whose launch was refused before a session started
+- `alnair --resume latest` skips a run whose launch was refused before a session started (only earlier builds of this release refused Code Mode launches)
+- the launcher tests can no longer start a real Claude session: `os.execve` is blocked in every launcher suite (lab, claude-mem, claude-clp), and the claude-clp suite now records writes to the real Claude files as the lab and claude-mem suites do
 
 ## 0.2.0 (2026-11-17)
 

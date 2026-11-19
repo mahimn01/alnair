@@ -214,10 +214,13 @@ def test_headless_refused_before_prepare(project,monkeypatch,flags):
     with pytest.raises(ValueError,match="Headless is disabled"):
         L.main(["--dry-run","--project",str(project),*flags])
 
-def test_dry_run_does_not_load_auth(project,capsys,monkeypatch):
+def test_dry_run_does_not_load_auth(project,capsys,monkeypatch,tmp_path):
     lab=L.load_lab()
-    def no_auth(*a,**kw): raise AssertionError("Dry run must not read auth")
-    monkeypatch.setattr(lab,"auth_environment",no_auth)
+    def no_token(*a,**kw): raise AssertionError("Dry run must not read the lab token from the Keychain")
+    selector=tmp_path/"auth.json"  # a lab login selector, so the preview's clean-up of inherited logins runs
+    selector.write_text(json.dumps({"schema":1,"source":"keychain","service":lab.TOKEN_SERVICE,"account":"lab","policy":"token"}))
+    monkeypatch.setattr(lab,"AUTH",selector)
+    monkeypatch.setattr(lab,"token_store",no_token)
     monkeypatch.setattr(L,"load_lab",lambda:lab)
     shown,_,run=_dry(project,capsys)
     shutil.rmtree(run)
