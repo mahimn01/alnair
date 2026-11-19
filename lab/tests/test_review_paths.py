@@ -126,3 +126,12 @@ def test_a_missing_policy_file_is_the_one_refusal_and_says_what_to_do(ab, capsys
     assert m.main(["--base", str(project), "--run", str(run), "--prompt", "Review"]) == 2
     err = capsys.readouterr().err
     assert str(run / "trading-policy.md") in err and "alnair --resume" in err
+
+
+def test_a_symlink_keeps_its_own_name(ab):
+    """First review: a prompt about a link was rewritten to name its target twice."""
+    project, run = ab
+    m = load()
+    (project / "LINK.md").symlink_to(project / "notes/Plan.md")
+    out = m.resolve_prompt("LINK.md is a symlink to notes/Plan.md", project, run)
+    assert out == f"{project / 'LINK.md'} is a symlink to {project / 'notes/Plan.md'}"

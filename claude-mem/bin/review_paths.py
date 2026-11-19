@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import unicodedata
@@ -43,7 +44,7 @@ def locate(name: str, roots: list[Path]) -> list[Path]:
                 if candidate.is_file():
                     # One file reached by two spellings (NFC and NFD on macOS) is still one file.
                     stat = candidate.stat()
-                    found.setdefault((stat.st_dev, stat.st_ino), candidate.resolve())
+                    found.setdefault((stat.st_dev, stat.st_ino), Path(os.path.abspath(candidate)))   # a link keeps its own name
         except (OSError, RuntimeError, ValueError):
             continue   # an unknown ~user, a name too long or with a NUL byte is simply not a file
     return sorted(found.values(), key=str)
@@ -67,7 +68,7 @@ class Resolver:
         if found:
             self.notes.setdefault(name, 'matches more than one file: ' + ', '.join(map(str, found)))
         else:
-            self.notes.setdefault(name, 'no such file under ' + ', '.join(map(str, self.roots)))
+            self.notes.setdefault(name, 'no file at that path in ' + ', '.join(map(str, self.roots)) + ' (subfolders are not searched)')
 
     def code(self, match: re.Match) -> str:
         """A backtick span: rewritten only when the whole span is one file name; commands stay as written."""

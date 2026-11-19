@@ -83,12 +83,18 @@ export function evidenceComplete(state, checks) {
     state.review.workspaceFingerprint === state.workspaceFingerprint);
 }
 
-// The reviewer's verdict: a JSON object with "approved" that is the whole answer, its start, its end or a
-// ```json block. Verdicts that disagree, or one only quoted in the middle of prose, are no verdict (null).
+// The reviewer's verdict: a JSON object with "approved". Every such object in the answer counts, and any two
+// that disagree make no verdict (null). One of them must stand where a verdict goes: on its own lines at the
+// start or end of the answer (or as all of it), or in a ```json block that opens or closes the answer.
+// One only quoted inside a sentence or in the middle of prose is no verdict either.
 export function reviewVerdict(answer) {
-  const text = String(answer ?? '').slice(0, 200000), verdicts = [];
-  for (let i = text.indexOf('{'); i >= 0; i = text.indexOf('{', i + 1)) {
-    // The balanced object starting here, reading JSON strings and their escapes.
+  const text = String(answer ?? '').slice(0, 100000), verdicts = [];
+  let read = 0, tried = 0;
+  // An object starts with { and a JSON key, so prose and code braces cost nothing; at most 200 are tried.
+  for (const start of text.matchAll(/\{(?=\s*")/g)) {
+    const i = start.index;
+    if (i < read) continue;   // inside an object already read
+    if (++tried > 200) break;
     let depth = 0, inString = false, end = -1;
     for (let j = i; j < text.length && end < 0; j++) {
       const c = text[j];
@@ -100,14 +106,19 @@ export function reviewVerdict(answer) {
     if (end < 0) continue;
     let value;
     try { value = JSON.parse(text.slice(i, end)); } catch { continue; }
-    if (!value || typeof value !== 'object' || Array.isArray(value) || !('approved' in value)) continue;
-    const before = text.slice(0, i), after = text.slice(end);
-    if (!before.trim() || !after.trim() || (/```(?:json)?\s*$/i.test(before) && /^\s*```/.test(after))) verdicts.push(value);
-    i = end - 1;
+    read = end;
+    if (value && typeof value === 'object' && !Array.isArray(value) && 'approved' in value) verdicts.push({value, placed:verdictPlaced(text, i, end)});
   }
-  if (!verdicts.length || verdicts.some(v => v.approved !== verdicts[0].approved)) return null;
-  const findings = verdicts.every(v => Array.isArray(v.findings)) ? [...new Map(verdicts.flatMap(v => v.findings).map(f => [JSON.stringify(f), f])).values()] : null;
-  return {approved:verdicts[0].approved, findings};
+  if (!verdicts.some(v => v.placed) || verdicts.some(v => v.value.approved !== verdicts[0].value.approved)) return null;
+  const findings = verdicts.every(v => Array.isArray(v.value.findings))
+    ? [...new Map(verdicts.flatMap(v => v.value.findings).map(f => [JSON.stringify(f), f])).values()] : null;
+  return {approved:verdicts[0].value.approved, findings};
+}
+function verdictPlaced(text, start, end) {
+  const before = text.slice(0, start), after = text.slice(end);
+  if (/(?:^|\n)[ \t]*$/.test(before) && /^[ \t]*(?:\n|$)/.test(after) && (!before.trim() || !after.trim())) return true;
+  const open = /(?:^|\n)[ \t]*```(?:json)?[ \t]*\n[ \t]*$/i.exec(before), close = /^[ \t]*\n[ \t]*```[ \t]*(?:\n|$)/.exec(after);
+  return Boolean(open && close && (!before.slice(0, open.index).trim() || !after.slice(close[0].length).trim()));
 }
 
 // A finding blocks approval unless it is plainly a note: severity info, informational, note, low or nit, or
@@ -175,12 +186,13 @@ const base = word => word.split('/').pop();
 // as `writes`. Returns null for text it cannot read with certainty (an unclosed quote or paren).
 export function splitShell(text) {
   const commands = [], subs = [], writes = [];
-  let words = [], word = '', inWord = false, pendingWrite = false, i = 0;
+  let words = [], word = '', inWord = false, pendingWrite = false, pendingInput = false, i = 0;
+  // The word after > or >> is a file written; the word after <, << or <<< is input, not a command word.
   const endWord = () => {
-    if (inWord) { if (pendingWrite) writes.push(word); else words.push(word); pendingWrite = false; }
+    if (inWord) { if (pendingWrite) writes.push(word); else if (!pendingInput) words.push(word); pendingWrite = pendingInput = false; }
     word = ''; inWord = false;
   };
-  const endCommand = () => { endWord(); if (words.length) commands.push(words); words = []; };
+  const endCommand = () => { endWord(); pendingWrite = pendingInput = false; if (words.length) commands.push(words); words = []; };
   // Index just past the ) that closes the ( at `open`, skipping quoted text; -1 when unclosed.
   const closeParen = open => {
     let depth = 0;
@@ -251,8 +263,8 @@ export function splitShell(text) {
       const op = /^(?:\d*>>?\|?|<<-?|<<<|<>|<)/.exec(text.slice(i))?.[0] || c;
       i += op.length;
       if (text[i] === '&') { i++; while (/[\d-]/.test(text[i] || '')) i++; continue; }  // 2>&1
-      pendingWrite = op.includes('>');
-      if (!pendingWrite) { while (text[i] === ' ' || text[i] === '\t') i++; while (i < text.length && !/[\s;&|()<>]/.test(text[i])) i++; }
+      // The operand is read as one shell word (quotes, escapes and substitutions included), then set aside.
+      pendingWrite = op.includes('>'); pendingInput = !pendingWrite;
       continue;
     }
     word += c; inWord = true; i++;
@@ -290,9 +302,10 @@ function commandDenial(words, subs, depth) {
   const program = words[i], name = base(program), args = words.slice(i + 1);
   // A program name built at run time from a substitution that names a launcher: $(which claude) -p.
   if (program.includes('\0') && subs.some(s => [...s.matchAll(/[^\s;&|()'"`]+/g)].some(m => LAUNCHERS.has(base(m[0]))))) return NESTED_SESSION;
-  // A word holding a whole command line ('claude -p x' in interpreter code that hands it to a shell) is read
-  // as one. Spaces only in its folder names ("/Users/u/Application Support/x/claude") make it one program.
-  if (/\s/.test(program.slice(program.lastIndexOf('/') + 1))) return nestedSessionDenial(program, depth + 1);
+  // A word holding a whole command line ('claude -p a/b' in interpreter code that hands it to a shell) is
+  // also read as that command line. A launcher path with spaces in its folders ("/Users/u/Application
+  // Support/x/claude") is that launcher, checked as one below.
+  if (/\s/.test(program) && !LAUNCHERS.has(name) && name !== 'codex') { const inner = nestedSessionDenial(program, depth + 1); if (inner) return inner; }
   if (LAUNCHERS.has(name)) {
     if (args.length === 1 && INFO_ARGS.has(args[0])) return null;
     if (name === 'claude' && args[0] === 'plugin' && ['validate','test'].includes(args[1]) && !args.some(a => SESSION_FLAGS.has(a))) return null;
@@ -306,6 +319,13 @@ function commandDenial(words, subs, depth) {
   }
   if (INTERPRETER.test(name)) for (const a of args) { const reason = /[[(]/.test(a) && codeListDenial(a, depth); if (reason) return reason; }
   if (DATA_PROGRAMS.has(name) && !(name === 'find' && args.some(a => /^-(?:exec|execdir|ok|okdir)$/.test(a)))) return null;
+  // A wrapper (env, sudo, timeout, xargs...) runs the command after its options: a shell or interpreter
+  // among its words is checked as the start of that command, so env A=1 python3 -c '...' reads as python3.
+  if (WRAPPERS.has(name)) for (let j = 0; j < args.length; j++) {
+    if (!SHELLS.has(base(args[j])) && !INTERPRETER.test(base(args[j]))) continue;
+    const reason = commandDenial(args.slice(j), subs, depth + 1);
+    if (reason) return reason;
+  }
   // Any other program (xargs, env, nohup, timeout, ssh, an unknown wrapper) that names a launcher
   // is treated as running it, and an argument that is itself a command line is read as one.
   for (const a of args) {

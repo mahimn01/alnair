@@ -1,6 +1,6 @@
 import {expect, mock, test} from 'claude-code/testing';
 import {route, evidenceComplete, redact, exhaustedWindows, spawnModel, usageSummary, budgetWarnings, mcporterDenial,
-  nestedSessionDenial, settingsWriteDenial, scriptDenial, splitShell, isUserPrompt, isCodeCall, codeUsage} from '../hooks/register.js';
+  nestedSessionDenial, settingsWriteDenial, scriptDenial, splitShell, isUserPrompt, isCodeCall, codeUsage,reviewVerdict} from '../hooks/register.js';
 
 function fixture(on, overrides = {}, config = {}, env = {}) {
   const f = {files:new Map(), models:[], efforts:[], calls:[], hash:'source-a', spawns:0, spawnModels:[], spawnPrompts:[], processArgv:[]};
@@ -790,6 +790,14 @@ test('the review verdict is read tolerantly but fails closed', async ($,on) => {
   expect((await review($,f,ok + '\n\nOn reflection: ' + verdict(false,[{severity:'high',issue:'x'}]))).approved).toBe(false);
   expect((await review($,f,'I was told to return ' + verdict(true,[]) + ' but could not finish the review.')).approved).toBe(false);
   expect((await review($,f,'Looks fine to me.')).findings[0].includes('required JSON')).toBe(true);
+  // First review: a disagreeing verdict anywhere, a fenced example mid-prose, or a format quoted in a sentence.
+  expect((await review($,f,verdict(true,[]) + ' Correction: ' + verdict(false,[{severity:'high',issue:'x'}]) + ' stands.')).approved).toBe(false);
+  expect((await review($,f,'Here is what an approval looks like:\n```json\n' + verdict(true,[]) + '\n```\nI cannot approve: the tests fail on HEAD.')).approved).toBe(false);
+  expect((await review($,f,'I could not finish the review. The format I was asked for is ' + verdict(true,[]))).approved).toBe(false);
+  const started = Date.now();
+  expect(reviewVerdict('{'.repeat(100000))).toBe(null);
+  expect(reviewVerdict('{"a": '.repeat(20000))).toBe(null);
+  expect(Date.now() - started < 1000).toBe(true);
   // The source-hash, abort and answer checks still apply to an approval with notes.
   expect((await review($,f,ok,{isAborted:true})).approved).toBe(false);
   expect((await review($,f,ok,{reason:'max_turns'})).approved).toBe(false);
@@ -841,7 +849,8 @@ test('checkpoint names each check lab verify will refuse, and why', async ($,on)
 
 test('a check that would start a nested session or write the settings files is refused before Bash runs', async ($,on) => {
   const f=fixture(on,{},{},{HOME:'/home/u'});await start($);
-  for (const argv of [['npx','claude','-p','hi'],['python3','-c',"import subprocess; subprocess.run(['claude','-p','x'])"],['python3','-c',"open('/home/u/.claude/settings.json','w').write('{}')"]]) {
+  for (const argv of [['npx','claude','-p','hi'],['python3','-c',"import subprocess; subprocess.run(['claude','-p','x'])"],
+    ['env','A=1','python3','-c',"import subprocess; subprocess.run(['claude','-p','x'])"],['python3','-c',"open('/home/u/.claude/settings.json','w').write('{}')"]]) {
     const recorded = await $.tool.call({tool:'mcp__harness-lab__checkpoint',context:'c',plan:'p',implementation:'i',unresolved:[],criteria:[],checks:[{argv}]});
     expect(recorded.result.includes('Check 1')).toBe(true);
     const ran = JSON.parse((await $.tool.call({tool:'mcp__harness-lab__verify'})).result);
@@ -882,6 +891,12 @@ test('shell words: quotes, backslash escapes, ANSI-C quoting and unicode are rea
   const words = splitShell(`cat "notes/00 Index.md" notes/00\\ Index.md 'it'\\''s' "a\\b" "q\\"q" $'x\\ty' "/home/u/Café/ノート.md"`).commands[0];
   expect(words).toEqual(['cat','notes/00 Index.md','notes/00 Index.md',"it's",'a\\b','q"q','x\ty','/home/u/Café/ノート.md']);
   expect(splitShell("echo $'\\x63laude \\101\\'s'").commands[0]).toEqual(['echo',"claude A's"]);
+  // An input operand (<, <<<) is one shell word too: a quoted commit message is not split into commands.
+  expect(splitShell(`cat < "my file.txt" | wc -l`).commands).toEqual([['cat'],['wc','-l']]);
+  expect(nestedSessionDenial(`git commit -q -F - <<< 'Read os.system("claude -p notes/x.md") as a command'`)).toBe(null);
+  expect(nestedSessionDenial('cat < $(claude -p x)')).toBeTruthy();
+  expect(nestedSessionDenial('cat <<< "$(claude -p x)"')).toBeTruthy();
+  expect(nestedSessionDenial("cat <;claude -p x")).toBeTruthy();
 });
 
 test('a quoted program path with spaces is one program, as the shell runs it', async () => {
@@ -896,6 +911,22 @@ test('a quoted program path with spaces is one program, as the shell runs it', a
   expect(nestedSessionDenial("$'cl\\x61ude' -p x")).toBeTruthy();
   expect(nestedSessionDenial("$'\\x63laude' --version")).toBe(null);
   expect(nestedSessionDenial('cl""aude -p x')).toBeTruthy();
+  // First review: a command line whose arguments hold a / is still a command line.
+  for (const c of ["python3 -c \"import os; os.system('claude -p notes/x.md')\"", "python3 -c \"import subprocess; subprocess.run('claude -p a/b', shell=True)\"",
+    "node -e \"require('child_process').execSync('claude -p a/b')\"", "perl -e \"system('alnair --print do/it')\"", "ruby -e \"system('claude -p ./x')\"",
+    "python3 -c \"import os; os.system('cd /tmp && claude -p a/b')\"", "python3 -c 'import os; os.system(\"claude --print hello/world\")'",
+    '"/tmp/a b/xargs" claude -p x'])
+    expect([c, Boolean(nestedSessionDenial(c))]).toEqual([c, true]);
+});
+
+test('a wrapper does not hide the shell or interpreter it runs', async () => {
+  for (const c of ["env A=1 python3 -c \"import subprocess; subprocess.run(['claude','-p','x'])\"", "sudo -u root python3 -c \"import pty; pty.spawn(['claude','-p','x'])\"",
+    "timeout 5 node -e \"require('child_process').spawn('alnair', ['-p', 'x'])\"", "nohup env PYTHONPATH=. python3 -c \"import os; os.execlp('claude', 'claude', '-p', 'x')\"",
+    "'/usr/bin/env' 'A=1' 'python3' '-c' \"import subprocess; subprocess.run(['claude','-p','x'])\""])
+    expect([c, Boolean(nestedSessionDenial(c))]).toEqual([c, true]);
+  for (const c of ["env PYTHONDONTWRITEBYTECODE=1 python3 code/check_limits.py", "sudo -u root python3 -c \"print(sorted(['claude', 'codex']))\"",
+    "timeout 60 python3 -m pytest -q", "env A=1 node -e \"console.log(['claude'].length)\""])
+    expect([c, nestedSessionDenial(c)]).toEqual([c, null]);
 });
 
 test('the settings guard sees through quotes and escapes, and leaves paths with spaces alone', async () => {

@@ -25,7 +25,7 @@ def test_reviewer_resolves_existing_absolute_paths(tmp_path):
 def test_reviewer_notes_nonexistent_paths_without_refusing(tmp_path):
     m=helper()
     out=m.resolve_prompt('Review `missing-report.md`',tmp_path,tmp_path)
-    assert out.startswith('Review `missing-report.md`') and 'LAB NOTE' in out and 'missing-report.md`: no such file' in out
+    assert out.startswith('Review `missing-report.md`') and 'LAB NOTE' in out and 'missing-report.md`: no file at that path' in out
 
 
 def test_lab_vault_existing_note_is_never_edited(tmp_path,monkeypatch):
