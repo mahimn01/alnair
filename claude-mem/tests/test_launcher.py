@@ -12,7 +12,9 @@ from memload import launcher as L
 
 
 def protected_state() -> dict:
-    return {str(p): (hashlib.sha256(p.read_bytes()).hexdigest(), p.stat().st_mtime_ns) for p in L.PROTECTED if p.is_file()}
+    # Content only, as the launcher checks: a running Claude Code re-saves its own files (remote-settings.json)
+    # with the same bytes, which changes the time but is not a write by these tests.
+    return {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in L.PROTECTED if p.is_file()}
 
 
 @pytest.fixture

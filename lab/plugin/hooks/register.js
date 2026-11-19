@@ -299,9 +299,11 @@ function programOf(text) {
   }
   return '';
 }
-// Programs that take a here-document as plain text: cat > note.md, git commit -F -, tee, jq, pbcopy ...
+// Programs that take a here-document as plain text: cat > note.md, git commit -F -, tee, jq, pbcopy, and
+// linters or highlighters told its language (shellcheck -s bash -, bat -l sh) ...
 const TEXT_READERS = new Set(['cat','tee','git','gh','pbcopy','mail','jq','yq','sed','awk','sort','uniq','wc','tr',
-  'base64','column','diff','patch','curl','head','tail','grep','egrep','fgrep','rg','echo','printf','less','more','true']);
+  'base64','column','diff','patch','curl','head','tail','grep','egrep','fgrep','rg','echo','printf','less','more','true',
+  'shellcheck','shfmt','bat','pygmentize','highlight','llm']);
 // How one pipeline stage reads its input: 'data' when its program is a known text reader; otherwise
 // any shell or interpreter word in it decides (sudo -u root bash, uv run python -, ssh host bash -s).
 function readerOf(stage) {

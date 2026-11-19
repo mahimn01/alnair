@@ -554,7 +554,9 @@ test('Bash commands are checked part by part, so a cd prefix or a pipe cannot hi
   for (const command of ["python3 -c \"print(sorted(['alnair', 'beta']))\"", "python3 -c \"names = set(['claude', 'codex']); print(len(names))\"",
     "python3 -c \"import json; d = json.load(open('c.json')); print(d.get('alnair', []))\"", "python3 - <<'EOF'\nprint(', '.join(['claude', 'codex']))\nEOF",
     "node -e \"console.log(['claude', 'codex'].length)\"", "node -e \"console.log(JSON.stringify(['claude', 'codex']))\"",
-    "python3 -c \"import os; os.execvp('claude', ['claude', '--version'])\""])
+    "python3 -c \"import os; os.execvp('claude', ['claude', '--version'])\"",
+    // Final review: a linter or highlighter told the body's language only reads it.
+    "shellcheck -s bash - <<'EOF'\n#!/bin/bash\nclaude -p \"$1\"\nEOF", "bat -l sh <<'EOF'\nalnair -p hi\nEOF"])
     expect([command,nestedSessionDenial(command)]).toEqual([command,null]);
   const f=fixture(on);await start($);
   const denied=await $.tool.call({tool:'Bash',command:"cd 'app' && claude -p hi",tool_use_id:'repl_1'});
