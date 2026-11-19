@@ -9,12 +9,13 @@ from pathlib import Path
 
 import pytest
 from memload import launcher as L
+from protected_writes import APP_OWNED  # lab/tests/protected_writes.py, put on the path by conftest.py
 
 
 def protected_state() -> dict:
-    # Content only, as the launcher checks: a running Claude Code re-saves its own files (remote-settings.json)
-    # with the same bytes, which changes the time but is not a write by these tests.
-    return {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in L.PROTECTED if p.is_file()}
+    # Content only, as the launcher checks, and without the files a running Claude Code rewrites itself
+    # (~/.claude.json, remote-settings.json): the write recorder in conftest.py checks every protected file.
+    return {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in L.PROTECTED if p.is_file() and p.name not in APP_OWNED}
 
 
 @pytest.fixture
@@ -273,3 +274,10 @@ def test_without_remote_control_argv_unchanged(project, capsys):
         assert "--remote-control" not in shown["argv"]
     finally:
         shutil.rmtree(shown["run"], ignore_errors=True)
+
+
+def test_every_test_runs_inside_the_write_recorder():
+    # conftest.py wraps each test in lab/tests/protected_writes.py; the real ~/.claude.json is watched.
+    import os
+    import protected_writes
+    assert os.path.abspath(L.HOME / ".claude.json") in protected_writes._state["watched"]

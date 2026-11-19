@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('lab', ROOT / 'bin/lab.py')
 lab = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(lab)
+from protected_writes import steady  # noqa: E402 - the recorder in conftest.py covers the files Claude Code rewrites
 cm = lab.code_mode
 CLEAN = {name: None for name in ('ALNAIR_CODE_MODE', 'ALNAIR_CONFIG', 'ALNAIR_LAB_LEGACY_ROOTS', cm.ENV, *cm.RESTART_ENV,
                                  *cm.OFF_SWITCHES, *cm.LOGIN_OVERRIDES, 'CLAUDE_CODE_AUTO_COMPACT_WINDOW')}
@@ -123,9 +124,9 @@ class RunTest(unittest.TestCase):
         self.project = base / 'project'
         shutil.copytree(ROOT / 'demo-project', self.project)
         self.run_dir = base / 'run'
-        self.before = lab.hashes()
+        self.before = steady(lab.hashes())
         lab.prepare(self.project, 'balanced', 'auto', self.run_dir)
-        self.addCleanup(lambda: self.assertEqual(self.before, lab.hashes()))
+        self.addCleanup(lambda: self.assertEqual(self.before, steady(lab.hashes())))
 
     def cfg(self, **changes) -> dict:
         cfg = json.loads((self.run_dir / 'runtime.json').read_text())

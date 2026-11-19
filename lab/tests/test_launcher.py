@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('lab',ROOT/'bin/lab.py')
 lab=importlib.util.module_from_spec(spec);spec.loader.exec_module(lab)
+from protected_writes import steady  # the recorder in conftest.py covers the files Claude Code rewrites
 
 class LauncherTest(unittest.TestCase):
     def setUp(self):
@@ -22,11 +23,11 @@ class LauncherTest(unittest.TestCase):
         self.project=Path(self.temp.name)/'project'
         shutil.copytree(ROOT/'demo-project',self.project)
         self.run=Path(self.temp.name)/'run'
-        self.before=lab.hashes()
+        self.before=steady(lab.hashes())
         lab.prepare(self.project,'balanced','auto',self.run)
 
     def tearDown(self):
-        self.assertEqual(self.before,lab.hashes())
+        self.assertEqual(self.before,steady(lab.hashes()))
         self.auth_patch.stop()
         self.registry_patch.stop()
         self.temp.cleanup()

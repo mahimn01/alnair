@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 from memload import launcher as L
+from protected_writes import APP_OWNED  # lab/tests/protected_writes.py, put on the path by conftest.py
 
 LAB = L.load_lab()
 CM = LAB.code_mode
@@ -19,10 +20,10 @@ SHELL = ("ALNAIR_CODE_MODE", "ALNAIR_CONFIG", CM.ENV, *CM.RESTART_ENV, *CM.OFF_S
 
 
 def protected_state() -> dict:
-    """sha256 of every protected file, ~/.claude/settings.json and ~/.claude.json among them. Content only, as
-    the launcher checks: a running Claude Code re-saves its own files (remote-settings.json) with the same
-    bytes, which changes the time but is not a write by these tests."""
-    return {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in L.PROTECTED if p.is_file()}
+    """sha256 of the protected files, ~/.claude/settings.json among them. Content only, as the launcher checks,
+    and without the two a running Claude Code rewrites itself (~/.claude.json, remote-settings.json): the
+    write recorder in conftest.py checks every protected file, those two included."""
+    return {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in L.PROTECTED if p.is_file() and p.name not in APP_OWNED}
 
 
 @pytest.fixture(autouse=True)
