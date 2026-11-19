@@ -22,6 +22,7 @@ runs the task folder's own `python3 -B code/check_limits.py`, which writes nothi
 from __future__ import annotations
 
 import argparse
+import difflib
 import hashlib
 import importlib.util
 import json
@@ -150,6 +151,15 @@ def timing_and_turns(path: Path) -> dict:
     return {"typed_turns": turns, "wall_seconds": round(wall, 1) if wall is not None else None}
 
 
+def links_diff(lines: list[str] | None) -> str:
+    """How broken-links.txt differs from the answer key, as a unified diff; empty when it matches."""
+    if lines is None:
+        return "broken-links.txt is missing"
+    if [unquote(x) for x in lines] == [unquote(x) for x in EXPECTED_LINKS]:
+        return ""
+    return "\n".join(difflib.unified_diff(EXPECTED_LINKS, lines, "answer key (TASK.md)", "broken-links.txt", lineterm=""))
+
+
 def criteria(folder: Path | None, seed_file: Path | None) -> dict:
     """The three TASK.md success criteria for one task folder."""
     if folder is None or not folder.is_dir():
@@ -157,7 +167,8 @@ def criteria(folder: Path | None, seed_file: Path | None) -> dict:
     out: dict = {}
     links = folder / "broken-links.txt"
     lines = [ln.strip() for ln in links.read_text().splitlines() if ln.strip()] if links.is_file() else None
-    out["broken_links"] = lines is not None and [unquote(x) for x in lines] == [unquote(x) for x in EXPECTED_LINKS]
+    out["broken_links_diff"] = links_diff(lines)
+    out["broken_links"] = lines is not None and not out["broken_links_diff"]
     check = subprocess.run([sys.executable, "-B", "code/check_limits.py"], cwd=folder, capture_output=True, text=True, timeout=60)
     out["check"] = check.returncode == 0 and "check passed" in check.stdout
     out["check_output"] = (check.stdout + check.stderr).strip()[-600:]
@@ -272,6 +283,9 @@ def show(results: list[dict]) -> None:
         out = cell(r, "criteria", "check_output")
         if out != "-":
             print(f"\n{r['arm']} check output:\n{out}")
+        diff = cell(r, "criteria", "broken_links_diff")
+        if diff not in ("-", ""):
+            print(f"\n{r['arm']} broken-links.txt does not match the answer key:\n{diff}")
         changed = cell(r, "criteria", "changed"), cell(r, "criteria", "added")
         print(f"{r['arm']} changed: {changed[0]}  added: {changed[1]}")
         written = cell(r, "criteria", "claude_code_files")

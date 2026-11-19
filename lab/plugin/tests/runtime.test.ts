@@ -3,7 +3,7 @@ import {route, evidenceComplete, redact, exhaustedWindows, spawnModel, usageSumm
   nestedSessionDenial, settingsWriteDenial, scriptDenial, splitShell, isUserPrompt, isCodeCall, codeUsage} from '../hooks/register.js';
 
 function fixture(on, overrides = {}, config = {}, env = {}) {
-  const f = {files:new Map(), models:[], efforts:[], calls:[], hash:'source-a', spawns:0, spawnModels:[]};
+  const f = {files:new Map(), models:[], efforts:[], calls:[], hash:'source-a', spawns:0, spawnModels:[], spawnPrompts:[], processArgv:[]};
   const state = {schema:1,workers:0,steps:0,mainSteps:0,agents:{},models:{},revision:0,
     codeEdited:false,verification:null,review:null,route:null,stopNudged:false,checkpoint:false,
     workspaceFingerprint:'source-a',taskSerial:0,runtimeReady:false,...overrides};
@@ -24,9 +24,11 @@ function fixture(on, overrides = {}, config = {}, env = {}) {
   on('turn.start',($,e) => ({turnId:e.turnId}));
   on('prompt.submit',($,e) => ({text:e.text,context:e.context}));
   on('agent.list',() => ({value:f.liveAgents || []}));
-  on('agent.spawn',($,e) => {f.spawns++;f.spawnModels.push(e.model);return {model:e.model || 'claude-sonnet-5-5',agentId:'worker-'+f.spawns};});
+  on('agent.spawn',($,e) => {f.spawns++;f.spawnModels.push(e.model);f.spawnPrompts.push(e.prompt);return {model:e.model || 'claude-sonnet-5-5',agentId:'worker-'+f.spawns};});
   on('process.run',($,e) => {
     const cfg=JSON.parse(f.files.get('/lab/run/runtime.json'));
+    f.processArgv.push(e.argv);
+    if(e.argv.includes('checks')) return {value:{exitCode:0,stdout:JSON.stringify({rejected:f.rejectedChecks || []}),stderr:''}};
     if(e.argv.some(x => x.endsWith('/review_paths.py'))) return {value:{exitCode:f.missingReviewPath ? 2 : 0,stdout:JSON.stringify({prompt:e.argv[e.argv.indexOf('--prompt')+1]}),stderr:f.missingReviewPath ? 'Reviewer artifact missing: missing.md' : ''}};
     if(e.argv.includes('scope')) {
       cfg.verificationProject=e.argv[e.argv.indexOf('--project')+1];
@@ -43,7 +45,7 @@ function fixture(on, overrides = {}, config = {}, env = {}) {
   });
   on('turn.complete',() => ({text:''}));
   on('classic.Stop',() => ({}));
-  on('tool.call',($,e) => {f.calls.push(e.tool);return {result:{stdout:f.stdout || 'ok',stderr:f.stderr || '',interrupted:false}};});
+  on('tool.call',($,e) => {f.calls.push(e.tool);if (f.denyBash && e.tool === 'Bash') return {deny:f.denyBash};return {result:{stdout:f.stdout || 'ok',stderr:f.stderr || '',interrupted:false}};});
   return f;
 }
 
@@ -740,4 +742,167 @@ test('without code mode the lead gets no Code Mode guidance',async ($,on) => {
   fixture(on);await start($);
   const off=await prompt($,'Implement pagination');
   expect(off.context.join('\n').includes('Code Mode')).toBe(false);
+});
+
+// 2026-11-18 Code Mode A/B regressions. The three reviewer answers below are verbatim from that run (paths
+// replaced): approved with info notes, approved with low notes (sent through SubagentHandback), and a bare
+// JSON verdict followed by prose. The old gate recorded all three as "not approved".
+const AB_INFO_FINDINGS = "{\"approved\": true, \"findings\": [{\"severity\": \"info\", \"detail\": \"No defects found. broken-links.txt (/project/broken-links.txt) is 139 bytes, read with od -c. It has 4 LF-terminated lines with no trailing blank line, in codepoint order ('Risk.md' sorts before 'archive/...' because 'R' is 0x52 and 'a' is 0x61). I worked through every link in the notes by hand. Not listed, correctly: AMZN.md, 00%20Index.md (it decodes to an existing file), AMZN.md#exit-plan, ../code/limits.py, ../ideas.txt, Plan.md, the https link, #plan and the [[AMZN]] wiki links. Listed, correctly: Risk.md, archive/Old%20Plan.md, img/drawdown.png (an image link) and the titled Missing%20Note.md link. The second check in acceptance.json does an exact byte comparison with the title included, and it exits 0.\"}, {\"severity\": \"info\", \"detail\": \"The task wording is ambiguous for the titled link. 'Target exactly as written' could mean the CommonMark destination 'Missing%20Note.md' without the title. The delivered line 'notes/Review.md: Missing%20Note.md \\\"a title\\\"' matches /lab/run/acceptance.json, and the choice is already recorded under unresolved in metrics.json. The final report to the user should mention this choice.\"}, {\"severity\": \"info\", \"detail\": \"limits.py: I removed the docstrings and dumped the AST. It contains only MAX_RETRIES=7, backoff, cap, attempts_left, jitter and Window.__init__/allows, with the same arguments and defaults, and each body is a single plain statement. All 6 functions now have docstrings that describe them accurately. The original file is not available (this is not a git repo and there is no backup), so I could not compare the ASTs before and after. Instead I relied on the unchanged checker, which checks names and behaviour. 'env PYTHONDONTWRITEBYTECODE=1 python3 /project/code/check_limits.py' prints 'check passed' and exits 0.\"}, {\"severity\": \"info\", \"detail\": \"Untouched files: .alnair-ab, ideas.txt, code/check_limits.py and all 4 notes still have mtime 1795048503. The only files in the tree are those 7 plus broken-links.txt and limits.py, and there is no __pycache__ or .pyc. The run's verification.md still says 'Not recorded yet' and verification in metrics.json is null. That is the harness's own step to record. I ran both acceptance checks myself just now and both pass.\"}]}";
+const AB_LOW_FINDINGS = "{\"approved\": true, \"findings\": [{\"severity\": \"low\", \"file\": \"/lab/run/verification.md\", \"issue\": \"The run's verification record is empty. Nothing is wrong with the work itself. To fix it, record the results of the two acceptance checks I re-ran myself (listed below).\", \"evidence\": \"verification.md contains only 'Not recorded yet.' I ran both acceptance.json checks myself: check_limits.py printed 'check passed' and exited 0, and broken-links.txt matched the expected file byte-for-byte.\"}, {\"severity\": \"low\", \"file\": \"/project/broken-links.txt\", \"issue\": \"The user's wording is ambiguous, and the implementer picked one reading. The Review.md line keeps the title in the target, as `Missing%20Note.md \\\"a title\\\"`. The brief lists the title among the parts of the target to ignore only when resolving the file, so keeping it under 'exactly as written' is reasonable and matches acceptance.json. The user should still be told about this choice. Nothing needs to change.\", \"evidence\": \"The line is `notes/Review.md: Missing%20Note.md \\\"a title\\\"`. implementation.md states this decision.\"}], \"summary\": \"(a) broken-links.txt is correct. My own scan of all 4 notes, using a script I wrote, found 10 local links. Six resolve: AMZN.md, 00%20Index.md, AMZN.md#exit-plan, ../code/limits.py, Plan.md and ../ideas.txt. Four are broken: Risk.md, archive/Old%20Plan.md, img/drawdown.png and Missing%20Note.md \\\"a title\\\". The [[AMZN]] wiki links, the https link and #plan were correctly skipped. The file is sorted by codepoint, has 4 lines ending in a newline and contains nothing else. (b) I rebuilt the original limits.py from /repo/claude-mem/bench/code_mode_ab/setup.sh, and its sha256 (f80c3acc...) matches /project.seed.json. A diff shows only 5 added docstring lines, for cap, attempts_left, jitter, Window.__init__ and Window.allows. With those docstrings removed, the old and new files parse to identical code. All 6 functions and methods now have docstrings. backoff's docstring was already there and is unchanged. The Window class has no docstring, which the task did not ask for because it covers functions and methods only. The new docstrings describe the code accurately: min with a ceiling, max(...,0), round(delay*(1+spread),3), and count <= size. (c) `PYTHONDONTWRITEBYTECODE=1 python3 /project/code/check_limits.py` prints 'check passed' and exits 0. (d) The folder now holds 9 files: the 8 originals plus broken-links.txt. The sha256 of every original except limits.py matches the seed record, and no __pycache__ folder exists. My scratch copy of the original is {SCRATCH}/orig_limits.py. There are no unresolved issues.\"}";
+const AB_JSON_THEN_PROSE = "{\"approved\": true, \"findings\": []}\n\nI found no defects. I checked the files myself and did not rely on the implementer's report.\n\n- **Broken links** (/project/broken-links.txt): the file has exactly 4 lines in sorted order, ends with a newline and contains nothing else:\n  - `notes/Plan.md: Risk.md`\n  - `notes/Plan.md: archive/Old%20Plan.md`\n  - `notes/Review.md: Missing%20Note.md \"a title\"`\n  - `notes/Review.md: img/drawdown.png`\n\n  I read all four notes under /project/notes and checked every link by hand. `AMZN.md`, `00%20Index.md` (which decodes to the existing \"00 Index.md\"), `AMZN.md#exit-plan`, `../code/limits.py`, `Plan.md` and `../ideas.txt` all point to files that exist. The https link, the `#plan` anchor and the `[[AMZN]]` wiki links are excluded, as the task asks. Keeping `\"a title\"` in the third line is a recorded decision that will be reported to the user, so I don't count it as a defect.\n- **Docstrings** (/project/code/limits.py): `backoff` already had one. Docstrings were added to `cap`, `attempts_left`, `jitter`, `Window.__init__` and `Window.allows`, and each one describes the code correctly. Names, signatures and function bodies are unchanged; the checker's name list and its 12 behaviour cases confirm this.\n- **Checker**: I ran `python3 -B check_limits.py` again and it printed `check passed`. That matches /lab/run/check-0.log. The lab's verification at revision 7 (verified-checks.json) shows both acceptance checks passing (exit 0), including the exact match on broken-links.txt.\n- **No other changes**: the only new file in the project is broken-links.txt, and there are no `__pycache__` folders or `.pyc` files. check_limits.py, ideas.txt, .alnair-ab and the notes all still have their 19:35 setup times. Only broken-links.txt and limits.py were written, at 22:19.\n\n**Unresolved:** there's no copy of the original limits.py to compare against, so \"only docstrings were added\" rests on the checker's tests and on reading the current file. Nothing is blocked.";
+async function review($, f, answer, done = {}) {
+  const reviewer = await $.agent.spawn({prompt:'Review final code', subagentType:'harness-lab:reviewer'});
+  await $.turn.complete({turnId:'review',agentId:reviewer.agentId,answer,durationMs:10,isAborted:false,reason:'answer',...done});
+  return JSON.parse(f.files.get('/lab/run/metrics.json')).review;
+}
+const verdict = (approved, findings) => JSON.stringify({approved, findings});
+
+test('the A/B reviewer approvals count: info or low notes, and a JSON verdict followed by prose', async ($,on) => {
+  const f=fixture(on,{checkpoint:true,codeEdited:true});await start($);
+  for (const answer of [AB_INFO_FINDINGS, AB_LOW_FINDINGS, AB_JSON_THEN_PROSE]) expect((await review($,f,answer)).approved).toBe(true);
+});
+
+test('only non-blocking findings approve; medium, high, critical, blocking or unreadable findings block', async ($,on) => {
+  const f=fixture(on,{checkpoint:true,codeEdited:true});await start($);
+  const approves = [
+    [{severity:'info',issue:'a'}], [{severity:'LOW',issue:'b'}], [{severity:'note',issue:'c'}],
+    [{severity:'low',blocking:false,issue:'d'}], [{blocking:false,issue:'no severity, marked non-blocking'}], [],
+  ];
+  for (const findings of approves) expect((await review($,f,verdict(true,findings))).approved).toBe(true);
+  const blocks = [
+    [{severity:'medium',issue:'a'}], [{severity:'high',issue:'b'}], [{severity:'critical',issue:'c'}],
+    [{severity:'low',blocking:true,issue:'d'}], [{severity:'high',blocking:false,issue:'e'}], [{issue:'no severity'}],
+    [{severity:'warning',issue:'unknown severity'}], ['a bare string finding'], [{severity:'info'},{severity:'medium'}],
+  ];
+  for (const findings of blocks) expect((await review($,f,verdict(true,findings))).approved).toBe(false);
+  expect((await review($,f,verdict(false,[{severity:'info'}]))).approved).toBe(false);
+  expect((await review($,f,JSON.stringify({approved:true}))).approved).toBe(false);
+  const recorded = await review($,f,verdict(true,[{severity:'low',issue:'tell the user'}]));
+  expect(recorded.findings[0].includes('tell the user')).toBe(true);
+});
+
+test('the review verdict is read tolerantly but fails closed', async ($,on) => {
+  const f=fixture(on,{checkpoint:true,codeEdited:true});await start($);
+  const ok = verdict(true,[{severity:'low',issue:'n'}]);
+  expect((await review($,f,'Summary first.\n\n```json\n' + ok + '\n```')).approved).toBe(true);
+  expect((await review($,f,'Checked everything.\n' + ok)).approved).toBe(true);
+  // Two verdicts that disagree, or a verdict only quoted in the middle of prose, are no verdict.
+  expect((await review($,f,ok + '\n\nOn reflection: ' + verdict(false,[{severity:'high',issue:'x'}]))).approved).toBe(false);
+  expect((await review($,f,'I was told to return ' + verdict(true,[]) + ' but could not finish the review.')).approved).toBe(false);
+  expect((await review($,f,'Looks fine to me.')).findings[0].includes('required JSON')).toBe(true);
+  // The source-hash, abort and answer checks still apply to an approval with notes.
+  expect((await review($,f,ok,{isAborted:true})).approved).toBe(false);
+  expect((await review($,f,ok,{reason:'max_turns'})).approved).toBe(false);
+  const reviewer = await $.agent.spawn({prompt:'Review final code', subagentType:'harness-lab:reviewer'});
+  f.hash = 'changed-during-review';
+  await $.turn.complete({turnId:'review',agentId:reviewer.agentId,answer:ok,durationMs:10,isAborted:false,reason:'answer'});
+  expect(JSON.parse(f.files.get('/lab/run/metrics.json')).review.approved).toBe(false);
+});
+
+test('a reviewer is asked for the JSON verdict with severities, other workers for a compact report', async ($,on) => {
+  const f=fixture(on);await start($);
+  await $.agent.spawn({prompt:'Review final code', subagentType:'harness-lab:reviewer'});
+  await $.agent.spawn({prompt:'Find the call sites', subagentType:'harness-lab:investigator'});
+  const [reviewer, investigator] = f.spawnPrompts;
+  for (const word of ['"approved"','"severity"','"blocking"','critical','info','nothing before or after']) expect(reviewer.includes(word)).toBe(true);
+  expect(reviewer.includes('about 300 words')).toBe(false);
+  expect(investigator.includes('about 300 words')).toBe(true);
+});
+
+test('lab verify never answers with a bare null: it returns the checker output or the refusals', async ($,on) => {
+  const f=fixture(on);await start($);
+  f.stdout = 'Traceback (most recent call last):\nValueError: Unsupported check program: env';
+  const crashed = JSON.parse((await $.tool.call({tool:'mcp__harness-lab__verify'})).result);
+  expect(crashed.evidence).toBe(null);
+  expect(crashed.error.includes('Unsupported check program: env')).toBe(true);
+  f.files.set('/lab/run/verified-checks.json',JSON.stringify({passed:false,revision:0,taskSerial:0,workspaceFingerprint:'source-a',checks:[],
+    rejected:[{index:0,argv:['env','-S','x'],reason:'env option -S is not supported'}]}));
+  const refused = JSON.parse((await $.tool.call({tool:'mcp__harness-lab__verify'})).result);
+  expect(refused.evidence.rejected[0].reason.includes('env option -S')).toBe(true);
+  expect(refused.next.includes('checkpoint')).toBe(true);
+});
+
+test('a denied verify call does not hand back older evidence', async ($,on) => {
+  const f=fixture(on);await start($);
+  f.files.set('/lab/run/verified-checks.json',JSON.stringify({passed:true,revision:0,taskSerial:0,workspaceFingerprint:'source-a'}));
+  f.denyBash = 'Permission denied by the user';
+  const denied = JSON.parse((await $.tool.call({tool:'mcp__harness-lab__verify'})).result);
+  expect(denied.evidence).toBe(null);
+  expect(denied.toolDenied).toBe('Permission denied by the user');
+});
+
+test('checkpoint names each check lab verify will refuse, and why', async ($,on) => {
+  const f=fixture(on);await start($);
+  f.rejectedChecks=[{index:0,argv:['env','-S','python3 x'],reason:'env option -S is not supported'}];
+  const recorded = await $.tool.call({tool:'mcp__harness-lab__checkpoint',context:'c',plan:'p',implementation:'i',unresolved:[],criteria:[],checks:[{argv:['env','-S','python3 x']}]});
+  expect(recorded.result.includes('env option -S is not supported')).toBe(true);
+  expect(recorded.result.includes('Check 1')).toBe(true);
+});
+
+test('a check that would start a nested session or write the settings files is refused before Bash runs', async ($,on) => {
+  const f=fixture(on,{},{},{HOME:'/home/u'});await start($);
+  for (const argv of [['npx','claude','-p','hi'],['python3','-c',"import subprocess; subprocess.run(['claude','-p','x'])"],['python3','-c',"open('/home/u/.claude/settings.json','w').write('{}')"]]) {
+    const recorded = await $.tool.call({tool:'mcp__harness-lab__checkpoint',context:'c',plan:'p',implementation:'i',unresolved:[],criteria:[],checks:[{argv}]});
+    expect(recorded.result.includes('Check 1')).toBe(true);
+    const ran = JSON.parse((await $.tool.call({tool:'mcp__harness-lab__verify'})).result);
+    expect(f.calls.includes('Bash')).toBe(false);
+    expect(ran.rejected[0].index).toBe(0);
+    expect(JSON.parse(f.files.get('/lab/run/verified-checks.json')).passed).toBe(false);
+  }
+});
+
+test('a financial review starts in a home session with no code folder selected', async ($,on) => {
+  const f=fixture(on,{scopeRequired:true,verificationProject:null,workspaceFingerprint:null},{homeWorkspace:true,project:'/home',verificationProject:null});await start($);
+  await prompt($,'Review current IBKR orders');
+  const reviewer = await $.agent.spawn({prompt:'Review the order analysis', subagentType:'harness-lab:reviewer'});
+  expect(reviewer.deny).toBe(undefined);
+  expect(f.spawns).toBe(1);
+  const argv = f.processArgv.find(a => a.some(x => String(x).endsWith('/review_paths.py')));
+  expect(argv.every(x => typeof x === 'string')).toBe(true);
+});
+
+test('changed acceptance checks need a fresh verify; re-recording the same checks keeps the evidence', async ($,on) => {
+  const f=fixture(on,{checkpoint:true,codeEdited:true});await start($);
+  const save = checks => $.tool.call({tool:'mcp__harness-lab__checkpoint',context:'c',plan:'p',implementation:'i',unresolved:[],criteria:[],checks});
+  await save([{argv:['python3','-m','pytest']}]);
+  const first = JSON.parse(f.files.get('/lab/run/metrics.json')).acceptanceSerial;
+  await save([{argv:['python3','-m','pytest']}]);
+  expect(JSON.parse(f.files.get('/lab/run/metrics.json')).acceptanceSerial).toBe(first);
+  await save([{argv:['python3','-m','pytest','-k','other']}]);
+  const second = JSON.parse(f.files.get('/lab/run/metrics.json')).acceptanceSerial;
+  expect(second).toBe(first + 1);
+  const state={checkpoint:true,codeEdited:true,revision:2,taskSerial:0,workspaceFingerprint:'now',acceptanceSerial:2,review:{approved:true,revision:2,workspaceFingerprint:'now'}};
+  const evidence={passed:true,revision:2,taskSerial:0,workspaceFingerprint:'now',acceptanceSerial:2};
+  expect(evidenceComplete(state,evidence)).toBe(true);
+  expect(evidenceComplete(state,{...evidence,acceptanceSerial:1})).toBe(false);
+  expect(evidenceComplete({...state,acceptanceSerial:undefined},{...evidence,acceptanceSerial:undefined})).toBe(true);
+});
+
+test('shell words: quotes, backslash escapes, ANSI-C quoting and unicode are read as the shell reads them', async () => {
+  const words = splitShell(`cat "notes/00 Index.md" notes/00\\ Index.md 'it'\\''s' "a\\b" "q\\"q" $'x\\ty' "/home/u/Café/ノート.md"`).commands[0];
+  expect(words).toEqual(['cat','notes/00 Index.md','notes/00 Index.md',"it's",'a\\b','q"q','x\ty','/home/u/Café/ノート.md']);
+  expect(splitShell("echo $'\\x63laude \\101\\'s'").commands[0]).toEqual(['echo',"claude A's"]);
+});
+
+test('a quoted program path with spaces is one program, as the shell runs it', async () => {
+  const app = '"/home/u/Library/Application Support/Claude/claude-code/2.1/claude"';
+  expect(nestedSessionDenial(app + ' --version')).toBe(null);
+  expect(nestedSessionDenial(app + ' -p hi')).toBeTruthy();
+  expect(nestedSessionDenial("'/opt/My Tools/alnair' --print task")).toBeTruthy();
+  expect(nestedSessionDenial('/opt/My\\ Tools/claude -p x')).toBeTruthy();
+  // A quoted whole command line, the shape interpreter code hands to a shell, is still read as one.
+  expect(nestedSessionDenial('"claude -p x"')).toBeTruthy();
+  expect(nestedSessionDenial('"/opt/My Tools/claude -p x"')).toBeTruthy();
+  expect(nestedSessionDenial("$'cl\\x61ude' -p x")).toBeTruthy();
+  expect(nestedSessionDenial("$'\\x63laude' --version")).toBe(null);
+  expect(nestedSessionDenial('cl""aude -p x')).toBeTruthy();
+});
+
+test('the settings guard sees through quotes and escapes, and leaves paths with spaces alone', async () => {
+  for (const c of ['cp x ~/.cla""ude.json','cp x ~/.cl\\aude.json',"cp x ~/'.claude'/sett''ings.json",'cp x "$HOME/.claude/settings.json"',
+    "cp x $'/home/u/\\x2eclaude.json'",'rm -rf "/home/u/.claude"','tee "/home/u/.claude/settings.json" < x'])
+    expect(settingsWriteDenial(c,HOME)).toBeTruthy();
+  for (const c of ['cat "/home/u/My Notes/00 Index.md"','python3 "/home/u/My Notes/check limits.py"','cp "/home/u/My Notes/a b.md" "/home/u/My Notes/c d.md"',
+    'cat "/home/u/Café/ノート.md" > "/home/u/out put.txt"','mv notes/00\\ Index.md "notes/01 Index.md"'])
+    expect(settingsWriteDenial(c,HOME)).toBe(null);
 });

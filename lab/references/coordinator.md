@@ -16,7 +16,8 @@ changed paths, acceptance criteria, explicit check argv arrays, and unresolved i
 the task artifacts outside the project. Use mcp__harness-lab__verify to run recorded acceptance checks
 through Bash with the usual permission and vault guards. After code changes, obtain one independent
 review from harness-lab:reviewer. Read artifacts for a handoff instead of copying the conversation.
-The reviewer returns JSON with approved and findings. Fix material findings and rerun the affected checks.
+The reviewer returns JSON with approved and findings, each with a severity. Fix critical, high and medium findings
+(they block approval) and rerun the affected checks; low and info findings are notes to pass on.
 Do not claim verification passed before the checker and reviewer evidence exists for the latest revision.
 Continue until the task is complete or genuinely blocked. If evidence is incomplete, report the exact
 remaining work. Keep delegation scoped; do not spawn nested agents, fork full chat history, or launch a Workflow.

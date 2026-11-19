@@ -24,7 +24,7 @@ after the other or at the same time. The rate limits you share between them affe
 
 ```text
 Work only inside this folder.
-1. Find every broken local link in the Markdown files under notes/. A link is the [text](target) or ![alt](target) form; ignore [[wiki]] links, http(s) links and links that are only an #anchor. A local link is broken when the file it points to (resolved from the note's own folder, after %20-style decoding, ignoring any #anchor or "title") does not exist. Write them to broken-links.txt in this folder, one per line, as `<note path relative to this folder>: <target exactly as written in the note>`, sorted, with nothing else in the file.
+1. Find every broken local link in the Markdown files under notes/. A link is the [text](target) or ![alt](target) form; ignore [[wiki]] links, http(s) links and links that are only an #anchor. A local link is broken when the file it points to (resolved from the note's own folder, after %20-style decoding, ignoring any #anchor or "title") does not exist. Write them to broken-links.txt in this folder, one per line, as `<note path relative to this folder>: <target>`, where <target> is the link's destination exactly as written between the parentheses, without any "title" after it. Sort the lines by byte order (as `LC_ALL=C sort` does) and put nothing else in the file.
 2. Add a docstring to every function and method in code/limits.py that lacks one. Don't change any behaviour, names or signatures.
 3. Run `python3 code/check_limits.py` and tell me its output.
 Don't change any other file.
@@ -33,7 +33,7 @@ Don't change any other file.
 ## Success criteria (collect.py checks each one)
 
 1. `broken-links.txt` holds exactly these four lines, in this order (collect.py also accepts the targets
-   %20-decoded):
+   %20-decoded, and prints a diff against these lines when they don't match):
 
    ```text
    notes/Plan.md: Risk.md

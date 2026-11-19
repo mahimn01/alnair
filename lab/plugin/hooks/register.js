@@ -77,10 +77,52 @@ export function evidenceComplete(state, checks) {
   if (!state.codeEdited) return true;
   if (state.scopeRequired) return false;
   return Boolean(checks?.passed && checks.revision === state.revision &&
-    checks.taskSerial === (state.taskSerial || 0) && state.review?.approved &&
+    checks.taskSerial === (state.taskSerial || 0) && (checks.acceptanceSerial ?? 0) === (state.acceptanceSerial ?? 0) &&
+    state.review?.approved &&
     state.review.revision === state.revision && checks.workspaceFingerprint === state.workspaceFingerprint &&
     state.review.workspaceFingerprint === state.workspaceFingerprint);
 }
+
+// The reviewer's verdict: a JSON object with "approved" that is the whole answer, its start, its end or a
+// ```json block. Verdicts that disagree, or one only quoted in the middle of prose, are no verdict (null).
+export function reviewVerdict(answer) {
+  const text = String(answer ?? '').slice(0, 200000), verdicts = [];
+  for (let i = text.indexOf('{'); i >= 0; i = text.indexOf('{', i + 1)) {
+    // The balanced object starting here, reading JSON strings and their escapes.
+    let depth = 0, inString = false, end = -1;
+    for (let j = i; j < text.length && end < 0; j++) {
+      const c = text[j];
+      if (inString) { if (c === '\\') j++; else if (c === '"') inString = false; }
+      else if (c === '"') inString = true;
+      else if (c === '{') depth++;
+      else if (c === '}' && --depth === 0) end = j + 1;
+    }
+    if (end < 0) continue;
+    let value;
+    try { value = JSON.parse(text.slice(i, end)); } catch { continue; }
+    if (!value || typeof value !== 'object' || Array.isArray(value) || !('approved' in value)) continue;
+    const before = text.slice(0, i), after = text.slice(end);
+    if (!before.trim() || !after.trim() || (/```(?:json)?\s*$/i.test(before) && /^\s*```/.test(after))) verdicts.push(value);
+    i = end - 1;
+  }
+  if (!verdicts.length || verdicts.some(v => v.approved !== verdicts[0].approved)) return null;
+  const findings = verdicts.every(v => Array.isArray(v.findings)) ? [...new Map(verdicts.flatMap(v => v.findings).map(f => [JSON.stringify(f), f])).values()] : null;
+  return {approved:verdicts[0].approved, findings};
+}
+
+// A finding blocks approval unless it is plainly a note: severity info, informational, note, low or nit, or
+// "blocking": false. Medium and worse, "blocking": true, an unknown severity or a non-object always block.
+const BLOCKING_SEVERITY = new Set(['medium','moderate','high','critical','major','blocker','severe','error']);
+const NOTE_SEVERITY = new Set(['info','informational','note','low','nit']);
+export function findingBlocks(finding) {
+  if (!finding || typeof finding !== 'object' || Array.isArray(finding)) return true;
+  const severity = String(finding.severity ?? '').trim().toLowerCase();
+  if (finding.blocking === true || BLOCKING_SEVERITY.has(severity)) return true;
+  return finding.blocking === false ? false : !NOTE_SEVERITY.has(severity);
+}
+
+// What a lab reviewer is told to return. The turn.complete gate reads exactly this shape.
+const REVIEW_CONTRACT = (project, run) => `\nLAB CONTRACT: review only; change nothing. Code verification folder: ${project}. Read its relevant project instructions and the task artifacts at ${run}, ${run}/personal-core.md, and ${run}/trading-policy.md for financial work. Answer with one JSON object, with nothing before or after it: {"approved": true or false, "findings": [{"severity": "critical|high|medium|low|info", "blocking": true or false, "file": "path:line", "issue": "the defect", "evidence": "what shows it", "fix": "the correction"}]}. critical, high and medium are defects that must be fixed before the work is done; they block approval. low and info are notes that need no change; they do not block. Leave out "blocking" to let the severity decide. Set "approved" to true only when no finding blocks; missing or stale verification evidence is a blocking finding. Do not spawn workers or modify Claude configuration.`;
 
 export function exhaustedWindows(windows, now = Date.now()) {
   return (windows || []).filter(w => ['five_hour','seven_day'].includes(w.kind) &&
@@ -178,7 +220,8 @@ export function splitShell(text) {
     if (c === '"') {
       let j = i + 1;
       while (j < text.length && text[j] !== '"') {
-        if (text[j] === '\\') { word += text[j + 1] ?? ''; j += 2; continue; }
+        // Inside double quotes a backslash escapes only $ ` " \\ and a newline; before anything else it stays.
+        if (text[j] === '\\') { const n = text[j + 1]; if (n === '\n') j += 2; else if (n !== undefined && '$`"\\'.includes(n)) { word += n; j += 2; } else { word += '\\'; j++; } continue; }
         if (opensSub(j) && text[j] !== '<' && text[j] !== '>') { const end = substitution(j); if (end < 0) return null; word += '\0'; j = end; continue; }
         word += text[j]; j++;
       }
@@ -186,6 +229,11 @@ export function splitShell(text) {
       inWord = true; i = j + 1; continue;
     }
     if (opensSub(i)) { const end = substitution(i); if (end < 0) return null; word += '\0'; inWord = true; i = end; continue; }
+    if (c === '$' && text[i + 1] === "'") {
+      const quoted = ansiC(text, i + 2);
+      if (!quoted) return null;
+      word += quoted.value; inWord = true; i = quoted.end; continue;
+    }
     if (c === '$' && text[i + 1] === '{') {
       const j = text.indexOf('}', i);
       if (j < 0) return null;
@@ -213,6 +261,27 @@ export function splitShell(text) {
   return {commands, subs, writes};
 }
 
+// The text of an ANSI-C quoted word ($'...') whose body starts at `at`, decoded as bash does, and the index
+// past its closing quote; null when it never closes.
+const ANSI_C = {a:'\x07',b:'\b',e:'\x1b',E:'\x1b',f:'\f',n:'\n',r:'\r',t:'\t',v:'\v','\\':'\\',"'":"'",'"':'"','?':'?'};
+function ansiC(text, at) {
+  let value = '';
+  for (let j = at; j < text.length; j++) {
+    const c = text[j];
+    if (c === "'") return {value, end:j + 1};
+    if (c !== '\\') { value += c; continue; }
+    const n = text[++j];
+    if (n === undefined) return null;
+    const code = /^(?:([0-7]{1,3})|x([0-9A-Fa-f]{1,2})|u([0-9A-Fa-f]{1,4})|U([0-9A-Fa-f]{1,8})|c(.))/.exec(text.slice(j));
+    if (code) {
+      const point = code[1] ? parseInt(code[1], 8) : code[2] ? parseInt(code[2], 16) : code[3] ? parseInt(code[3], 16) : code[4] ? parseInt(code[4], 16) : code[5].charCodeAt(0) & 31;
+      value += point <= 0x10ffff ? String.fromCodePoint(point) : '';
+      j += code[0].length - 1;
+    } else value += n in ANSI_C ? ANSI_C[n] : '\\' + n;
+  }
+  return null;
+}
+
 // Why one simple command (its words) must not run, or null.
 function commandDenial(words, subs, depth) {
   let i = 0;
@@ -221,7 +290,9 @@ function commandDenial(words, subs, depth) {
   const program = words[i], name = base(program), args = words.slice(i + 1);
   // A program name built at run time from a substitution that names a launcher: $(which claude) -p.
   if (program.includes('\0') && subs.some(s => [...s.matchAll(/[^\s;&|()'"`]+/g)].some(m => LAUNCHERS.has(base(m[0]))))) return NESTED_SESSION;
-  if (/\s/.test(program)) return nestedSessionDenial(program, depth + 1);
+  // A word holding a whole command line ('claude -p x' in interpreter code that hands it to a shell) is read
+  // as one. Spaces only in its folder names ("/Users/u/Application Support/x/claude") make it one program.
+  if (/\s/.test(program.slice(program.lastIndexOf('/') + 1))) return nestedSessionDenial(program, depth + 1);
   if (LAUNCHERS.has(name)) {
     if (args.length === 1 && INFO_ARGS.has(args[0])) return null;
     if (name === 'claude' && args[0] === 'plugin' && ['validate','test'].includes(args[1]) && !args.some(a => SESSION_FLAGS.has(a))) return null;
@@ -501,7 +572,10 @@ function shellWritesSettings(command, home, dirs, depth) {
 // target may be a folder or glob that never spells the name (rm -rf ~/.c*).
 export function settingsWriteDenial(command, home, cwd = null) {
   const text = String(command || '');
-  if (!home || !/\.claude|settings\.json|\b(?:rm|mv|trash|srm|shred|unlink)\b/i.test(text)) return null;
+  // Quotes and backslashes taken out, so ~/.cla""ude.json or ~/.cl\aude.json still names the file; an ANSI-C
+  // word ($'\x2eclaude.json') can spell anything, so it always gets the full reading.
+  const plain = text.replace(/["'\\]/g, '');
+  if (!home || (!text.includes("$'") && !/\.claude|settings\.json|\b(?:rm|mv|trash|srm|shred|unlink)\b/i.test(plain))) return null;
   return shellWritesSettings(text, home, [cwd], 0) ? SETTINGS_DENIAL : null;
 }
 
@@ -742,19 +816,50 @@ let lock = Promise.resolve();
     return {turnId:e.turnId,index:e.index,answer:reason,toolUses:[],stopReason:'end_turn',usage:null};
   }
 
+  // The recorded checks that the lab's own Bash guards would refuse. lab.py runs each check as a process,
+  // out of sight of those guards, so a check is read here as the command line it is.
+  async function guardedChecks($) {
+    let checks;
+    try { checks = JSON.parse(await $.fs.read(run + '/acceptance.json')).checks; } catch { return []; }
+    const cwd = state.verificationProject || cfg.project;
+    return (Array.isArray(checks) ? checks : []).flatMap((check, index) => {
+      const argv = check?.argv;
+      if (!Array.isArray(argv) || !argv.length || !argv.every(a => typeof a === 'string')) return [];
+      const line = argv.map(shellQuote).join(' ');
+      const reason = nestedSessionDenial(line) || settingsWriteDenial(line, home, cwd);
+      return reason ? [{index,argv,reason:'the lab guards refuse it: ' + reason}] : [];
+    });
+  }
+  const REFUSED_NEXT = 'Record allowed checks with the lab checkpoint tool (mcp__harness-lab__checkpoint), then run verify again.';
+
   async function runVerify($) {
     await refreshProject($);
     if (state.scopeRequired) return {result:'Select the specific code folder with /lab-project /absolute/path or the select_project tool before verification.'};
+    const guarded = await guardedChecks($);
+    if (guarded.length) {
+      // No check runs, and a failing record replaces any older evidence.
+      const evidence = {revision:state.revision,taskSerial:state.taskSerial || 0,acceptanceSerial:state.acceptanceSerial || 0,
+        workspaceFingerprint:state.workspaceFingerprint,passed:false,checks:[],rejected:guarded,error:'No check ran: the lab guards refuse ' + guarded.length + ' of the recorded checks.'};
+      await $.fs.write(run + '/verified-checks.json', JSON.stringify(evidence, null, 2));
+      await change($, () => { state.verification = {passed:false,revision:state.revision,taskSerial:state.taskSerial || 0}; });
+      return {result:JSON.stringify({evidence,rejected:guarded,next:REFUSED_NEXT})};
+    }
     const command = 'python3 ' + shellQuote(root + '/bin/lab.py') + ' verify --run ' + shellQuote(run);
     const checked = await $.tool.call({tool:'Bash',command,description:'Run the lab acceptance checks and record their exit codes'});
-    const evidence = await proof($);
+    // A denied call ran nothing, so a file on disk is older evidence, not this verify's.
+    const evidence = checked.deny ? null : await proof($);
     const hint = evidence ? await change($, () => {
       state.verification = {passed:evidence.passed,revision:evidence.revision,taskSerial:evidence.taskSerial};
       state.verifyFailures = evidence.passed ? 0 : (state.verifyFailures || 0) + 1;
       if (!evidence.passed && state.verifyFailures >= 2) setHint('acceptance checks failed twice');
       return takeHint();
     }) : null;
-    return {result:JSON.stringify({evidence,toolDenied:checked.deny || null,...(hint ? {next:hintText(hint)} : {})})};
+    // With no evidence, say why: the end of what the checker printed.
+    const output = checked.result ? [checked.result.stdout, checked.result.stderr].filter(Boolean).join('\n') : '';
+    const refused = evidence && (evidence.rejected?.length || evidence.error);
+    return {result:JSON.stringify({evidence,toolDenied:checked.deny || null,
+      ...(!evidence && !checked.deny ? {error:redact(output.slice(-1500)) || 'lab verify wrote no evidence and printed nothing.'} : {}),
+      ...(refused ? {next:REFUSED_NEXT} : hint ? {next:hintText(hint)} : {})})};
   }
 
   async function selectProject($, path) {
@@ -881,7 +986,7 @@ export function register(on) {
     try {
       if (REVIEW_ROLE.test(e.subagentType)) {
         const base = state?.verificationProject || cfg?.project;
-        const checked = await $.process.run(['python3',root + '/bin/review_paths.py','--base',base,'--run',run,'--prompt',e.prompt],{timeoutMs:10000});
+        const checked = await $.process.run(['python3',root + '/bin/review_paths.py',...(base ? ['--base',String(base)] : []),'--run',run,'--prompt',String(e.prompt ?? '')],{timeoutMs:10000});
         if (checked.exitCode !== 0) return {deny:redact(checked.stderr || 'Reviewer artifact validation failed; save the report and use real absolute paths.')};
         const resolved = JSON.parse(checked.stdout);
         if (typeof resolved.prompt !== 'string') return {deny:'Reviewer path validation returned no resolved prompt.'};
@@ -905,7 +1010,7 @@ export function register(on) {
       if (warnings.length) $.ui.log('Claude Lab soft budget: ' + warnings.join('; ') + '. Consider asking the lead to stop and check with you.');
       const reviewProject = state.verificationProject || cfg.project, reviewTaskSerial = state.taskSerial;
       const reviewHash = /reviewer/i.test(e.subagentType) ? await refreshProject($) : null;
-      const contract = `\nLAB CONTRACT: own only your assigned scope. Code verification folder: ${reviewProject}. Read its relevant project instructions and the task artifacts at ${run}. Read ${run}/personal-core.md before editing or committing, and ${run}/trading-policy.md for financial work. Return a compact report (about 300 words): findings, file/source paths, verification evidence and unresolved issues. Multi-step data or bulk output: process it with a throwaway script and return summaries with a path to the full output, not dumps. Do not spawn workers or modify Claude configuration.`;
+      const contract = REVIEW_ROLE.test(e.subagentType) ? REVIEW_CONTRACT(reviewProject, run) : `\nLAB CONTRACT: own only your assigned scope. Code verification folder: ${reviewProject}. Read its relevant project instructions and the task artifacts at ${run}. Read ${run}/personal-core.md before editing or committing, and ${run}/trading-policy.md for financial work. Return a compact report (about 300 words): findings, file/source paths, verification evidence and unresolved issues. Multi-step data or bulk output: process it with a throwaway script and return summaries with a path to the full output, not dumps. Do not spawn workers or modify Claude configuration.`;
       const financialPolicy = FINANCIAL.test(e.prompt) || (state.route?.financial && OPUS_ROLE.test(e.subagentType)) ? '\nSCOPED TRADING POLICY:\n' + await $.fs.read(run + '/trading-policy.md') : '';
       const result = await next({...e,...{cwd:reviewProject},...(model ? {model} : {}),prompt:e.prompt + contract + financialPolicy});
       if (result.agentId) await change($, () => { state.agents[result.agentId] = {...state.agents[result.agentId],role:e.subagentType,model:result.model || model || null,effort:state.agents[result.agentId]?.effort || null,steps:state.agents[result.agentId]?.steps || 0,reviewHash,reviewProject,reviewTaskSerial}; });
@@ -988,8 +1093,19 @@ export function register(on) {
         await $.fs.write(run + '/acceptance.json',JSON.stringify({criteria:e.criteria,checks:e.checks},null,2));
         state.unresolved = (e.unresolved || []).map(x => redact(x).slice(0,500));
         state.checkpoint = true;
+        // New checks need a new verify: evidence names the acceptance serial it ran (see evidenceComplete).
+        const checks = JSON.stringify(e.checks ?? null);
+        if (checks !== state.acceptanceChecks) { state.acceptanceSerial = (state.acceptanceSerial || 0) + 1; state.acceptanceChecks = checks; }
       });
-      return {result:'Compact task checkpoint recorded. Acceptance checks and independent review determine verified completion.'};
+      // Say now which checks lab verify will refuse, instead of at verify time.
+      let refused = await guardedChecks($);
+      try {
+        const listed = await $.process.run(['python3',root + '/bin/lab.py','checks','--run',run],{timeoutMs:10000});
+        if (listed.exitCode === 0) refused = [...JSON.parse(listed.stdout).rejected, ...refused];
+      } catch { /* lab verify reports the same refusals */ }
+      const note = refused.length ? '\nlab verify will refuse these checks and run none until they are re-recorded:\n' +
+        refused.map(r => `- Check ${r.index + 1} (${redact((r.argv || []).join(' ')).slice(0,200)}): ${r.reason}`).join('\n') : '';
+      return {result:'Compact task checkpoint recorded. Acceptance checks and independent review determine verified completion.' + note};
     }
     if (e.tool === 'mcp__harness-lab__verify') return runVerify($);
     if (e.tool === 'mcp__harness-lab__select_project') {
@@ -1044,13 +1160,16 @@ export function register(on) {
       if (worker && /reviewer|staff-reviewer/i.test(worker.role || '')) {
         // An old-scope reviewer may finish normally, but cannot approve or poison the lead's new task.
         if (worker.reviewProject !== (state.verificationProject || cfg.project) || worker.reviewTaskSerial !== state.taskSerial) return;
-        try {
-          const report = JSON.parse(String(e.answer).replace(/^\s*```(?:json)?\s*/,'').replace(/\s*```\s*$/,''));
-          state.review = {approved:report.approved === true && Array.isArray(report.findings) && report.findings.length === 0 && worker.reviewHash === reviewHash && !e.isAborted && e.reason === 'answer',
-            findings:(report.findings || []).slice(0,12).map(x => redact(JSON.stringify(x)).slice(0,700)),revision:state.revision};
+        const verdict = reviewVerdict(e.answer);
+        if (!verdict) state.review = {approved:false,findings:['Reviewer did not return the required JSON report.'],revision:state.revision};
+        else {
+          const findings = verdict.findings || ['The verdict has no findings array.'];
+          const blocking = findings.filter(findingBlocks).length;
+          state.review = {approved:verdict.approved === true && Array.isArray(verdict.findings) && blocking === 0 && worker.reviewHash === reviewHash && !e.isAborted && e.reason === 'answer',
+            findings:findings.slice(0,12).map(x => redact(typeof x === 'string' ? x : JSON.stringify(x)).slice(0,700)),blocking,revision:state.revision};
           state.review.workspaceFingerprint = reviewHash;
-          if (!state.review.approved) setHint('the independent review did not approve the latest revision');
-        } catch {state.review = {approved:false,findings:['Reviewer did not return the required JSON report.'],revision:state.revision};}
+        }
+        if (!state.review.approved) setHint('the independent review did not approve the latest revision');
       }
     });
     const result = await next(e);

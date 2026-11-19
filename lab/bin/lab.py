@@ -620,6 +620,13 @@ def upgrade_run(run: Path, full_tools: bool = False) -> dict:
                 'fullTools': full_tools or bool(cfg.get('fullTools'))})
     dump(run / 'runtime.json', cfg)
     dump(run / 'settings.json', settings(run, bool(cfg.get('homeWorkspace')), cfg['fullTools'], cfg.get('executionMode','interactive')))
+    # A reviewer cannot start without the two policy files, so a resume restores any that went missing.
+    if not all((run / name).is_file() for name in ('personal-core.md', 'trading-policy.md')):
+        core, trading = core_and_trading()
+        for name, text in [('personal-core.md', core), ('trading-policy.md', trading)]:
+            if not (run / name).is_file():
+                (run / name).write_text(text)
+                (run / name).chmod(0o600)
     return cfg
 
 
@@ -729,7 +736,57 @@ def launch_command(run: Path, prompt: str = '', resume: bool = False, load_auth:
     return argv, env
 
 
+# The programs an acceptance check may run, directly or as `env NAME=value ... program`.
+CHECK_PROGRAMS = frozenset({'python', 'python3', 'pytest', 'ruff', 'mypy', 'npm', 'pnpm', 'yarn', 'bun',
+                            'node', 'npx', 'uv', 'cargo', 'go', 'make', 'tsc'})
+ENV_ASSIGNMENT = re.compile(r'[A-Za-z_][A-Za-z0-9_]*=')
+# Variables that change which program or library runs, which would undo the program check.
+LOADER_VARIABLES = re.compile(r'PATH|LD_\w*|DYLD_\w*')
+
+
+def check_problem(argv: object) -> str | None:
+    """Why lab verify refuses to run this check argv, or None when it may run."""
+    if not isinstance(argv, list) or not argv or not all(isinstance(a, str) for a in argv):
+        return 'a check needs an argv array of strings, with no shell interpolation'
+    words = argv
+    if Path(argv[0]).name == 'env':
+        # env only sets variables for the program after it; its options (-S, -i, -u, --) are refused.
+        words = argv[1:]
+        while words and ENV_ASSIGNMENT.match(words[0]):
+            name = words[0].split('=', 1)[0]
+            if LOADER_VARIABLES.fullmatch(name):
+                return f'env may not set {name}: it changes which program or library runs'
+            words = words[1:]
+        if not words:
+            return 'env has no program to run'
+        if words[0].startswith('-'):
+            return f'env option {words[0]} is not supported; write env NAME=value ... program'
+    program = Path(words[0]).name
+    if program not in CHECK_PROGRAMS:
+        return (f'{program} is not an allowed check program; use one of ' + ', '.join(sorted(CHECK_PROGRAMS))
+                + ', optionally after env NAME=value')
+    return None
+
+
+def refusals(checks: list) -> list[dict]:
+    """Each check lab verify would refuse, with its position, argv and the reason."""
+    out = []
+    for index, check in enumerate(checks):
+        argv = check.get('argv') if isinstance(check, dict) else None
+        if problem := check_problem(argv):
+            out.append({'index': index, 'argv': argv, 'reason': problem})
+    return out
+
+
+def check_refusals(run: Path) -> list[dict]:
+    """The refusals for the checks recorded in a run's acceptance.json (read-only)."""
+    checks = json.loads((run / 'acceptance.json').read_text()).get('checks', [])
+    return refusals(checks if isinstance(checks, list) else [])
+
+
 def verify(run: Path) -> dict:
+    # Drop the previous evidence first, so a verify that refuses or breaks never leaves an older pass behind.
+    (run / 'verified-checks.json').unlink(missing_ok=True)
     cfg = json.loads((run / 'runtime.json').read_text())
     metrics = json.loads((run / 'metrics.json').read_text())
     acceptance = json.loads((run / 'acceptance.json').read_text())
@@ -737,18 +794,16 @@ def verify(run: Path) -> dict:
     if project is None:
         raise ValueError('Select the code folder with /lab-project /absolute/path before verification')
     checks = acceptance.get('checks', [])
-    if not checks or len(checks) > 6:
-        raise ValueError('Record 1–6 meaningful acceptance checks before verification')
-    results = []
+    error, rejected, results = None, [], []
+    if not isinstance(checks, list) or not checks or len(checks) > 6:
+        error = 'Record 1–6 meaningful acceptance checks before verification'
+    elif rejected := refusals(checks):
+        # Refuse the whole set: evidence from only some of the recorded checks would read as a pass.
+        error = (f'Refused {len(rejected)} of {len(checks)} checks, so none ran (see rejected). '
+                 'Record allowed checks with the lab checkpoint tool, then verify again.')
     initial = fingerprint(Path(project))['sha256']
-    allowed = {'python', 'python3', 'pytest', 'ruff', 'mypy', 'npm', 'pnpm', 'yarn', 'bun',
-               'node', 'npx', 'uv', 'cargo', 'go', 'make', 'tsc'}
-    for index, check in enumerate(checks):
-        argv = check.get('argv')
-        if not isinstance(argv, list) or not argv or not all(isinstance(a, str) for a in argv):
-            raise ValueError('Each check needs an argv array, with no shell interpolation')
-        if Path(argv[0]).name not in allowed:
-            raise ValueError('Unsupported check program: ' + Path(argv[0]).name)
+    for index, check in enumerate(checks if error is None else []):
+        argv = check['argv']
         timeout = min(60, max(1, int(check.get('timeoutSeconds', 60))))
         try:
             result = subprocess.run(argv, cwd=project, text=True, stdout=subprocess.PIPE,
@@ -764,11 +819,14 @@ def verify(run: Path) -> dict:
         log.write_text(clean)
         log.chmod(0o600)
         results.append({'argv': argv, 'exitCode': code, 'log': str(log), 'tail': clean[-1800:]})
-    final = fingerprint(Path(project))['sha256']
+    final = fingerprint(Path(project))['sha256'] if results else initial
     report = {'revision': metrics['revision'], 'taskSerial':metrics.get('taskSerial',0),
+              'acceptanceSerial': metrics.get('acceptanceSerial', 0),
               'workspaceFingerprint':final, 'project': project,
-              'passed': all(r['exitCode'] == 0 for r in results) and initial == final,
-              'checks': results, 'checkedAt': datetime.now(timezone.utc).isoformat()}
+              'passed': error is None and all(r['exitCode'] == 0 for r in results) and initial == final,
+              'checks': results, 'rejected': rejected, 'checkedAt': datetime.now(timezone.utc).isoformat()}
+    if error:
+        report['error'] = error
     # This distinct file is the checker-owned evidence. The mod reads it; it does
     # not replace verification evidence with an agent's assertion of success.
     dump(run / 'verified-checks.json', report)
@@ -802,7 +860,7 @@ def main() -> int:
     args = sys.argv[1:]
     reject_headless_args(args)
     sync_models()
-    commands = {'launch', 'auth', 'doctor', 'route', 'report', 'verify', 'demo', 'prepare', 'fingerprint', 'scope', 'benchmark', 'rate', 'bili', 'fable-check', 'update'}
+    commands = {'launch', 'auth', 'doctor', 'route', 'report', 'verify', 'checks', 'demo', 'prepare', 'fingerprint', 'scope', 'benchmark', 'rate', 'bili', 'fable-check', 'update'}
     if not args or args[0] not in commands:
         args.insert(0, 'launch')
     parser = argparse.ArgumentParser(description=__doc__)
@@ -870,10 +928,18 @@ def main() -> int:
         if not opt.run or opt.quality is None:parser.error('rate requires --run and --quality 0–5')
         dump(opt.run/'feedback.json',{'quality':opt.quality,'manualCorrections':opt.corrections,'notes':scrub(opt.text)[:2000]})
         print('Feedback recorded without a model request.');return 0
+    if opt.command == 'checks':
+        if not opt.run:
+            parser.error('checks requires --run')
+        print(json.dumps({'rejected': check_refusals(opt.run)}, indent=2)); return 0
     if opt.command == 'verify':
         if not opt.run:
             parser.error('verify requires --run')
-        result = verify(opt.run); print(json.dumps(result, indent=2)); return 0 if result['passed'] else 1
+        try:
+            result = verify(opt.run)
+        except ValueError as error:
+            print('lab verify: ' + str(error), file=sys.stderr); return 2
+        print(json.dumps(result, indent=2)); return 0 if result['passed'] else 1
     if opt.command == 'demo':
         project = STATE.parent / 'demo-projects' / str(uuid.uuid4())
         shutil.copytree(ROOT / 'demo-project', project)

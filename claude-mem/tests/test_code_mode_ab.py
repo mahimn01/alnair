@@ -140,3 +140,33 @@ def test_files_claude_code_writes_under_dot_claude_do_not_fail_the_arm(arms):
     (folder / ".claude/settings.local.json").write_text("{}")
     done = collect.criteria(folder, arms / "alnair-ab-off.seed.json")
     assert done["passed"] is True and done["claude_code_files"] == [".claude/settings.local.json"]
+
+
+def test_task_md_states_the_answer_key_collect_py_checks():
+    """The prompt says what a target is (no "title") and how to sort, and the answer key matches collect.py."""
+    text = (BENCH / "TASK.md").read_text()
+    prompt = text.split("## The prompt (paste exactly)", 1)[1].split("```text\n", 1)[1].split("```", 1)[0]
+    assert 'without any "title"' in prompt and "byte order" in prompt and "exactly as written in the note>" not in prompt
+    key = text.split("holds exactly these four lines", 1)[1].split("```text\n", 1)[1].split("```", 1)[0].split()
+    collect = load_collect()
+    assert [" ".join(key[i:i + 2]) for i in range(0, len(key), 2)] == collect.EXPECTED_LINKS
+    assert collect.EXPECTED_LINKS == sorted(collect.EXPECTED_LINKS)  # byte order: "Risk.md" before "archive/"
+
+
+def test_a_titled_or_reordered_answer_fails_with_a_diff(arms, capsys):
+    """The 2026-11-18 ON arm kept the link's title; collect.py now shows the exact difference."""
+    collect = load_collect()
+    folder, seed = arms / "alnair-ab-on", arms / "alnair-ab-on.seed.json"
+    assert collect.criteria(folder, seed)["broken_links_diff"] == "broken-links.txt is missing"
+    titled = [x + ' "a title"' if x.endswith("Missing%20Note.md") else x for x in collect.EXPECTED_LINKS]
+    (folder / "broken-links.txt").write_text("\n".join(titled) + "\n")
+    result = collect.criteria(folder, seed)
+    assert result["broken_links"] is False
+    assert '-notes/Review.md: Missing%20Note.md\n+notes/Review.md: Missing%20Note.md "a title"' in result["broken_links_diff"]
+    (folder / "broken-links.txt").write_text("\n".join(sorted(collect.EXPECTED_LINKS, key=str.lower)) + "\n")
+    reordered = collect.criteria(folder, seed)
+    assert reordered["broken_links"] is False and "+notes/Plan.md: archive/Old%20Plan.md" in reordered["broken_links_diff"]
+    collect.show([{"arm": "on", "criteria": reordered}])
+    assert "on broken-links.txt does not match the answer key:" in capsys.readouterr().out
+    (folder / "broken-links.txt").write_text("\n".join(unquoted for unquoted in map(collect.unquote, collect.EXPECTED_LINKS)) + "\n")
+    assert collect.criteria(folder, seed)["broken_links_diff"] == ""

@@ -21,7 +21,7 @@ outside the repository. Read these for a stage handoff instead of rerunning disc
 
 Run the recorded acceptance checks with the lab verify tool. It invokes the usual Bash permission
 and vault guards, then records real exit codes and a fingerprint of current source. For code edits,
-use one independent reviewer after checks. Fix material findings, repeat affected checks and review
+use one independent reviewer after checks. Fix blocking findings (critical, high or medium), repeat affected checks and review
 the final revision. Changes through Bash also invalidate evidence when the source fingerprint changes.
 
 When an investigation is hard or its result is uncertain, escalate that specific question to the

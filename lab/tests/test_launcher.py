@@ -59,11 +59,14 @@ class LauncherTest(unittest.TestCase):
         self.assertTrue(passed['passed']);self.assertNotEqual(old,passed['workspaceFingerprint'])
 
     def test_no_checks_cannot_be_called_verified(self):
-        with self.assertRaises(ValueError):lab.verify(self.run)
+        report=lab.verify(self.run)
+        self.assertFalse(report['passed']);self.assertIn('Record 1',report['error'])
 
     def test_a_shell_is_not_a_verification_program(self):
         lab.dump(self.run/'acceptance.json',{'checks':[{'argv':['sh','-c','true']}],'criteria':[]})
-        with self.assertRaises(ValueError):lab.verify(self.run)
+        report=lab.verify(self.run)
+        self.assertFalse(report['passed']);self.assertEqual(report['checks'],[])
+        self.assertIn('sh is not an allowed check program',report['rejected'][0]['reason'])
 
     def test_readiness_blocks_inactive_plugin_without_running_a_model(self):
         import os
