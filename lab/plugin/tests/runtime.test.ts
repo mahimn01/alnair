@@ -988,7 +988,10 @@ test('a shell -c text is read with its $0 and $@ words put back, and so is what 
     "bash -c 'shift; rm -rf \"$@\"' _ x ~/.claude", "bash -c 'for f; do rm -rf \"$f\"; done' _ ~/.claude", "bash -c 'rm -rf \"$" + "{1:-x}\"' _ ~/.claude",
     "sh -c 'echo {} > \"$1\"' _ ~/.claude.json", "xargs bash -c 'rm -rf \"$1\"' _ <<< ~/.claude", "echo ~/.claude | xargs bash -c 'rm -rf \"$1\"' _",
     "xargs rm -rf <<< ~/.claude", "echo ~/.claude | xargs rm -rf", "cat <<< ~/.claude | xargs -n1 rm -rf", "xargs -I{} mv {} /tmp/x <<< ~/.claude",
-    "p=~/.claude; echo $p | xargs rm -rf", "xargs rm -rf <<EOF\n~/.claude\nEOF", "echo ~/.claude | sudo xargs rm -rf"])
+    "p=~/.claude; echo $p | xargs rm -rf", "xargs rm -rf <<EOF\n~/.claude\nEOF", "echo ~/.claude | sudo xargs rm -rf",
+    // $HOME words stay as they are, so the guard still expands them (refused at da532c5, let through by the first version of this fix).
+    "bash -c 'rm \"$1\"' _ \"$HOME/.claude.json\"", "bash -c 'rm \"$1\"' _ $HOME/.claude.json", "bash -c 'tee \"$1\" < /dev/null' _ \"$" + "{HOME}/.claude/settings.json\"",
+    "bash -c 'rm -rf \"$1\"' _ \"$HOME/.claude\"", "bash -c 'rm \"$1/settings.json\"' _ \"$HOME/.claude\""])
     expect([c, Boolean(settingsWriteDenial(c,HOME))]).toEqual([c, true]);
   for (const c of ["bash -c '\"$1$2\" -p x' _ cla ude", "bash -c '$1 -p x' _ claude", "echo claude | xargs bash -c '$1 -p x' _", "xargs -I{} sh -c '{} -p x' <<< claude"])
     expect([c, Boolean(nestedSessionDenial(c))]).toEqual([c, true]);

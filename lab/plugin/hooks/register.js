@@ -370,9 +370,11 @@ function ansiC(text, at) {
 }
 
 // A shell -c text with the words after it put back: $0, $1..$9, ${N}, $@, $*, "$@", "$*", ${@} and ${*}.
-// A word of only path characters goes in as it is (a glob still globs); any other is single-quoted.
+// A word of only path characters and $ goes in as it is (a glob still globs, $HOME still expands); any
+// other is single-quoted, and then the words are also judged as paths (see writesSettings).
+const PLAIN_WORD = /^[\w@%+=:,./~*?[\]{}$-]+$/;
 function withPositionals(code, positional) {
-  const word = w => /^[\w@%+=:,./~*?[\]{}-]+$/.test(w) ? w : "'" + w.replace(/'/g, "'\\''") + "'";
+  const word = w => PLAIN_WORD.test(w) ? w : "'" + w.replace(/'/g, "'\\''") + "'";
   const at = k => positional[k] === undefined ? '' : word(positional[k]);
   return String(code).replace(/"\$[@*]"|"\$\{[@*]\}"|\$\{[@*]\}|\$[@*]|\$\{(\d+)\}|\$(\d)/g, (m, b, d) =>
     b !== undefined || d !== undefined ? at(Number(b ?? d)) : positional.slice(1).map(word).join(' '));
@@ -706,10 +708,12 @@ function writesSettings(words, home, dirs, depth, scan = true) {
     if (code === undefined) return false;
     // The words after the -c text become $0 and $@: they are put back where the text uses them, so
     // bash -c 'rm -rf "$1"' _ ~/.claude reads as rm -rf ~/.claude and bash -c 'cat "$1"' _ ~/.claude.json
-    // as a read. Uses that can't be put back (shift, ${@:2}, for x; do) judge the words as paths instead.
+    // as a read. Uses that can't be put back (shift, ${@:2}, for x; do), and words that had to be quoted,
+    // judge the words as paths instead.
     const positional = name === 'eval' ? [] : rest.slice(flag + 2);
     if (shellWritesSettings(positional.length ? withPositionals(code, positional) : code, home, dirs, depth + 1)) return true;
-    return positional.length > 0 && UNEXPANDED.test(code) && positional.some(a => named(a) || covers(a));
+    return positional.length > 0 && (UNEXPANDED.test(code) || !positional.every(a => PLAIN_WORD.test(a)))
+      && positional.some(a => named(a) || covers(a));
   }
   if (name === 'dd') return rest.some(a => a.startsWith('of=') && hit(a.slice(3)));
   if (INTERPRETER.test(name)) {
