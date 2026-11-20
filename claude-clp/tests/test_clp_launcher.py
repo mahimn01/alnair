@@ -227,3 +227,11 @@ def test_a_bad_alnair_code_mode_value_stops_before_any_folder_is_made(settings_f
     with pytest.raises(ValueError, match="must be 1 or 0"):
         L.main(["--project", str(project)])
     assert not (tmp_path / "runs").exists()
+
+
+def test_a_claude_code_older_than_code_mode_turns_it_off_with_one_line(settings_files, code_mode_home, project, capsys, monkeypatch):
+    monkeypatch.setattr(L, "claude_version", lambda: "2.1.321")
+    shown, err = dry(project, capsys, "--code-mode")
+    assert (shown["codeMode"]["enabled"], shown["codeMode"]["env"]) == (False, None)
+    assert err.strip() == ("Alnair: Code Mode is off for this session: Claude Code 2.1.321 is older than 2.1.323, "
+                           "the first version with Code Mode (update it with claude update).")

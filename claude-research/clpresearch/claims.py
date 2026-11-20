@@ -18,13 +18,12 @@ fixed rules; nothing here asks a model for a judgement.
 from __future__ import annotations
 
 import ast
-import fcntl
 import json
 import re
 from datetime import date, timedelta
 from decimal import Decimal, DivisionByZero, InvalidOperation, localcontext
 
-from . import memory, passages, reliability
+from . import filelock, memory, passages, reliability
 from .common import Ctx, ToolError
 from .store import Store, StoreError, now_iso, slugify
 
@@ -354,13 +353,13 @@ class Ledger:
     def append(self, records: list[dict]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.path, "a+", encoding="utf-8") as fh:
-            fcntl.flock(fh, fcntl.LOCK_EX)
+            filelock.lock(fh)
             try:
                 for rec in records:
                     fh.write(json.dumps({"at": now_iso(), **rec}, ensure_ascii=False) + "\n")
                 fh.flush()
             finally:
-                fcntl.flock(fh, fcntl.LOCK_UN)
+                filelock.unlock(fh)
 
     def claims(self) -> dict[str, dict]:
         view: dict[str, dict] = {}

@@ -11,7 +11,8 @@ class CredentialError(RuntimeError):
 class Keychain:
     def __init__(self, service="local.claude-lab.oauth.v1"):
         if sys.platform != "darwin":
-            raise CredentialError("This version requires macOS Keychain.")
+            raise CredentialError("Saved lab accounts are kept in the macOS Keychain, which this system doesn't have. "
+                                  "Sign in to Claude Code itself instead (run claude, then /login).")
         self.service = service.encode()
         self.sec = C.CDLL("/System/Library/Frameworks/Security.framework/Security")
         self.cf = C.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")

@@ -7,7 +7,6 @@ and oversized bodies, and caches successful answers for a few hours (cache is si
 
 from __future__ import annotations
 
-import fcntl
 import gzip
 import hashlib
 import http.client
@@ -22,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urljoin
 
-from . import config
+from . import config, filelock
 from .netsafe import NetError, resolve_public, split_url
 
 SLEEP = time.sleep   # tests replace these two to run instantly
@@ -81,7 +80,7 @@ class RateLimiter:
         self.dir.mkdir(parents=True, exist_ok=True)
         path = self.dir / f"{provider}.ts"
         with open(path, "a+") as fh:
-            fcntl.flock(fh, fcntl.LOCK_EX)
+            filelock.lock(fh)
             try:
                 fh.seek(0)
                 try:
@@ -97,7 +96,7 @@ class RateLimiter:
                 fh.flush()
                 return waited
             finally:
-                fcntl.flock(fh, fcntl.LOCK_UN)
+                filelock.unlock(fh)
 
 
 def _decode_full(body: bytes, encoding: str, limit: int) -> tuple[bytes, bool]:

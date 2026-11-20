@@ -781,8 +781,8 @@ def check_problem(argv: object) -> str | None:
         if words[0].startswith('-'):
             return f'env option {words[0]} is not supported; write env NAME=value ... program'
     program = Path(words[0]).name
-    if native.WINDOWS and program.lower().endswith('.exe'):
-        program = program[:-4]  # python.exe is python, claude.exe is claude
+    if native.WINDOWS:  # names have no case there, and python.exe is python, claude.exe is claude
+        program = program.lower().removesuffix('.exe')
     if program == 'claude':
         # The plugin test runner and validator start no session, so they may be checks; nothing else may.
         rest = words[1:]

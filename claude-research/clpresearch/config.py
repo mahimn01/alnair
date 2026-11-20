@@ -54,6 +54,12 @@ BASES = {
     "patentsview": "https://search.patentsview.org/api/v1",
 }
 
+# The variables a scrubbed child process (the CLP gate and indexer, gh, pdftotext) still gets. The Windows ones
+# don't exist on macOS or Linux; on Windows a child can't start without SYSTEMROOT, and gh needs its profile paths.
+WINDOWS_ENV = ("SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP",
+               "PATHEXT", "COMSPEC")
+CHILD_ENV = ("PATH", "HOME", "LANG", "TMPDIR", *WINDOWS_ENV)
+
 SEC_SUFFIXES = ("sec.gov",)
 WAYBACK_SUFFIXES = ("archive.org",)
 

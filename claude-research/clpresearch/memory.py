@@ -30,7 +30,7 @@ VERIFY_NOTE = ("NOTE: PASS checks text integrity only — each quote is word for
 
 def _env() -> dict[str, str]:
     # A scrubbed environment for the gate, plus the operator's minimum quote length (default 20, never below 12).
-    return {**{k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "LANG", "TMPDIR")}, "CLP_MIN_QUOTE": str(config.min_quote())}
+    return {**{k: v for k, v in os.environ.items() if k in config.CHILD_ENV}, "CLP_MIN_QUOTE": str(config.min_quote())}
 
 
 def run_clp(store: Store, argv: list[str], stdin: str | None = None, timeout: int = 120) -> tuple[int, str]:

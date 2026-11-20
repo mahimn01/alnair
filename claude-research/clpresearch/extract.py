@@ -125,7 +125,8 @@ def pdf_to_text(pdf: bytes) -> str:
         with open(path, "wb") as fh:
             fh.write(pdf)
         argv = [exe, "-q", "-enc", "UTF-8", "-l", str(config.PDF_MAX_PAGES), path, "-"]
-        env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LANG": "en_US.UTF-8"}
+        env = {"PATH": os.environ.get("PATH", os.defpath if os.name == "nt" else "/usr/bin:/bin"), "LANG": "en_US.UTF-8",
+               **{k: os.environ[k] for k in config.WINDOWS_ENV if k in os.environ}}
         try:
             proc = subprocess.run(argv, capture_output=True, timeout=config.PDFTOTEXT_TIMEOUT, env=env, check=False)
         except subprocess.TimeoutExpired:

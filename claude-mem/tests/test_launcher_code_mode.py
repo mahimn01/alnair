@@ -300,3 +300,17 @@ def test_a_real_launch_that_cant_use_code_mode_starts_without_it_and_records_why
     assert (status["requested"], status["enabled"], status["env"], status["reason"]) == (True, False, None, "DISABLE_TELEMETRY is set")
     assert len(launched) == 1 and CM.ENV not in launched[0] and launched[0]["CLAUDE_LAB_CODE_MODE"] == "auto-off"
     assert ledgers and "code mode off (auto)" in out.out and "Code Mode is off for this session: DISABLE_TELEMETRY is set" in out.err
+
+
+def test_a_claude_code_older_than_code_mode_turns_it_off_with_one_line(project, capsys, monkeypatch):
+    """Claude Code before 2.1.323 has no Code Mode: one line says so, even for --code-mode, and the launch goes on."""
+    monkeypatch.setattr(LAB, "claude_version", lambda: "2.1.321")
+    for flags in ([], ["--code-mode"]):
+        shown, err = dry(project, capsys, *flags)
+        try:
+            mode = shown["codeMode"]
+            assert (mode["requested"], mode["enabled"], mode["env"], mode["childEnv"][CM.ENV]) == (True, False, None, None)
+            assert [line for line in err.splitlines() if "Code Mode" in line] == [
+                CM.OFF_NOTE + "Claude Code 2.1.321 is older than 2.1.323, the first version with Code Mode (update it with claude update)."]
+        finally:
+            cleanup(shown["run"])

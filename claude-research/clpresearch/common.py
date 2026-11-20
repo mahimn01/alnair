@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
 import re
 import threading
@@ -10,7 +9,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import config
+from . import config, filelock
 from .http import Client
 from .memory import fence
 from .netsafe import NetError
@@ -71,7 +70,7 @@ class Ctx:
         path = self.cap_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path.with_name("capability.lock"), "a+") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
+            filelock.lock(lock)
             try:
                 data = self.cap_read()
                 prev = data.get(provider) or {}
@@ -83,7 +82,7 @@ class Ctx:
                 data[provider] = rec
                 atomic_write(path, json.dumps(data, indent=1))
             finally:
-                fcntl.flock(lock, fcntl.LOCK_UN)
+                filelock.unlock(lock)
 
     def cap_blocked(self, provider: str, ttl_rate: float | None = None, now: float | None = None) -> str | None:
         rec = self.cap_read().get(provider)

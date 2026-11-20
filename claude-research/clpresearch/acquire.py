@@ -13,7 +13,6 @@ to stop and the call waits for any save in progress, so the store is never left 
 
 from __future__ import annotations
 
-import fcntl
 import json
 import queue
 import re
@@ -21,7 +20,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from . import memory, passages, primary, reliability, scholar, specs
+from . import filelock, memory, passages, primary, reliability, scholar, specs
 from .claims import Ledger
 from .common import Ctx, ToolError, Unavailable
 from .netsafe import NetError
@@ -70,13 +69,13 @@ def _index_update(ctx: Ctx, updates: dict) -> None:
     path = _index_path(ctx)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path.with_name("specs.lock"), "a+") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+        filelock.lock(lock)
         try:
             data = index_read(ctx)
             data.update(updates)
             atomic_write(path, json.dumps(data, indent=1, sort_keys=True))
         finally:
-            fcntl.flock(lock, fcntl.LOCK_UN)
+            filelock.unlock(lock)
 
 
 def _reusable(ctx: Ctx, job: specs.Job, index: dict, now: float) -> tuple[list[str], float] | None:

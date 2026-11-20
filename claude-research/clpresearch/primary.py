@@ -478,7 +478,7 @@ def wayback_fetch(ctx: Ctx, url: str, timestamp: str) -> str:
 # GitHub via the logged-in gh CLI (we never read or print the token)
 # =========================================================================================
 GH_ALT = "research_fetch on raw.githubusercontent.com / github.com public pages; wayback_fetch"
-_GH_ENV = ("PATH", "HOME", "LANG", "TMPDIR", "USER", "XDG_CONFIG_HOME")
+_GH_ENV = (*config.CHILD_ENV, "USER", "XDG_CONFIG_HOME")
 
 
 def gh_api(ctx: Ctx, args: list[str], bucket: str = "github_core", accept: str | None = None) -> object:

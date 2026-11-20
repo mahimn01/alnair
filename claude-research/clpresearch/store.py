@@ -13,7 +13,6 @@ old one stays and is marked superseded_by, so an old citation still verifies aga
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
@@ -24,7 +23,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import config
+from . import config, filelock
 from .extract import clean
 
 
@@ -101,13 +100,13 @@ class Store:
         that has passed its deadline uses it so that no save starts after the caller stopped waiting."""
         self.home.mkdir(parents=True, exist_ok=True, mode=0o700)
         with open(self.home / ".lock", "a+") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
+            filelock.lock(lock)
             try:
                 if precheck is not None:
                     precheck()
                 return self._put(kind, url, title, text, raw_bytes, provider, extra or {})
             finally:
-                fcntl.flock(lock, fcntl.LOCK_UN)
+                filelock.unlock(lock)
 
     def _put(self, kind, url, title, text, raw_bytes, provider, extra) -> SourceRef:
         body = clean(text) if text.strip() else ""
@@ -206,8 +205,8 @@ class Store:
         """Wait for any save in progress to finish (take and release the store lock)."""
         self.home.mkdir(parents=True, exist_ok=True, mode=0o700)
         with open(self.home / ".lock", "a+") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            fcntl.flock(lock, fcntl.LOCK_UN)
+            filelock.lock(lock)
+            filelock.unlock(lock)
 
     # -- read --------------------------------------------------------------------
     def get_meta(self, sid: str) -> dict | None:
@@ -276,14 +275,14 @@ class Store:
         if bad:
             raise StoreError("refusing to (re)index: stored sources were modified after saving: " + "; ".join(bad[:3]))
         with open(self.home / ".index.lock", "a+") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
+            filelock.lock(lock)
             try:
                 if not ((self.home / "dirty").exists() or not (self.clp / "research" / "corpus.json").exists()):
                     return
                 first = not (self.clp / "research" / "corpus.json").exists()
                 cmd = [config.clp_python(), str(config.clp_tool_path()), "init" if first else "refresh",
                        *([str(self.docs)] if first else []), "--store", str(self.clp), "--name", "research"]
-                env = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "LANG", "TMPDIR")}
+                env = {k: v for k, v in os.environ.items() if k in config.CHILD_ENV}
                 try:
                     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env, check=False)
                 except subprocess.TimeoutExpired:
@@ -292,4 +291,4 @@ class Store:
                     raise StoreError("indexing failed: " + (proc.stderr or proc.stdout).strip()[-400:])
                 (self.home / "dirty").unlink(missing_ok=True)
             finally:
-                fcntl.flock(lock, fcntl.LOCK_UN)
+                filelock.unlock(lock)

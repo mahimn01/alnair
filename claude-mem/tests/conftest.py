@@ -59,7 +59,7 @@ def _mock_native_claude_metadata(monkeypatch):
     from pathlib import Path
     real_run = subprocess.run
     def guarded_run(args, *a, **kw):
-        name = Path(str(args[0])).name.removesuffix(".exe") if isinstance(args, (list, tuple)) and args else ""
+        name = Path(str(args[0])).name.lower().removesuffix(".exe").removesuffix(".cmd") if isinstance(args, (list, tuple)) and args else ""
         if name == "codex":
             if list(args[1:]) == ["--version"]:
                 return subprocess.CompletedProcess(args, 0, "codex-cli 0.169.0\n", "")
@@ -95,9 +95,12 @@ def _codex_sandbox(monkeypatch, tmp_path_factory):
     home = tmp_path_factory.mktemp("codex-home")
     (home / "models_cache.json").write_text(json.dumps(CODEX_MODELS))
     bin_dir = tmp_path_factory.mktemp("codex-bin")
-    stub = bin_dir / "codex"
-    stub.write_text("#!/bin/sh\necho 'stub codex: not for running' >&2\nexit 1\n")
-    stub.chmod(0o755)
+    if os.name == "nt":  # Windows finds a program on PATH by its extension
+        (bin_dir / "codex.cmd").write_text("@echo stub codex: not for running 1>&2\r\n@exit /b 1\r\n")
+    else:
+        stub = bin_dir / "codex"
+        stub.write_text("#!/bin/sh\necho 'stub codex: not for running' >&2\nexit 1\n")
+        stub.chmod(0o755)
     monkeypatch.setenv("CODEX_HOME", str(home))
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
     monkeypatch.delenv("ALNAIR_GPT_MODEL", raising=False)

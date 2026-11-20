@@ -39,7 +39,6 @@ case.
 from __future__ import annotations
 
 import datetime as _dt
-import fcntl
 import json
 import os
 import re
@@ -47,6 +46,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 from ..ids import GENESIS_HASH, canonical_json, sha256_hex
 from ..pricing import PICO_PER_USD, PricingTable, usd
@@ -214,6 +218,28 @@ def _now() -> str:
     return _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
 
 
+# Windows has no flock: there the guard locks one byte of the lock file with msvcrt (Windows locks are
+# mandatory, and nothing reads or writes the lock file itself). macOS and Linux keep fcntl.flock.
+def _lock_now(fh) -> None:
+    """Take the exclusive lock on the open lock file now, or raise BlockingIOError if another process has it."""
+    if os.name != "nt":
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return
+    fh.seek(0)
+    try:
+        msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+    except OSError as exc:
+        raise BlockingIOError(exc.errno, f"{fh.name} is locked") from None
+
+
+def _unlock(fh) -> None:
+    if os.name != "nt":
+        fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+        return
+    fh.seek(0)
+    msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+
+
 class SpendGuard:
     """The fail-closed budget of one process. `key` gives the caps (default: the aperture key's,
     the original single ledger; open_live passes the key profile's). `run_cap_usd` (--budget)
@@ -242,7 +268,7 @@ class SpendGuard:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = open(lock_path if lock_path is not None else self.path.parent / "lock", "a+")
         try:
-            fcntl.flock(self._lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            _lock_now(self._lock)
         except BlockingIOError:
             self._lock.close()
             raise SpendLocked(f"another process holds {self._lock.name}") from None
@@ -379,7 +405,7 @@ class SpendGuard:
 
     def close(self) -> None:
         if not self._lock.closed:
-            fcntl.flock(self._lock.fileno(), fcntl.LOCK_UN)
+            _unlock(self._lock)
             self._lock.close()
 
     def __enter__(self) -> SpendGuard:

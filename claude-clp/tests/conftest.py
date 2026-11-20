@@ -79,7 +79,10 @@ def stub_claude_when_missing(monkeypatch, tmp_path_factory):
     if (Path.home() / ".local/bin/claude").exists() or shutil.which("claude"):
         return
     bin_dir = tmp_path_factory.mktemp("stub-bin")
-    stub = bin_dir / "claude"
-    stub.write_text("#!/bin/sh\necho 'stub claude: not for running' >&2\nexit 1\n")
-    stub.chmod(0o755)
+    if os.name == "nt":  # Windows finds a program on PATH by its extension
+        (bin_dir / "claude.cmd").write_text("@echo stub claude: not for running 1>&2\r\n@exit /b 1\r\n")
+    else:
+        stub = bin_dir / "claude"
+        stub.write_text("#!/bin/sh\necho 'stub claude: not for running' >&2\nexit 1\n")
+        stub.chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
