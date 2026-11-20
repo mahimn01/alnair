@@ -438,11 +438,11 @@ def cmd_verify(corpus: DailyCorpus, question: str, answer_file: str) -> int:
 # status, refresh, init: the daily `clp` commands, plus folder drift
 
 
-def folder_drift(corpus: DailyCorpus) -> str:
+def folder_drift(corpus: DailyCorpus, store: Path) -> str:
     folder = Path(corpus.manifest["folder"])
     if not folder.is_dir():
         return f"folder   {folder} is missing"
-    texts, _ = scan(folder, corpus.store)
+    texts, _ = scan(folder, corpus.store, store)  # skip what init and refresh skip, or status reports files they never index
     files = corpus.manifest["files"]
     shas = {p: hashlib.sha256(t.encode("utf-8")).hexdigest() for p, t in texts.items()}
     changed = sum(1 for p in shas if p in files and files[p]["sha256"] != shas[p])
@@ -456,7 +456,7 @@ def folder_drift(corpus: DailyCorpus) -> str:
 def cmd_status(store: Path, name: str | None) -> int:
     name, corpus = open_corpus(store, name)
     try:
-        drift = folder_drift(corpus)
+        drift = folder_drift(corpus, store)
     finally:
         corpus.close()
     code = clp.main(["--store", str(store), "status", "--name", name])

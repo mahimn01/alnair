@@ -25,7 +25,8 @@ def test_a_store_inside_the_indexed_folder_is_not_indexed(tmp_path: Path):
 
 def test_nothing_else_kept_in_the_store_is_indexed_either(tmp_path: Path, capsys):
     """clp_tool hands the scan the corpus's own folder (store/name). With the store inside the notes folder, another
-    corpus's copies and anything else kept in that store were still indexed as if they were notes."""
+    corpus's copies and anything else kept in that store were still indexed as if they were notes. status counts
+    the folder's files the same way, so it has to skip them too."""
     folder = tmp_path / "notes"
     store = folder / "store"
     (store / "other").mkdir(parents=True)
@@ -35,6 +36,9 @@ def test_nothing_else_kept_in_the_store_is_indexed_either(tmp_path: Path, capsys
         assert tool.main(command) == 0, capsys.readouterr().err
         assert sorted(dc.load_manifest(store / "demo")["files"]) == ["a.md"]
     capsys.readouterr()
+    # status must skip the same files, or it reports them as new for ever and a refresh can never clear it
+    assert tool.main(["status", "--store", str(store), "--name", "demo"]) == 0
+    assert "unchanged since indexing" in capsys.readouterr().out
 
 
 def test_an_unreadable_file_is_skipped_not_fatal(tmp_path: Path, monkeypatch):
