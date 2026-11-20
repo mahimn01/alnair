@@ -280,8 +280,8 @@ class Store:
                 if not ((self.home / "dirty").exists() or not (self.clp / "research" / "corpus.json").exists()):
                     return
                 first = not (self.clp / "research" / "corpus.json").exists()
-                cmd = [config.clp_python(), str(config.clp_tool_path()), "init" if first else "refresh",
-                       *([str(self.docs)] if first else []), "--store", str(self.clp), "--name", "research"]
+                cmd = [config.clp_python(), config.clp_tool_path(), "init" if first else "refresh",
+                       *([self.docs] if first else []), "--store", self.clp, "--name", "research"]
                 try:
                     proc = subprocess.run(config.child_argv(cmd), capture_output=True, text=True, encoding="utf-8", errors="replace",
                                           timeout=timeout, env=config.child_env(), check=False)

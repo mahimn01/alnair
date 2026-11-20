@@ -191,14 +191,20 @@ def test_crossref_organisation_author_keeps_its_name():
     assert got["authors"] == ["WHO Consortium", "Ada One"]
 
 
-def test_the_clp_child_runs_in_utf8_with_utf8_arguments():
-    """The gate's helper printed in the Windows code page: a character outside it failed, and the rest was misread."""
+def test_the_clp_child_runs_in_utf8_with_utf8_arguments(monkeypatch):
+    """The gate's helper printed in the Windows code page: a character outside it failed, and the rest was misread.
+    Text goes to it as UTF-8. The program and every Path go as the file system's own bytes: encoded as UTF-8 they
+    would name other files under an older 8-bit locale."""
     import os
     from clpresearch import config
     env = config.child_env()
     assert env["PYTHONUTF8"] == "1" and env["PYTHONIOENCODING"] == "utf-8"
-    words = ["py", "caf\u00e9 \u2248"]
-    assert config.child_argv(words) == (words if os.name == "nt" else [w.encode("utf-8") for w in words])
+    words = ["py", Path("tool.py"), "--store", Path("store"), "caf\u00e9 \u2248"]
+    if os.name == "nt":
+        assert config.child_argv(words) == ["py", "tool.py", "--store", "store", "caf\u00e9 \u2248"]
+    else:
+        monkeypatch.setattr(os, "fsencode", lambda path: b"fs:" + str(path).encode("utf-8"))
+        assert config.child_argv(words) == [b"fs:py", b"fs:tool.py", b"--store", b"fs:store", "caf\u00e9 \u2248".encode("utf-8")]
 
 
 def test_research_tools_load_without_time_zone_data(monkeypatch):

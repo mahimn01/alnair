@@ -33,7 +33,7 @@ def _env() -> dict[str, str]:
 
 
 def run_clp(store: Store, argv: list[str], stdin: str | None = None, timeout: int = 120) -> tuple[int, str]:
-    cmd = [config.clp_python(), str(config.clp_tool_path()), argv[0], "--store", str(store.clp), "--name", "research", *argv[1:]]
+    cmd = [config.clp_python(), config.clp_tool_path(), argv[0], "--store", store.clp, "--name", "research", *argv[1:]]
     try:
         p = subprocess.run(config.child_argv(cmd), input=stdin, capture_output=True, text=True, encoding="utf-8", errors="replace",
                            timeout=timeout, env=_env(), check=False)

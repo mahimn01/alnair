@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("clp_mcp", ROOT / "bin" / "clp_mcp.py")
 M = importlib.util.module_from_spec(spec)
@@ -103,3 +105,19 @@ def test_server_survives_input_that_is_not_utf8():
     lines = [json.loads(x) for x in done.stdout.decode("utf-8").splitlines()]
     assert [x.get("id") for x in lines] == [None, 9] and lines[0]["error"]["code"] == -32700, done.stderr.decode("utf-8", "replace")[-300:]
 
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows takes the command as text")
+def test_a_tool_call_sends_paths_as_file_system_bytes_and_text_as_utf8(monkeypatch):
+    """Text goes as UTF-8, which the child reads back exactly. The interpreter and the script go as the file system's
+    own bytes: encoded as UTF-8 they would name other files under an older 8-bit locale."""
+    seen = []
+
+    def run(argv, **kwargs):
+        seen.extend(argv)
+        return subprocess.CompletedProcess(argv, 0, "ok", "")
+
+    monkeypatch.setattr(M.subprocess, "run", run)
+    monkeypatch.setattr(M.os, "fsencode", lambda path: b"fs:" + str(path).encode("utf-8"))
+    assert M.call("lookup", {"query": "caf\u00e9"}) == (False, "ok")
+    assert seen[0].startswith(b"fs:") and seen[1] == b"fs:" + str(M.TOOL).encode("utf-8")
+    assert seen[2] == b"lookup" and seen[-1] == "caf\u00e9".encode("utf-8")
