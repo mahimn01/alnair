@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 - 2026-11-20
+
+Alnair now runs on Windows without WSL, installs with one command, turns on Claude Code's Code Mode by default, and is tested in CI on macOS, Ubuntu and Windows. This release also has the fixes from a review of the whole code.
 
 Fixed:
 
