@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tomllib
 from pathlib import Path
 
@@ -211,3 +212,51 @@ def test_a_model_list_from_an_older_codex_does_not_block_a_newer_model(tmp_path,
     monkeypatch.setenv("CODEX_HOME", str(tmp_path))
     out = dry(capsys, "--model", "gpt", "--project", str(tmp_path))
     assert out["model"] == "gpt-6.2-astra" and "older Codex (0.153.2)" in out["modelCheck"]
+
+
+def test_toml_str_writes_a_character_outside_the_bmp_as_valid_toml():
+    for text in ("/home/me/\U0001F4C1 notes", "caf\u00e9", 'quote " and \\ and \n'):
+        assert tomllib.loads("x = " + CB.toml_str(text))["x"] == text
+
+
+def test_setup_then_remove_in_one_second_keeps_the_original_in_a_backup(tmp_path, monkeypatch):
+    class Frozen:
+        @staticmethod
+        def now():
+            import datetime
+            return datetime.datetime(2026, 1, 2, 3, 4, 5)
+
+    monkeypatch.setattr(CB, "datetime", Frozen)
+    original = '# mine\nmodel = "x"\n'
+    (tmp_path / "config.toml").write_text(original, encoding="utf-8")
+    first = CB.setup_config(REPO, "/py", home=tmp_path)
+    second = CB.remove_config(home=tmp_path)
+    assert first["backup"] != second["backup"]
+    assert (tmp_path / "config.toml").read_text(encoding="utf-8") == original
+    assert original in [Path(b).read_text(encoding="utf-8") for b in (first["backup"], second["backup"])]
+
+
+def test_a_symlinked_config_toml_stays_a_link_through_setup_and_remove(tmp_path):
+    real = tmp_path / "dotfiles" / "codex.toml"
+    real.parent.mkdir()
+    real.write_text('model = "x"\n', encoding="utf-8")
+    home = tmp_path / "home"
+    home.mkdir()
+    try:
+        (home / "config.toml").symlink_to(real)
+    except (OSError, NotImplementedError):
+        pytest.skip("this system can't make symlinks")
+    CB.setup_config(REPO, "/py", home=home)
+    assert (home / "config.toml").is_symlink() and CB.BEGIN in real.read_text(encoding="utf-8")
+    CB.remove_config(home=home)
+    assert (home / "config.toml").is_symlink() and real.read_text(encoding="utf-8") == 'model = "x"\n'
+
+
+def test_remove_config_replaces_the_file_in_one_step(tmp_path, monkeypatch):
+    CB.setup_config(REPO, "/py", home=tmp_path)
+    replaced: list[str] = []
+    real_replace = os.replace
+    monkeypatch.setattr(CB.os, "replace", lambda src, dst: replaced.append(str(dst)) or real_replace(src, dst))
+    CB.remove_config(home=tmp_path)
+    assert replaced == [str((tmp_path / "config.toml").resolve())]
+    assert not (tmp_path / ".config.toml.alnair-tmp").exists()

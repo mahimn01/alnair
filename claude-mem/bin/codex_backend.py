@@ -86,7 +86,7 @@ def installed_version() -> str | None:
 
 def cache_version(home: Path | None = None) -> str | None:
     try:
-        data = json.loads(((home or codex_home()) / "models_cache.json").read_text())
+        data = json.loads(((home or codex_home()) / "models_cache.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     return data.get("client_version") if isinstance(data, dict) else None
@@ -96,7 +96,7 @@ def listed_models(home: Path | None = None) -> list[dict] | None:
     """Models from Codex's own catalog cache, or None when Codex hasn't fetched one yet."""
     path = (home or codex_home()) / "models_cache.json"
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     models = data.get("models") if isinstance(data, dict) else data
@@ -135,7 +135,9 @@ def resolve_model(requested: str | None, effort: str | None = None, home: Path |
 
 
 def toml_str(value: str) -> str:
-    return json.dumps(value)  # a JSON string is a valid TOML basic string
+    # A JSON string is a valid TOML basic string. ensure_ascii=False: JSON would write a character outside the
+    # BMP (an emoji) as a surrogate pair, which TOML rejects.
+    return json.dumps(value, ensure_ascii=False)
 
 
 def toml_list(values: list[str]) -> str:
@@ -160,7 +162,7 @@ def _user_config(home: Path | None = None) -> dict:
     except ModuleNotFoundError:  # Python 3.10
         return {}
     try:
-        return tomllib.loads(((home or codex_home()) / "config.toml").read_text())
+        return tomllib.loads(((home or codex_home()) / "config.toml").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
 
@@ -267,11 +269,33 @@ def _strip_block(text: str) -> str:
     return text[:a].rstrip("\n") + ("\n" if text[:a].strip() else "") + rest.lstrip("\n")
 
 
+def _backup_path(path: Path) -> Path:
+    """A backup name next to config.toml that doesn't exist yet: two backups in one second never share a file."""
+    stem = f"config.toml.alnair-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    backup, n = path.with_name(stem), 1
+    while os.path.lexists(backup):
+        n += 1
+        backup = path.with_name(f"{stem}-{n}")
+    return backup
+
+
+def _write_config(path: Path, text: str) -> None:
+    """Replace config.toml in one step. A symlinked config.toml (a dotfile manager) stays a link: its target is written."""
+    target = path.resolve()
+    tmp = target.with_name(".config.toml.alnair-tmp")
+    tmp.write_text(text, encoding="utf-8")
+    try:
+        os.chmod(tmp, (target.stat().st_mode & 0o777) if target.exists() else 0o600)
+    except OSError:
+        pass
+    os.replace(tmp, target)
+
+
 def setup_config(repo: Path, python: str, home: Path | None = None, dry_run: bool = False) -> dict:
     """Add or refresh Alnair's MCP servers in config.toml. Idempotent; backs the file up before any change."""
     home = home or codex_home()
     path = home / "config.toml"
-    old = path.read_text() if path.exists() else ""
+    old = path.read_text(encoding="utf-8") if path.exists() else ""
     base = _strip_block(old)
     try:
         import tomllib
@@ -291,15 +315,9 @@ def setup_config(repo: Path, python: str, home: Path | None = None, dry_run: boo
     backup = None
     home.mkdir(parents=True, exist_ok=True)
     if path.exists():
-        backup = path.with_name(f"config.toml.alnair-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}")
+        backup = _backup_path(path)
         shutil.copy2(path, backup)
-    tmp = path.with_name(".config.toml.alnair-tmp")
-    tmp.write_text(new)
-    try:
-        os.chmod(tmp, (path.stat().st_mode & 0o777) if path.exists() else 0o600)
-    except OSError:
-        pass
-    tmp.replace(path)
+    _write_config(path, new)
     return {"path": str(path), "changed": True, "backup": str(backup) if backup else None}
 
 
@@ -307,12 +325,12 @@ def remove_config(home: Path | None = None) -> dict:
     """Take Alnair's block back out of config.toml (after a backup)."""
     home = home or codex_home()
     path = home / "config.toml"
-    if not path.exists() or BEGIN not in path.read_text():
+    if not path.exists() or BEGIN not in path.read_text(encoding="utf-8"):
         return {"path": str(path), "changed": False}
-    old = path.read_text()
-    backup = path.with_name(f"config.toml.alnair-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}")
+    old = path.read_text(encoding="utf-8")
+    backup = _backup_path(path)
     shutil.copy2(path, backup)
-    path.write_text(_strip_block(old))
+    _write_config(path, _strip_block(old))
     return {"path": str(path), "changed": True, "backup": str(backup)}
 
 
@@ -328,7 +346,7 @@ def status(repo: Path, python: str) -> dict:
         report["error"] = str(exc)
         return report
     path = codex_home() / "config.toml"
-    text = path.read_text() if path.exists() else ""
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
     report["config"] = "current" if config_block(repo, python) in text else ("outdated" if BEGIN in text else "missing (run ./install.sh or alnair codex-setup)")
     models = listed_models()
     report["defaultModel"] = os.environ.get("ALNAIR_GPT_MODEL") or DEFAULT_GPT_MODEL
