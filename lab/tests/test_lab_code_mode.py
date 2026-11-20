@@ -32,6 +32,36 @@ def environ(**values: str) -> dict:
     return {**env, **values}
 
 
+class ConfigFileTest(unittest.TestCase):
+    """How config.env is read: a BOM, a stray byte and an inline comment must not change what a line says."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.dir)
+        self.path = self.dir / 'config.env'
+        self.env = {'ALNAIR_CONFIG': str(self.path)}
+
+    def write(self, data: bytes) -> None:
+        self.path.write_bytes(data)
+
+    def test_a_bom_in_front_of_the_first_key_does_not_hide_it(self):
+        self.write(b'\xef\xbb\xbfALNAIR_CODE_MODE=0\n')
+        self.assertEqual(cm.choice(None, self.env), (False, 'config.env'))
+
+    def test_a_byte_that_is_not_utf8_does_not_stop_the_launch(self):
+        self.write(b'# caf\xe9\nALNAIR_CODE_MODE=0\n')
+        self.assertEqual(cm.choice(None, self.env), (False, 'config.env'))
+
+    def test_an_inline_comment_after_a_value_is_not_part_of_it(self):
+        self.write(b'ALNAIR_CODE_MODE=0 # off for now\n')
+        self.assertEqual(cm.choice(None, self.env), (False, 'config.env'))
+        self.write(b'ALNAIR_CODE_MODE="1"  # on\nOTHER=a#b\n')
+        self.assertEqual(cm.choice(None, self.env), (True, 'config.env'))
+        self.assertEqual(cm.config_value('OTHER', self.env), 'a#b')
+        self.write(b"X='two words' # c\n")
+        self.assertEqual(cm.config_value('X', self.env), 'two words')
+
+
 class ChoiceTest(unittest.TestCase):
     def setUp(self):
         self.home = Path(tempfile.mkdtemp())

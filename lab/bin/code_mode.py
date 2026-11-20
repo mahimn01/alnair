@@ -74,12 +74,15 @@ def config_value(name: str, environ: Mapping[str, str] | None = None) -> str:
     source = os.environ if environ is None else environ
     config = Path(source.get('ALNAIR_CONFIG') or Path.home() / '.config/alnair/config.env').expanduser()
     try:
-        lines = config.read_text().splitlines()
+        # utf-8-sig drops a BOM an editor put in front of the first key; a stray byte is replaced, not fatal.
+        lines = config.read_text(encoding='utf-8-sig', errors='replace').splitlines()
     except OSError:
         return ''
     for line in lines:
         key, sep, raw = line.strip().partition('=')
-        value = raw.strip().strip('"').strip("'")
+        quoted = re.match(r'''\s*(["'])(.*?)\1''', raw)
+        # A quoted value ends at its closing quote; an unquoted one ends at a " #" comment.
+        value = quoted.group(2) if quoted else re.split(r'\s+#', raw.strip())[0].strip().strip('"').strip("'")
         if sep and value and not key.startswith('#') and key.strip().removeprefix('export ').strip() == name:
             return os.path.expanduser(value)
     return ''
