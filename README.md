@@ -3,159 +3,153 @@
 [![CI](https://github.com/mahimn01/alnair/actions/workflows/ci.yml/badge.svg)](https://github.com/mahimn01/alnair/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A terminal harness that works with Claude and ChatGPT/Codex models. It picks the model for each task, remembers what a long session settled, and checks quotes against the files they came from.
+**Claude Code and Codex with a model router, memory that survives compaction, and answers checked against their sources.**
 
-Alnair starts an ordinary interactive session on your own subscription: Claude Code for Claude models (Sonnet, Opus, Fable), or the Codex CLI on your ChatGPT login for GPT models such as GPT-6.2-Astra. Both get the same memory, research tools and session notes. It never edits `~/.claude`, and on the Codex side it only adds two MCP servers to `~/.codex/config.toml`, after a backup. I built it because my long sessions kept hitting the same three problems: Opus got spent on renaming variables, important facts vanished at compaction, and research answers cited pages that didn't say what the answer claimed.
+Alnair is a launcher for the Claude Code and Codex command-line tools. It starts their normal interactive session on your own subscription and adds three things. It picks the Claude model for each task. It keeps what a long session settled in a ledger the model can read back. And it refuses an answer whose quote is not in the file or page it cites. It never edits `~/.claude`.
 
 ![alnair --help and a GPT dry run in a terminal](docs/terminal.png)
 
 *Real output of `alnair --help` and `alnair --model gpt --dry-run`, captured from a fresh clone in a scratch home folder and rendered as an image. A dry run starts no session.*
 
-## What it does
+## Why I built it
 
-- **Claude and GPT in one harness.** `alnair` runs Claude Code. `alnair --model gpt` runs Codex on GPT-6.2-Astra (or any model Codex lists) with the same memory and research tools, and both write to the same session ledger.
-- **Model routing for Claude.** Each task goes to Sonnet, Opus or Fable based on what you asked. You can override it per launch or per task.
+My long sessions kept hitting the same three problems.
+
+- **Opus got spent on renaming variables.** A session runs every task on the model it started with unless you switch by hand.
+- **Important facts vanished at compaction.** Once the context was summarised, a decision from an hour earlier could be gone.
+- **Research answers cited pages that didn't say what the answer claimed.**
+
+Alnair is the harness I use every day to deal with those three. It is still Claude Code or Codex underneath, so what you already know about them carries over.
+
+## What you get
+
+- **Model routing for Claude.** Each task goes to Sonnet, Opus or Fable based on what you asked. You can override it per launch (`--model opus`) or per task (`/lab-model`).
 - **Session memory that survives compaction.** Durable facts go into a ledger under `~/.clp/sessions/<id>/`, each with a file address and a SHA-256. A read whose hash no longer matches is refused, so stale memory can't come back as fact.
-- **Notes lookup with a verify gate.** CLP (Context Ledger Protocol) indexes a copy of your notes folder. The model looks things up, reads the exact lines, and runs `verify` before presenting a claim. A claim whose quote isn't in the cited lines is refused.
-- **Keyless research tools.** Papers (arXiv, OpenAlex, Crossref, Semantic Scholar), SEC filings, patents, court records, Wayback snapshots and market data, all without API keys. Research reports only pass when every quote matches the saved source word for word.
-- **Session notes.** When a session stops, ends or compacts, a hook writes one Markdown note for it into your notes vault (Obsidian works). It only ever edits the notes it created.
-- **Interactive only.** `-p`/`--print`, `codex exec` and the other headless modes are refused, and there's no API-key fallback, so a session can't quietly start billing an API account.
-- **Remote Control.** `alnair --remote-control` turns on Claude Code's Remote Control so you can follow a session from your phone.
+- **A verify gate for your notes.** CLP (Context Ledger Protocol) indexes a copy of your notes folder. The model looks things up, reads the exact lines, and runs `verify` before presenting a claim. A claim whose quote isn't in the cited lines is refused. You can [try the gate yourself](#try-the-verify-gate-without-a-session) in half a minute.
+- **Research tools that need no API keys.** Papers (arXiv, OpenAlex, Crossref, Semantic Scholar), SEC filings, patents, court records, Wayback snapshots and market data. A research report only passes when every quote matches the saved source word for word.
+- **Claude and GPT in one harness.** `alnair --model gpt` runs the Codex CLI on your ChatGPT login with the same memory and research tools, and both write to the same session ledger.
+- **Session notes.** When a session stops, ends or compacts, a hook writes one Markdown note for it into your notes folder (Obsidian works). It only ever edits the notes it created.
+- **Interactive only, on your subscription.** `-p`/`--print`, `codex exec` and the other headless modes are refused, and there's no API-key fallback, so a session can't quietly start billing an API account.
 
 The memory layer comes from my research on CLP. The protocol, its paper experiments and the measured results are in [mahimn01/context-ledger](https://github.com/mahimn01/context-ledger). This repo is the day-to-day harness built on it.
 
 ## Quickstart
 
-You need macOS, Linux or Windows, Python 3.10+, Node 20+ and git. For Claude models, install Claude Code with Anthropic's native installer (it lands at `~/.local/bin/claude`) and sign in once. For GPT models, install the Codex CLI and sign in with ChatGPT:
+You need Python 3.10+, Node 20+, git, and [Claude Code](https://code.claude.com/docs/en/setup) installed with Anthropic's native installer and signed in once.
 
-```sh
-brew install --cask codex      # or: npm install -g @openai/codex
-codex login                    # choose "Sign in with ChatGPT"
-```
-
-Then install with one command:
+macOS and Linux:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/mahimn01/alnair/main/get.sh | bash
-alnair doctor
+alnair doctor     # checks the install offline, with no model call
+alnair            # start a session in the current folder
 ```
 
-`get.sh` clones Alnair into `~/alnair` (or fast-forwards a clean checkout already there) and runs `install.sh`. It stops without changing anything if that folder has uncommitted changes or isn't Alnair. A piped script can't take options, so set them on the bash side of the pipe: `ALNAIR_HOME` (the folder), `ALNAIR_REF` (a branch, tag or commit), `ALNAIR_VAULT`, `ALNAIR_BIN`, and `ALNAIR_SKIP_CODEX=1`, `ALNAIR_SKIP_PYTHON_DEPS=1` or `ALNAIR_FORCE=1`. For example, `curl -fsSL .../get.sh | ALNAIR_VAULT=~/Notes bash`.
-
-Or by hand:
-
-```sh
-git clone https://github.com/mahimn01/alnair.git ~/alnair
-cd ~/alnair
-./install.sh
-alnair doctor
-alnair                  # Claude
-alnair --model gpt      # GPT-6.2-Astra through Codex
-```
-
-`install.sh` links `alnair` and `claude-lab-clp` (the old name) into `~/.local/bin`, creates `~/.clp` and the run folders under `~/.local/state`, makes a Python venv inside the checkout, and writes `~/.config/alnair/config.env` once. When `codex` is on your PATH it also adds Alnair's two MCP servers to `~/.codex/config.toml` between marker comments, saving `config.toml.alnair-backup-<time>` first. It's safe to run again. It never writes `~/.claude/settings.json`, `~/.claude.json` or anything else under `~/.claude`.
-
-```sh
-./install.sh --vault ~/Notes          # notes folder for session notes (default ~/Documents/Obsidian Vault)
-./install.sh --bin ~/bin              # put the commands somewhere other than ~/.local/bin
-./install.sh --skip-python-deps       # skip the optional page-extraction package
-./install.sh --skip-codex             # leave ~/.codex/config.toml alone
-```
-
-To update, run the `get.sh` line again, or `git pull` and run `./install.sh` again. Running Alnair never changes the checkout: what the lab learns about models goes to `~/.clp/model-catalog.json`, outside it. A checkout that an older Alnair left with a changed `lab/plugin/hooks/model-catalog.js` is handled by `get.sh` and `get.ps1`, which move that file's contents to `~/.clp/model-catalog.json` and put the tracked file back before updating.
-
-macOS is what I use every day. Linux should work but hasn't been tested yet. Windows runs natively, as below.
-
-### Windows
-
-Alnair runs natively on Windows 10 and 11, from PowerShell or cmd, with no WSL. Install Git for Windows (Claude Code runs its Bash tool in Git Bash), Python 3.10+, Node 20+ and Claude Code, then in PowerShell:
+Windows 10 and 11, in PowerShell, with no WSL (Git for Windows must be installed):
 
 ```powershell
 irm https://raw.githubusercontent.com/mahimn01/alnair/main/get.ps1 | iex
 alnair doctor
 ```
 
-`get.ps1` clones Alnair into `%USERPROFILE%\alnair` (or fast-forwards a clean checkout there) and runs `install.ps1`. That writes `alnair.cmd` and `claude-lab-clp.cmd` into `%USERPROFILE%\.local\bin` and adds that folder to your user PATH if it isn't on it; open a new window afterwards. To change what it does, set the same variables first, for example `$env:ALNAIR_VAULT = 'D:\Notes'` or `$env:ALNAIR_SKIP_CODEX = '1'`. From a checkout:
+Everything the installer does:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Vault D:\Notes -SkipCodex
+- clones this repository into `~/alnair`, makes a Python venv inside it, and installs the optional page-extraction package into that venv
+- links `alnair` (and its old name, `claude-lab-clp`) into `~/.local/bin`
+- creates `~/.clp` for memory and saved research, run folders under `~/.local/state`, and `~/.config/alnair/config.env` for settings
+- if the Codex CLI is installed, adds two MCP servers to `~/.codex/config.toml` between marker comments, after saving a backup
+
+It never writes `~/.claude/settings.json`, `~/.claude.json` or anything else under `~/.claude`. If you would rather read before you run, [get.sh](get.sh) and [install.sh](install.sh) are short, or clone the repository and run `./install.sh` yourself. [docs/install.md](docs/install.md) covers the options, updating and [removing it](docs/install.md#removing-it).
+
+One default to know about: when a session ends, a note about it is written to `~/Documents/Obsidian Vault/Claude Sessions`, and that folder is created if it isn't there. To use your own notes folder, install with `curl -fsSL .../get.sh | ALNAIR_VAULT=~/Notes bash` or set `ALNAIR_VAULT` in `config.env` afterwards.
+
+For GPT models, install the Codex CLI, run `codex login`, and start `alnair --model gpt`. Details are in [docs/codex.md](docs/codex.md).
+
+## Try the verify gate without a session
+
+This runs the gate on a two-note sample. It makes no model call, uses no network, and writes only to a temporary folder that it deletes.
+
+```sh
+~/alnair/examples/verify-gate.sh
 ```
 
-`install.ps1` takes `-Vault`, `-Bin`, `-SkipPythonDeps`, `-Force` and `-SkipCodex`. Like `install.sh`, it writes `config.env` once and never writes `~\.claude\settings.json` or `~\.claude.json`. It leaves an older `claude-lab.cmd` that runs WSL alone. Code Mode needs Claude Code 2.1.323 or newer; with an older one, alnair starts with Code Mode off and says so. Run the tests with `.\scripts\test.ps1`. [docs/windows.md](docs/windows.md) lists what changed for Windows and how the guards read PowerShell and cmd.
+The last three of its five steps print this. It is real output, copied from a run:
 
-## Using it
+```text
+== 3. Read the exact lines at AMZN.md:1-4#a07561d9
+[AMZN.md:1-4#a07561d9]  lines 1-4 of 5
+# AMZN
+
+Exit plan: sell if a daily close is 25% below the highest close since the first buy.
+Working order: BUY 22 @ $223 GTC.
+
+== 4. Verify an answer that quotes the note word for word
+PASS: verified against your files.
+Answer: The exit plan is to sell if a daily close is 25% below the highest close since the first buy.
+Why: every claim quotes your files word for word, and every number or name in the answer is in those quotes.
+Sources:
+  [1] AMZN.md lines 1-4: "sell if a daily close is 25% below the highest close since the first buy"
+Present the ANSWER and these claims as the verified part; label anything else you add as not verified.
+
+== 5. Verify an answer that gets the number wrong (25% became 20%)
+REFUSED: not verified (2 problems). Do not present this answer as fact.
+- claim 1, citation 1: the quote is not in AMZN.md:1-4 word for word. Read those lines again and copy the quote exactly, or cite the lines that hold it.
+- answer: `20` in the ANSWER line is not in any verbatim quote you cite. Quote the line that gives it, or leave it out.
+Repair: read the lines that hold each value, copy quotes exactly, and verify again; or answer UNANSWERABLE.
+```
+
+Inside a session the model runs these same steps before it tells you what your notes say. `alnair demo` starts a session on a small demo project with this sample corpus.
+
+## Everyday commands
 
 ```sh
 alnair                        # Claude session in the current folder
 alnair "fix the flaky test"   # start with a prompt
+alnair --model opus "..."     # pick the model yourself: auto (default), sonnet, opus, fable or gpt
 alnair --resume latest        # pick up the last run with the same memory tools
-alnair demo                   # small demo project plus a sample notes corpus
-alnair doctor                 # offline readiness report for Claude and Codex, no model call
 alnair --dry-run "..."        # print the exact command and settings, start nothing
-alnair --no-research          # leave the research tools out
-alnair --remote-control       # turn on Claude Code Remote Control
-alnair --remote-control=desk "fix the flaky test"   # same, with a session name
-alnair codex-setup            # add or refresh Alnair's entries in ~/.codex/config.toml
-alnair codex-setup --remove   # take them back out (after another backup)
+alnair doctor                 # offline readiness report for Claude and Codex
+alnair --version
 ```
 
 Index your notes once so lookups have something to search. This copies the folder into `~/.clp` and never writes to the original:
 
 ```sh
-~/alnair/.venv/bin/python ~/alnair/claude-clp/bin/clp_tool.py init            # your configured vault
-~/alnair/.venv/bin/python ~/alnair/claude-clp/bin/clp_tool.py init ~/Notes    # or any folder
+~/alnair/.venv/bin/python ~/alnair/claude-clp/bin/clp_tool.py init ~/Notes
 ```
 
-`--remote-control` passes Claude Code's own `--remote-control [name]` flag through. Remote Control needs Claude Code signed in with a claude.ai account and doesn't work with an API key. You can also type `/remote-control` inside a session that's already running. If you give both a name and a prompt, use the `--remote-control=NAME` form so the prompt isn't read as the name.
+The rest, including Remote Control and the Codex setup commands, is in [docs/usage.md](docs/usage.md).
 
-## GPT models through Codex
+## How it works
 
-```sh
-alnair --model gpt "..."                          # GPT-6.2-Astra (model id gpt-6.2-astra)
-alnair --model gpt --effort high "..."            # low, medium, high, xhigh, max or ultra
-alnair --model gpt --gpt-model gpt-6.2-sol "..."  # any other model Codex lists
-alnair --backend codex "..."                      # same as --model gpt
-alnair --model gpt --resume                       # codex resume --last, with Alnair's tools
-alnair --model gpt -- -s workspace-write          # anything after -- goes to codex
+```mermaid
+flowchart LR
+    you(["You"]) --> launcher["alnair launcher"]
+    launcher -->|default| claude["Claude Code<br/>interactive session"]
+    launcher -->|"--model gpt"| codex["Codex CLI<br/>interactive session"]
+    claude --- lab["Lab plugin<br/>model router, guards, status line"]
+    claude --- tools
+    codex --- tools
+    subgraph tools["Added to both"]
+        clp["Memory tools<br/>lookup, read, verify, session ledger"]
+        research["Research tools<br/>fetch, claim, report gate"]
+        notes["Session-note hook"]
+    end
+    clp --> store[("~/.clp<br/>notes index and session ledgers")]
+    research --> rstore[("~/.clp/research<br/>saved sources and claims")]
+    notes --> vault[("Your notes folder")]
 ```
 
-The session is the normal Codex TUI on your ChatGPT plan. Alnair passes these for that session only, as `-c` overrides:
+`alnair` is a Python launcher. For a Claude session it builds a settings layer for that one run, loads its plugins with `--plugin-dir`, and starts `claude`. Nothing is installed into Claude Code itself, which is why your plain `claude` command behaves as before. For a GPT session it starts `codex` with the same memory and research tools attached as MCP servers.
 
-- the model and the project folder
-- a short developer note on using the memory and research tools, and on how to switch models
-- the `alnair_clp` and `alnair_research` MCP servers
-- `forced_login_method="chatgpt"`
-- session-note hooks on `Stop`, `PreCompact` and `SessionEnd`
+- **Lab plugin** (Claude only). Reads each prompt and picks the model, shows a status line, and guards the session: no nested or headless sessions, and no writes to your Claude settings files.
+- **Memory tools.** `lookup`, `read` and `verify` over an indexed copy of your notes, plus a ledger for each session. Every address carries a hash of the lines it points at.
+- **Research tools.** Fetch a source, save its exact text, record claims that quote it, and gate the final report against those claims.
+- **Session-note hook.** Writes one Markdown note per session into your notes folder.
 
-It also removes `OPENAI_API_KEY` and `CODEX_API_KEY` from the session's environment so Codex can't fall back to API billing.
+## Model routing
 
-The model id comes from Codex's own model list (`codex debug models`). Alnair checks your choice against the copy Codex keeps in `~/.codex/models_cache.json` and refuses a model it doesn't list. One exception: when that copy was written by an older Codex than the one you have installed, it lets the model through, because an older Codex gets a shorter list from OpenAI. (A long-running Codex app-server or the desktop app can rewrite that file with its own older list.) Set `ALNAIR_GPT_MODEL` in `config.env` to change the default. If GPT-6.2-Astra is missing from `codex debug models`, update Codex (`brew upgrade --cask codex`).
-
-Codex asks you to review new hooks before it runs them. The first time, open `/hooks` in the session and trust Alnair's session-note hook. Until you do, Codex skips it and no note is written. Alnair never bypasses that check.
-
-Inside Codex, `/model` switches between GPT models. To switch to Claude you exit and run `alnair` (or `alnair --model opus`). Inside a Claude session, `/lab-model gpt` tells you the same thing the other way round. The two sessions share `~/.clp/sessions`, so `session_lookup` with `latest` or a listed id picks up what the other one saved.
-
-What doesn't carry over to Codex:
-
-- automatic Sonnet/Opus/Fable routing, which runs inside Claude Code
-- the lab status line and subagent rules
-- `--remote-control` (Codex has its own `codex remote-control`)
-- the paid `clp ask` tool
-
-Codex's session transcript format isn't a stable interface, so a Codex update can thin out what the session notes capture until the parser catches up.
-
-## Choosing a Claude model
-
-```sh
-alnair --model auto "..."     # the default
-alnair --model sonnet "..."
-alnair --model opus "..."
-alnair --model fable "..."
-```
-
-The choices are `auto`, `gpt`, and every alias in the model catalog, which today means `sonnet`, `opus` and `fable`. The catalog is the shipped `lab/plugin/hooks/model-catalog.js` merged with `~/.clp/model-catalog.json` (or the file `CLAUDE_LAB_MODEL_CATALOG` names), where the lab records aliases a newer Claude Code advertises in `claude --help` and the model ids sessions are served, so a new alias becomes a choice without a code change. Full Claude model ids such as `claude-opus-5-5` are rejected, and so is `--model` after `--`, because both would skip the router. For Sonnet and Opus, Alnair hands Claude Code the alias, so `opus` always means the newest Opus your Claude Code ships. Fable is passed as the full id in the catalog (`claude-fable-5-2` right now), and the lab updates that id when a session reports a newer one.
-
-With `auto`, the router reads your prompt:
+With `--model auto`, the default, the router reads your prompt:
 
 | Prompt looks like | Model | Effort |
 |---|---|---|
@@ -164,127 +158,67 @@ With `auto`, the router reads your prompt:
 | brokerage or options-trading work | Sonnet, plus a required Opus review | high |
 | everything else | Sonnet | medium |
 
-Auto never picks GPT. Claude and Codex are separate programs, so changing backends means a new session, and I have no measured basis yet for sending a given prompt to GPT rather than Opus or Fable. Picking GPT is up to you.
+Auto never picks GPT. Inside a session, `/lab-model auto|sonnet|opus|fable` sets the model for the next task. [docs/models.md](docs/models.md) has the rest: the Fable check, how new model aliases are picked up, and what subagents get.
 
-Start `alnair` with no prompt and your first message picks the model. Inside a session, `/lab-model auto|sonnet|opus|fable` sets the model for the next task, and adding `now` switches straight away. Subagents get Opus for review and hard reasoning and Sonnet for the rest. An explicit Haiku or Sonnet request for a subagent is kept.
+## Compared with plain Claude Code
 
-Fable is gated. `alnair fable-check` looks in your local Claude Code transcripts for an interactive Fable reply from the last 7 days and enables Fable only if it finds one. `alnair fable-check --enable` or `--disable` overrides that by hand. The check makes no model call.
-
-New Claude models show up on their own. Once a day, or right away when the Claude Code binary changes, Alnair reads the aliases listed in `claude --help` and adds any new one to the catalog, after which it's a valid `--model` choice. `alnair update` forces that check. Auto-routing only picks Sonnet, Opus or Fable, so a new alias has to be chosen by name.
-
-## Code Mode (experimental)
-
-Code Mode is **on by default**: plain `alnair` (and `claude-lab`, `claude-clp`) starts every new Claude session in Code Mode.
-
-```sh
-alnair                        # Code Mode on
-alnair --no-code-mode "..."   # this session without it
-alnair --code-mode "..."      # on, even when ALNAIR_CODE_MODE=0 is set
-```
-
-To turn it off for every session, add `ALNAIR_CODE_MODE=0` to `~/.config/alnair/config.env`, or export it in your shell. The order, strongest first: the flag, then `ALNAIR_CODE_MODE` in the shell, then in `config.env`, then on. An empty value counts as not set.
-
-**First launch:** Claude Code asks once whether to turn on Code Mode. Answer "Yes, turn on Code Mode" yourself. Claude Code then restarts the session in Code Mode. If you decline, that session runs without it.
-
-Code Mode is an experimental Claude Code feature (2.1.323 and later). Normally the model makes one tool call per turn. In Code Mode it can write a short JavaScript script instead, which the `REPL` tool runs. One script can read several files, search, call MCP tools and run a check, some of them in parallel, and keep only the part of the output it needs. The aim is fewer model turns and less raw tool output in the context.
-
-Alnair sets Code Mode only in the session's own environment, through `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE`. It never writes `~/.claude/settings.json` or `~/.claude.json`. The variable has three states:
-
-- `1`: Code Mode is wanted and nothing rules it out.
-- `0`: you turned it off (flag, shell or `config.env`). Claude Code treats a `0` as a hard off.
-- removed: Code Mode was wanted, but something rules it out. Alnair removes the variable instead of setting `0`, so it never writes an off switch you didn't ask for. A value left in your shell never leaks into the session either way.
-
-Where Code Mode can't run, the session still starts, without Code Mode, and one line says why (`Alnair: Code Mode is off for this session: …`). This holds even for an explicit `--code-mode`. These rule it out:
-
-- `DISABLE_TELEMETRY` or `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` set to any value (Claude Code reads even `0` as opting out)
-- `DO_NOT_TRACK`, `CLAUDE_CODE_DISABLE_FEATURE_FLAGS`, `DISABLE_GROWTHBOOK`, `CLAUDE_CODE_ENABLE_TELEMETRY` or `ENABLE_BETA_TRACING_DETAILED` turned on
-- a login that isn't a direct Claude subscription:
-  - `ANTHROPIC_AUTH_TOKEN` or a custom `ANTHROPIC_BASE_URL`. Alnair already removes a shell `ANTHROPIC_BASE_URL` from its sessions;
-  - an `apiKeyHelper`;
-  - an `ANTHROPIC_CUSTOM_HEADERS` with an `Authorization` or `X-Api-Key` header;
-  - Bedrock, Vertex, Foundry or another cloud provider.
-- bili (`claude-lab`), when its proxy routes the session through `ANTHROPIC_BASE_URL`. If the proxy is down, the session runs direct, with Code Mode
-- a model other than Opus 5.5, Sonnet 5.5, Haiku 5.5 or Fable 5.2. For `auto`, every model the router can pick is checked
-- `--remote-control`, or flags after `--` that remove the `REPL` tool (`--tools`, `--disallowedTools`, `--restricted`)
-- settings that deny `REPL`, or a project settings file that sets `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE` to `0`
-
-`--model gpt` (Codex) has no Code Mode. Alnair doesn't read the setting there and gives the session no Code Mode variable. It mentions Code Mode only if you typed `--code-mode`.
-
-Each run records what was requested and what the session got in `runtime.json` (`codeModeStatus`: `requested`, `source`, `enabled`, `env`, `reason`). The banner, the status line, `/lab-status` and the session note show it. `alnair --dry-run` prints the record and the Code Mode-related variables of the session's environment, with login values shown only as `[set]`. Like a launch, it drops the inherited logins that a lab login selector replaces, without reading the Keychain.
-
-`--resume` keeps how the run was launched, because Claude Code resumes a session in the mode it started in:
-
-- A run launched with Code Mode stays on. If something now rules Code Mode out, one line warns, and Claude Code decides.
-- A run launched with Code Mode off, or turned off automatically, stays off.
-- A run from before Alnair recorded Code Mode follows the new default on each resume. Resuming an older session that didn't run in Code Mode with the variable set is safe: Claude Code reopens it without Code Mode.
-- A Code Mode session can't later be resumed with `--remote-control`.
-
-What's different inside a Code Mode session:
-
-- The lab's guards run on every call a script makes, just as on a direct call. A script still can't start another Claude, Alnair or Codex session, can't write `~/.claude/settings.json` or `~/.claude.json`, and can't use the blocked mcporter servers. Script text that would start a headless session or write those two files is refused before it runs.
-- The CLP and research tools take `format: "json"` and then return one JSON object, so a script can `JSON.parse` the result instead of reading prose.
-- Bash output from inside a script isn't shortened by the lab, because Code Mode trims what a script returns. Direct Bash calls are still shortened.
-- The status line shows `code mode`, `code mode as started` (an older run that Claude Code resumes as it began), `code mode off` or `code mode off (auto)`. `/lab-status` shows the full record and how many scripts ran and how many calls they made. A launch with Code Mode is a request that Claude Code can still decline, so the script count is what shows Code Mode really ran.
-- Session notes get a tool section: direct calls, scripts, calls inside scripts, and commands run. Claude Code doesn't document how script calls are written to the transcript, so the note parser accepts several shapes and falls back to reading the script text. Treat the note's counts as a lower bound. The lab metrics count every call.
-
-`claude-mem/bench/code_mode_ab/` has a small task, a setup script and a collector for comparing the same task with Code Mode off and on.
-
-## Settings
-
-`~/.config/alnair/config.env` holds `KEY=VALUE` lines. Anything exported in your shell wins over the file.
-
-| Key | Default | What it changes |
+| | Plain Claude Code | With Alnair |
 |---|---|---|
-| `ALNAIR_VAULT` | `~/Documents/Obsidian Vault` | where session notes go, and what `clp_tool.py init` indexes by default |
-| `ALNAIR_GPT_MODEL` | `gpt-6.2-astra` | the Codex model `--model gpt` uses |
-| `CLP_STORE` | `~/.clp` | corpus copies and session ledgers |
-| `RESEARCH_HOME` | `~/.clp/research` | saved research sources and claims |
-| `RESEARCH_MAILTO` | unset | contact address sent to Crossref, OpenAlex and SEC. SEC full-text search wants one |
-| `ALNAIR_TZ` | `America/Toronto` | time zone used in session note titles |
-| `ALNAIR_LAB_ROOT` | `lab/` in the checkout | use a different copy of the lab shell |
-| `ALNAIR_CODE_MODE` | unset (on) | `0` starts new Claude sessions without Code Mode, `1` (or unset) with it. `--code-mode` and `--no-code-mode` win, and a shell value wins over the file |
-| `ALNAIR_LAB_LEGACY_ROOTS` | unset | earlier lab copies (separated by `:`) whose runs this checkout may `--resume`. Each run keeps the root it was made with |
-| `CONTEXT_LEDGER_RESEARCH_API_KEY` | unset | only for the optional paid `clp ask` command. Sessions never use it |
+| Model for each task | The one the session started with, until you switch with `/model` | Sonnet, Opus or Fable, picked from the prompt. You can override it |
+| After compaction | The session continues from a summary | The summary, plus a ledger of saved facts the model can look up, each checked by hash |
+| Answers about your notes | Not checked | `verify` refuses a claim whose quote isn't in the cited lines |
+| Research | Web search and page fetches | Keyless source tools that save what they fetch, and a report gate that checks every quote |
+| GPT models | No | `alnair --model gpt` runs Codex with the same memory |
+| Record of a session | Transcript files | One Markdown note per session in your notes folder |
+| Headless runs (`-p`) | Yes | Refused |
+| Billing | Subscription or API key | Subscription logins only |
+| Your Claude settings | Yours | Unchanged. Alnair passes its own layer for each run |
 
-`CODEX_HOME` is respected if you've moved Codex's folder.
+What you give up: headless mode, API-key use, and some simplicity. Alnair needs Python and Node, adds hooks and tools to every session, and turns on Claude Code's experimental Code Mode by default (`--no-code-mode` turns it off, and [docs/code-mode.md](docs/code-mode.md) explains it).
 
-## How it compares
+Your plain `claude` and `codex` commands behave as before. The only lasting change outside Alnair's own folders is the two MCP servers in `~/.codex/config.toml`, which plain `codex` sessions can use too.
 
-**Plain Claude Code or plain Codex.** Alnair is those programs. It adds routing on the Claude side, the memory and research tools on both, session notes and a status line, and it passes everything per run. Your normal `claude` and `codex` commands behave as before. The only lasting change is the two MCP servers in `~/.codex/config.toml`, which plain `codex` sessions can use too.
-
-**Memory plugins that summarise past sessions.** Those inject recalled text that the model can't check. Alnair's memory is addressed: every fact points at a file, a line range and a hash, and the verify gate refuses a quote that isn't there. Recall is weaker in exchange, because nothing gets remembered that wasn't written down.
-
-**context-ledger.** [context-ledger](https://github.com/mahimn01/context-ledger) is the research code and paper for CLP. Alnair ships the same library in `src/context_ledger/` and uses it for notes lookup and the gate.
+**Memory plugins that summarise past sessions** inject recalled text that the model can't check. Alnair's memory is addressed: every fact points at a file, a line range and a hash, and the verify gate refuses a quote that isn't there. Recall is weaker in exchange, because nothing gets remembered that wasn't written down.
 
 ## FAQ
 
 **Does it use my API key?** No. Claude sessions run on your Claude Code login and Codex sessions on your ChatGPT login. Alnair strips `OPENAI_API_KEY` and `CODEX_API_KEY` from Codex sessions. The only paid path is the optional `clp ask` command, which reads `CONTEXT_LEDGER_RESEARCH_API_KEY`, stops at a $5 daily cap, and isn't offered to Codex at all.
 
-**Will it change my settings?** It never writes Claude Code's settings. It reads `~/.claude/settings.json` to build the run's layer and passes that layer with `--settings`, and the test suite checks that a launch leaves those files byte-identical. On the Codex side, `install.sh` adds one marked block to `~/.codex/config.toml` after a backup, and `alnair codex-setup --remove` takes it out again.
+**Will it change my settings?** It never writes Claude Code's settings. It reads `~/.claude/settings.json` to build the run's layer and passes that layer with `--settings`, and the test suite checks that a launch leaves those files byte-identical. On the Codex side, the installer adds one marked block to `~/.codex/config.toml` after a backup, and `alnair codex-setup --remove` takes it out again.
+
+**How do I remove it?** Run `alnair codex-setup --remove`, delete the two links in `~/.local/bin`, and delete `~/alnair`. [docs/install.md](docs/install.md#removing-it) lists the data folders that are left for you to keep or delete.
 
 **Why no headless mode?** The subscription I built it on refuses headless calls with a 403, and silently falling back to an API key is how surprise bills happen. The same rule covers `codex exec`.
 
 **Does it need Obsidian?** No. Any folder of Markdown, text or Python files works as the notes corpus, and session notes are plain Markdown.
 
-**What happened to the desktop app?** I removed it in 0.2.0. The terminal harness is the part I use, so that's what this repo is now.
+**Does it work on Linux and Windows?** The test suites run on macOS, Ubuntu and Windows in CI. I use macOS every day, so that is where it has had the most real use. On Linux the optional account switcher is missing because it needs the macOS Keychain. [docs/windows.md](docs/windows.md) covers Windows.
+
+## Status
+
+Alnair is young. The first release was on 2026-11-17, and [CHANGELOG.md](CHANGELOG.md) lists what has changed since. I use it every day on macOS. The test suites hold more than 1,000 tests. They run against local stand-ins for the network and for the `claude` and `codex` programs, so they never start a model session or make a paid call. Code Mode support is experimental because the Claude Code feature is.
+
+## Documentation
+
+[docs/](docs/README.md) has the full pages: [install](docs/install.md), [everyday use](docs/usage.md), [model routing](docs/models.md), [Codex and GPT](docs/codex.md), [Code Mode](docs/code-mode.md), [settings](docs/settings.md) and [Windows](docs/windows.md).
+
+The code is in five folders:
+
+- `claude-mem/` holds the `alnair` launcher (`bin/claude-lab-clp`), the Codex backend, the routing benchmark and an optional Rune terminal layout
+- `lab/` is the Claude session layer: model router, guards, status line and the optional account switcher ([lab/README.md](lab/README.md))
+- `claude-clp/` is the memory plugin, its MCP server for Codex, the session ledger and the session-note hook
+- `claude-research/` is the research plugin and its MCP server
+- `src/context_ledger/` is the CLP library
 
 ## Roadmap
 
 - measure Claude against GPT on the routing benchmark, and only then let auto-routing choose between them
-- test and document Linux properly, including account switching without the macOS Keychain
+- more real use on Linux, including account switching without the macOS Keychain
 - let auto-routing consider newly discovered Claude model aliases
 - bring the lab status line to Codex sessions
 
-## Repo layout
-
-- `claude-mem/` holds the `alnair` launcher (`bin/claude-lab-clp`), the Codex backend (`bin/codex_backend.py`), the routing benchmark and an optional Rune terminal layout
-- `lab/` is the Claude session layer: launcher, model router, status line and the optional account switcher ([lab/README.md](lab/README.md))
-- `claude-clp/` is the CLP plugin, its MCP server for Codex (`bin/clp_mcp.py`), the session ledger and the session note hook
-- `claude-research/` is the research plugin and its MCP server
-- `src/context_ledger/` is the CLP library
-
 ## Contributing
 
-Bug reports and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers running the tests (none of them start a Claude or Codex session), and [SECURITY.md](SECURITY.md) says how to report a vulnerability privately.
+Bug reports and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers running the tests, and [SECURITY.md](SECURITY.md) says how to report a vulnerability privately. If Alnair is useful to you, a star helps other people find it.
 
 MIT licensed. See [LICENSE](LICENSE).
