@@ -70,6 +70,10 @@ def main(argv: list[str]) -> int:
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(__doc__)
         return 0
+    # Windows consoles default to a legacy code page; arguments and results here are UTF-8.
+    for stream in (sys.stdin, sys.stdout):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     if argv[0] == "list":
         for t in tools.TOOLS:
             print(f"{t.name:18} {t.description.split('. ')[0][:110]}")

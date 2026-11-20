@@ -70,6 +70,24 @@ def test_value_with_more_than_28_digits_does_not_crash():
     assert claims.show(Decimal(10) ** 30) == "1" + "0" * 30
 
 
+# ---- RES-5: the MCP server survives odd input ----------------------------------------------------------------------
+def test_mcp_handle_survives_params_that_are_not_an_object_and_unhashable_names():
+    for params in ([1], "x", 5):
+        out = research_mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": params})
+        assert out["error"]["code"] == -32602
+    for name in ([1], {"a": 1}):
+        out = research_mcp.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": name}})
+        assert out["error"]["code"] == -32602
+
+
+def test_mcp_stdio_survives_non_utf8_input():
+    good = json.dumps({"jsonrpc": "2.0", "id": 9, "method": "ping"}).encode("utf-8")
+    p = subprocess.run([sys.executable, str(ROOT / "bin" / "research_mcp.py")], input=b"\xff\xfe\n" + good + b"\n",
+                       capture_output=True, timeout=60, env={**os.environ, "PYTHONIOENCODING": "ascii"})
+    lines = [json.loads(x) for x in p.stdout.decode("utf-8").splitlines()]
+    assert [x.get("id") for x in lines] == [None, 9] and lines[0]["error"]["code"] == -32700, p.stderr[-300:]
+
+
 # ---- RES-6: the Wayback fallback asks for the same URL, query string included --------------------------------------
 def test_url_variants_keep_the_query_string():
     variants = fetch.url_variants("https://www.example.com/page/?id=5&x=y")
@@ -94,6 +112,32 @@ def test_a_token_that_is_a_data_blob_is_still_cut_so_lines_stay_small():
 def test_wrap_still_breaks_ordinary_long_lines_at_spaces():
     out = extract.wrap_lines("word " * 300)
     assert max(len(line) for line in out.split("\n")) <= 400 and len(out.split("\n")) > 1
+
+
+# ---- RES-8: UTF-8 whatever the locale -------------------------------------------------------------------------------
+def test_research_tool_call_uses_utf8_for_stdin_and_stdout(tmp_path):
+    env = {**os.environ, "PYTHONIOENCODING": "ascii", "RESEARCH_HOME": str(tmp_path / "home")}
+    tool = str(ROOT / "bin" / "research_tool.py")
+    p = subprocess.run([sys.executable, tool, "call", "\u2248x"], input=b"{}", capture_output=True, timeout=60, env=env)
+    assert "\u2248x".encode("utf-8") in p.stdout, p.stderr[-300:]
+    p = subprocess.run([sys.executable, tool, "call", "research_read"], input='{"address": "\u2248"}'.encode("utf-8"), capture_output=True, timeout=60, env=env)
+    assert b"not valid JSON" not in p.stdout
+
+
+def test_find_reads_saved_text_as_utf8(ctx, monkeypatch):
+    ref = ctx.save("web", "http://example.com/u", "Unicode page", "Revenue \u2248 15 million\nsecond line\n")
+    read_text = Path.read_text
+    monkeypatch.setattr(Path, "read_text", lambda self, encoding=None, errors=None: read_text(self, encoding=encoding or "ascii", errors=errors))
+    assert "\u2248 15 million" in memory.find(ctx.store, ref.id, "revenue", 0)
+
+
+# ---- RES-9: only newlines split lines ---------------------------------------------------------------------------------
+def test_find_addresses_use_newline_line_numbers(ctx):
+    ref = ctx.save("web", "http://example.com/l", "Line page", "alpha\u2028beta\nneedle here\n")
+    out = memory.find(ctx.store, ref.id, "needle", 0)
+    part = ctx.store.docs / ctx.store.get_meta(ref.id)["parts"][0]
+    line = part.read_text(encoding="utf-8").split("\n").index("needle here") + 1
+    assert f".txt:{line}-{line}#" in out
 
 
 # ---- RES-10: two reports in one second keep separate files --------------------------------------------------------------

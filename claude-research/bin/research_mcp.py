@@ -32,6 +32,8 @@ def handle(msg: dict) -> dict | None:
         return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32600, "message": "invalid request"}}
     if mid is None:  # notification (e.g. notifications/initialized): no response
         return None
+    if not isinstance(params, dict):
+        return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32602, "message": "params must be an object"}}
     if method == "initialize":
         return {"jsonrpc": "2.0", "id": mid, "result": {"protocolVersion": params.get("protocolVersion") or PROTOCOL, "capabilities": {"tools": {"listChanged": False}},
                                                        "serverInfo": {"name": "clp-research", "version": __version__}}}
@@ -41,7 +43,7 @@ def handle(msg: dict) -> dict | None:
         return {"jsonrpc": "2.0", "id": mid, "result": {"tools": _tool_list()}}
     if method == "tools/call":
         name, args = params.get("name"), params.get("arguments") or {}
-        if name not in tools.BY_NAME:
+        if not isinstance(name, str) or name not in tools.BY_NAME:
             return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32602, "message": f"unknown tool {name!r}"}}
         if not isinstance(args, dict):
             return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32602, "message": "arguments must be an object"}}
@@ -67,4 +69,7 @@ def serve(stdin=sys.stdin, stdout=sys.stdout) -> None:
 
 
 if __name__ == "__main__":
+    # Bytes that are not UTF-8 become a parse error on that line instead of ending the server; output is always UTF-8.
+    sys.stdin.reconfigure(encoding="utf-8", errors="replace")
+    sys.stdout.reconfigure(encoding="utf-8")
     serve()

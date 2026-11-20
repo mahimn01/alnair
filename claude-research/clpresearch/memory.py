@@ -169,7 +169,9 @@ def find(store, source: str, query: str, context: int = 3, limit: int = 10) -> s
     for name in meta['parts']:
         if source.endswith('.txt') and source != name:
             continue
-        lines = (store.docs / name).read_text().splitlines()
+        lines = (store.docs / name).read_text(encoding="utf-8").split("\n")     # only \n starts a line, as in every address
+        if lines[-1] == "":
+            lines.pop()
         last_end = 0
         for i, line in enumerate(lines, 1):
             if query.casefold() not in line.casefold() or i <= last_end:
