@@ -117,7 +117,7 @@ def cmd_init(args, config: dict, home: Path) -> int:
     known = config["corpora"].get(name)
     if known is not None and Path(known["folder"]) != folder:
         raise CorpusMissing(f"a corpus named {name!r} already indexes {known['folder']}; pick another --name")
-    result = build(args.store / name, folder, name)
+    result = build(args.store / name, folder, name, args.store)
     config["corpora"][name] = {"folder": str(folder)}
     config["default"] = config["default"] or name
     save_config(args.store, config)
@@ -132,7 +132,7 @@ def cmd_init(args, config: dict, home: Path) -> int:
 
 def cmd_refresh(args, config: dict) -> int:
     name = _name(args, config)
-    result = build(args.store / name, Path(config["corpora"][name]["folder"]), name)
+    result = build(args.store / name, Path(config["corpora"][name]["folder"]), name, args.store)
     for label in ("added", "changed", "removed"):
         paths = result[label]
         shown = ", ".join(display_path(p) for p in paths[:5]) + (f" and {len(paths) - 5} more" if len(paths) > 5 else "")

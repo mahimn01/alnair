@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-import clpload  # noqa: F401 - puts src on sys.path
+from clpload import tool  # importing clpload also puts src on sys.path
 
 from context_ledger.daily import corpus as dc
 from context_ledger.eval import corpus as ec
@@ -21,6 +21,20 @@ def test_a_store_inside_the_indexed_folder_is_not_indexed(tmp_path: Path):
     for _ in range(3):
         dc.build(store, folder, "demo")
     assert sorted(dc.load_manifest(store)["files"]) == ["a.md"]
+
+
+def test_nothing_else_kept_in_the_store_is_indexed_either(tmp_path: Path, capsys):
+    """clp_tool hands the scan the corpus's own folder (store/name). With the store inside the notes folder, another
+    corpus's copies and anything else kept in that store were still indexed as if they were notes."""
+    folder = tmp_path / "notes"
+    store = folder / "store"
+    (store / "other").mkdir(parents=True)
+    (folder / "a.md").write_text("alpha note\n", encoding="utf-8")
+    (store / "other" / "keep.md").write_text("another corpus's copy\n", encoding="utf-8")
+    for command in (["init", "--store", str(store), str(folder), "--name", "demo"], ["refresh", "--store", str(store), "--name", "demo"]):
+        assert tool.main(command) == 0, capsys.readouterr().err
+        assert sorted(dc.load_manifest(store / "demo")["files"]) == ["a.md"]
+    capsys.readouterr()
 
 
 def test_an_unreadable_file_is_skipped_not_fatal(tmp_path: Path, monkeypatch):

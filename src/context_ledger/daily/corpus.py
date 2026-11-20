@@ -49,16 +49,16 @@ def display_path(stored: str) -> str:
     return unquote(stored)
 
 
-def scan(folder: Path, store: Path | None = None) -> tuple[dict[str, str], list[str]]:
+def scan(folder: Path, *stores: Path | None) -> tuple[dict[str, str], list[str]]:
     """(stored path -> text, skipped relative paths) of every file under `folder` with one of
     EXTENSIONS, at most MAX_FILE_BYTES and valid UTF-8. Hidden directories and files are
-    skipped, and symlinks are never followed. A file that cannot be read is skipped, and so is the
-    `store` when it sits inside `folder` (its copies are not the folder's files)."""
+    skipped, and symlinks are never followed. A file that cannot be read is skipped, and so is each
+    of `stores` that sits inside `folder` (a store's copies are not the folder's files)."""
     texts: dict[str, str] = {}
     skipped: list[str] = []
-    own = store.expanduser().resolve() if store is not None else None
+    own = {store.expanduser().resolve() for store in stores if store is not None}
     for root, dirs, files in os.walk(folder, followlinks=False):
-        dirs[:] = sorted(d for d in dirs if not d.startswith(".") and d not in SKIP_DIRS and (own is None or Path(root, d).resolve() != own))
+        dirs[:] = sorted(d for d in dirs if not d.startswith(".") and d not in SKIP_DIRS and Path(root, d).resolve() not in own)
         for name in sorted(files):
             path = Path(root) / name
             if name.startswith(".") or not name.endswith(EXTENSIONS) or path.is_symlink():
@@ -75,14 +75,15 @@ def scan(folder: Path, store: Path | None = None) -> tuple[dict[str, str], list[
     return texts, skipped
 
 
-def build(store: Path, folder: Path, name: str) -> dict:
+def build(store: Path, folder: Path, name: str, home: Path | None = None) -> dict:
     """Index `folder` into `store` (first time or refresh) and return what changed: added,
     changed and removed stored paths, skipped files and the new manifest. Both indexes are
-    rebuilt from the copied texts; nothing is written to `folder`."""
+    rebuilt from the copied texts; nothing is written to `folder`. `home` is the CLP store that
+    holds `store` beside other corpora and session files; none of it is indexed either."""
     folder = folder.expanduser().resolve()
     if not folder.is_dir():
         raise CorpusMissing(f"{folder} is not a folder")
-    texts, skipped = scan(folder, store)
+    texts, skipped = scan(folder, store, home)
     if not texts:
         raise CorpusMissing(f"no {', '.join(EXTENSIONS)} files under {folder}")
     old = load_manifest(store)["files"] if (store / MANIFEST).exists() else {}
