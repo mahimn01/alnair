@@ -899,7 +899,7 @@ def doctor() -> dict:
     return {'claude': subprocess.check_output([str(CLAUDE), '--version'], text=True).strip(),
             'original_files_unchanged': {p: current.get(p) == value for p, value in before.items()},
             'original_main_config_sections_unchanged': stable_check,
-            **({} if before or stable else {'original_files_note': 'Not compared: no installation baseline is recorded on this '
+            **({} if before or stable or not native.WINDOWS else {'original_files_note': 'Not compared: no installation baseline is recorded on this '
                                             f'machine ({baseline}, {scope_file}), so the two checks above are empty.'}),
             'lab_plugin': str(ROOT / 'plugin'), 'runtime_root': str(STATE),
             'modelCatalog': sync_models(),

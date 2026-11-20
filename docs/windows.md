@@ -65,7 +65,7 @@ These are POSIX-only, so on Windows they skip with the reason, or give more time
 
 The four command guards hold on every system, with no platform switch. They are: no headless Claude, Alnair or
 Codex session; no writes to `~/.claude/settings.json` or `~/.claude.json`; the vault guard; and the settings
-guard. A Windows form only ever adds a refusal.
+guard. A Windows form only ever adds a refusal, with one exception on every system: a read-only program such as `cat` is still recognised under another case or a Windows ending (`./Cat`, `./cat.cmd`).
 
 - **Paths.** Each path is read the way the shell reads it and the way Windows does. Forms covered: `C:\Users\u\.claude.json`, `C:/Users/...`, `/c/Users/...`,
   `\\?\C:\...`, `FileSystem::C:\...`, `~\`, `%USERPROFILE%`, `%HOMEDRIVE%%HOMEPATH%`, `$env:USERPROFILE`,
@@ -92,6 +92,6 @@ Two guards live outside this repository:
 `alnair.cmd` is three lines. Its last line is
 `goto #_undefined_# 2>NUL || title %COMSPEC% & "<checkout>\.venv\Scripts\python.exe" -X utf8 "<checkout>\claude-mem\bin\claude-lab-clp" %*`.
 A `%` in a path is doubled, and the file carries an `alnair-shim` marker. Rerunning the installer rewrites only files with that marker; anything else needs `-Force`, which keeps a `.bak` copy.
-Like every batch file, it hands `%*` to Python as cmd parsed it. A prompt that itself contains double quotes is safer typed inside the session.
+Like every batch file, it hands `%*` to Python as cmd parsed it. A prompt that itself contains double quotes is safer typed inside the session. The same goes for `alnair --model gpt`: it starts npm's `codex.cmd`, so cmd reads the prompt once more on the way to Codex, and a prompt with `&`, `%` or `"` is safer typed inside the session.
 
 Task Manager shows two `python.exe` processes for one `alnair`. A venv's `python.exe` is a small launcher: it starts the base Python with the venv's settings and waits for it. It leaves Ctrl+C to that child and exits with the child's exit code. Claude Code is the child of the base Python.

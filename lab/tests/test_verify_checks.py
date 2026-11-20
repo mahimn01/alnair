@@ -69,7 +69,7 @@ class VerifyChecksTest(unittest.TestCase):
         real_run = lab.subprocess.run
 
         def run(argv, *args, **kwargs):  # cargo is missing; git, for the fingerprint, still runs
-            if argv[:1] == ["cargo"]:
+            if Path(argv[0]).stem.lower() == "cargo":  # cargo, or the cargo.EXE a Windows check resolves to
                 raise FileNotFoundError(2, "No such file or directory", "cargo")
             return real_run(argv, *args, **kwargs)
         with patch.object(lab.subprocess, "run", run):
