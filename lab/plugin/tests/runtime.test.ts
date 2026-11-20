@@ -253,6 +253,23 @@ test('mcporter cannot reach the vault server or print its config',async ($,on) =
   expect(f.calls).toEqual(['Bash']);
 });
 
+test('a URL or a gh repository named alnair or claude is data, while real launches stay refused', async () => {
+  for (const c of ['gh repo view owner/alnair', 'gh pr list -R owner/alnair', 'gh issue list --repo owner/claude-clp',
+    'curl https://api.github.com/repos/owner/alnair', 'open https://github.com/x/claude'])
+    expect([c, nestedSessionDenial(c)]).toEqual([c, null]);
+  for (const c of ["gh alias set x 'claude -p hi'", 'xargs claude', 'env claude -p x', 'nohup alnair', 'timeout 5 claude -p x',
+    'gh extension exec claude', "gh repo view 'x claude -p y'", 'curl https://x.test/a && claude -p y'])
+    expect([c, Boolean(nestedSessionDenial(c))]).toEqual([c, true]);
+});
+
+test('mcporterDenial stays fast on many --flag=value options and still finds the config word', async () => {
+  const started = Date.now();
+  expect(mcporterDenial('mcporter ' + Array(40).fill('--a=b').join(' '))).toBe(null);
+  expect(Date.now() - started).toBeLessThan(200 * SLOW);   // the old pattern took about 740 ms here, and 27 s under Node
+  for (const c of ['mcporter config', 'mcporter --verbose config', 'mcporter --flag value config', 'mcporter --a=b --c=d config list'])
+    expect([c, Boolean(mcporterDenial(c))]).toEqual([c, true]);
+});
+
 test('worker starts and review remain available beyond obsolete stored budgets',async ($,on) => {
   const f=fixture(on,{workers:10000});await start($);
   const launches=await Promise.all(Array.from({length:10},() => $.agent.spawn({prompt:'Implement one scoped change',subagentType:'harness-lab:implementer'})));

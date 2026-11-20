@@ -179,7 +179,7 @@ function shellQuote(text) { return "'" + String(text).replaceAll("'", "'\\''") +
 export function mcporterDenial(command) {
   if (!/mcporter/i.test(command)) return null;
   if (/obsidian/i.test(command)) return 'mcporter must not call the Obsidian vault server; it would bypass the vault guards. Use the mcp__obsidian-staging__ tools.';
-  if (/\bmcporter(?:\s+--?[\w-]+(?:[ =][^\s-]\S*)?)*\s+config\b/i.test(command)) return 'mcporter config output can contain credentials; ask the user to run config commands themselves.';
+  if (/\bmcporter(?:\s+--?(?!-)[\w-]+(?:[ =][^\s-]\S*)?)*\s+config\b/i.test(command)) return 'mcporter config output can contain credentials; ask the user to run config commands themselves.';
   return null;
 }
 
@@ -203,6 +203,7 @@ const SESSION_FLAGS = new Set(['-p','--print','--bare','-c','--continue','-r','-
 const DATA_PROGRAMS = new Set(['grep','egrep','fgrep','rg','ag','cat','head','tail','wc','ls','echo','printf','which','type',
   'readlink','realpath','file','stat','basename','dirname','diff','git','jq','sort','uniq','cut','tr','cd','pushd','test','[',
   'mkdir','cp','mv','rm','ln','chmod','touch','du','less','more','find']);
+const GH_DATA_ARGS = new Set(['repo','pr','issue','run','workflow','release','api','search','browse','label','cache']);
 const KEYWORDS = new Set(['!','{','}','if','then','else','elif','fi','do','done','while','until','time']);
 const SHELLS = new Set(['sh','bash','zsh','dash','ksh','fish','csh','tcsh']);
 const NESTED_SESSION = 'Use the lab specialists (the Agent tool) instead of starting another Claude, Alnair or Codex session: a nested session bypasses the lab routing, worker budget and handoffs. Version, help and `claude plugin validate|test` are allowed.';
@@ -451,9 +452,13 @@ function commandDenial(words, subs, depth, scan = true) {
   }
   // Any other program (xargs, env, nohup, timeout, ssh, an unknown wrapper) that names a launcher
   // is treated as running it, and an argument that is itself a command line is read as one.
+  // A URL (https://github.com/x/alnair) and an argument of a gh subcommand that only talks to GitHub
+  // (gh repo view owner/alnair) are names of things, not programs, unless they hold a command line.
+  const ghData = name === 'gh' && GH_DATA_ARGS.has(args[0]);
   for (const a of args) {
-    if (LAUNCHERS.has(base(a))) return NESTED_SESSION;
-    if (base(a) === 'codex' && ['exec','e'].includes(args[args.indexOf(a) + 1])) return NESTED_SESSION;
+    const named = !/\s/.test(a) && (ghData || /^[a-z][a-z0-9+.-]*:\/\//i.test(a));
+    if (!named && LAUNCHERS.has(base(a))) return NESTED_SESSION;
+    if (!named && base(a) === 'codex' && ['exec','e'].includes(args[args.indexOf(a) + 1])) return NESTED_SESSION;
     if (/\s/.test(a)) { const inner = nestedSessionDenial(a, depth + 1); if (inner) return inner; }
   }
   return null;
