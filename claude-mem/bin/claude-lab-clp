@@ -90,7 +90,12 @@ def load_config(path: Path = CONFIG) -> None:
         key, value = line.split("=", 1)
         key, value = key.strip().removeprefix("export ").strip(), value.strip().strip('"').strip("'")
         if key.isidentifier() and value and key not in os.environ:
-            os.environ[key] = FROM_CONFIG[key] = os.path.expanduser(value)
+            value = os.path.expanduser(value)
+            try:
+                os.environ[key] = value
+            except UnicodeEncodeError:  # Linux under a locale that can't write this value: pass its UTF-8 bytes as they are
+                os.environb[key.encode("utf-8")] = value.encode("utf-8")
+            FROM_CONFIG[key] = os.environ[key]
 
 
 def shell_environ() -> dict[str, str]:

@@ -301,7 +301,8 @@ def test_config_env_with_a_utf8_bom_keeps_its_first_setting(tmp_path, monkeypatc
 
 
 def test_config_files_are_read_and_written_as_utf8_whatever_the_default_encoding(tmp_path):
-    """A fresh Python with UTF-8 mode off and no locale coercion: ASCII on Linux and macOS, cp1252 on Windows."""
+    """A fresh Python with UTF-8 mode off and no locale coercion: ASCII on Linux and macOS, cp1252 on Windows.
+    Linux can't hold the value as text under that locale, so the check is on the bytes the session will get."""
     code = (
         "import os, sys\n"
         "from pathlib import Path\n"
@@ -309,7 +310,7 @@ def test_config_files_are_read_and_written_as_utf8_whatever_the_default_encoding
         "from memload import launcher as L\n"
         "home = Path(sys.argv[2])\n"
         "L.load_config(home / 'config.env')\n"
-        "assert os.environ['ALNAIR_ENC_TEST'] == '\\u00c1lvaro', os.environ.get('ALNAIR_ENC_TEST')\n"
+        "assert os.fsencode(os.environ['ALNAIR_ENC_TEST']) == '\\u00c1lvaro'.encode('utf-8'), os.environ.get('ALNAIR_ENC_TEST')\n"
         "cb = L.load_codex()\n"
         "cb.setup_config(L.REPO, '/py', home=home)\n"
         "assert '\\u00c1lvaro' in (home / 'config.toml').read_text(encoding='utf-8')\n"

@@ -123,6 +123,8 @@ def call(name: str, args: dict) -> tuple[bool, str]:
     stdin = spec["stdin"](args) if "stdin" in spec else None
     # UTF-8 both ways, whatever the locale: the child reads and prints through its own stdin and stdout
     env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
+    if os.name != "nt":  # and its arguments as UTF-8 bytes: on Linux a locale that can't encode one would stop the call
+        argv = [a.encode("utf-8", "surrogateescape") for a in argv]
     try:
         done = subprocess.run(argv, input=stdin, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env,
                               timeout=spec["timeout"], check=False)
