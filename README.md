@@ -35,7 +35,7 @@ The memory layer comes from my research on CLP. The protocol, its paper experime
 
 ## Quickstart
 
-You need Python 3.10+, Node 20+, git, and [Claude Code](https://code.claude.com/docs/en/setup) installed with Anthropic's native installer and signed in once.
+You need Python 3.10+, Node 20+, git, and [Claude Code](https://code.claude.com/docs/en/setup) installed with Anthropic's native installer and signed in once. On Debian and Ubuntu, Python's venv module is a separate package, so run `sudo apt install python3-venv` first.
 
 macOS and Linux:
 
@@ -61,9 +61,18 @@ Everything the installer does:
 
 It never writes `~/.claude/settings.json`, `~/.claude.json` or anything else under `~/.claude`. If you would rather read before you run, [get.sh](get.sh) and [install.sh](install.sh) are short, or clone the repository and run `./install.sh` yourself. [docs/install.md](docs/install.md) covers the options, updating and [removing it](docs/install.md#removing-it).
 
-One default to know about: when a session ends, a note about it is written to `~/Documents/Obsidian Vault/Claude Sessions`, and that folder is created if it isn't there. To use your own notes folder, install with `curl -fsSL .../get.sh | ALNAIR_VAULT=~/Notes bash` or set `ALNAIR_VAULT` in `config.env` afterwards.
-
 For GPT models, install the Codex CLI, run `codex login`, and start `alnair --model gpt`. Details are in [docs/codex.md](docs/codex.md).
+
+### Where session notes go
+
+When a session ends, Alnair writes one Markdown note about it into a `Claude Sessions` folder inside your notes folder. The setting `ALNAIR_VAULT` names the notes folder. If you don't set it, the notes folder is `~/Documents/Obsidian Vault`, and it is created if it isn't there. You don't need Obsidian for this; the notes are plain Markdown files.
+
+To use a folder of your own:
+
+- when you install: `curl -fsSL https://raw.githubusercontent.com/mahimn01/alnair/main/get.sh | ALNAIR_VAULT=~/Notes bash` (in PowerShell, run `$env:ALNAIR_VAULT = 'D:\Notes'` before the `irm` line)
+- later: add the line `ALNAIR_VAULT=~/Notes` to `~/.config/alnair/config.env`
+
+Changing it later doesn't move notes that are already written. [docs/install.md](docs/install.md#your-notes-folder) has the details.
 
 ## Try the verify gate without a session
 
