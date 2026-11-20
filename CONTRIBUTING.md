@@ -35,7 +35,7 @@ claude plugin test claude-research/plugin
 
 `examples/verify-gate.sh` is a quick end-to-end check of the memory tools: it should print one PASS and one REFUSED.
 
-CI runs the five suites on macOS, Ubuntu and Windows with Python 3.12, and again on Ubuntu with Python 3.10 and 3.13. It also runs the installer on all three systems, the example above, `node --test lab/tests/node/windows-guards.test.mjs`, `ruff check --select E9,F63,F7,F82`, and a syntax check of the shell and PowerShell scripts.
+CI runs the five suites on macOS and Ubuntu and four of them on Windows (clp-rune, in `claude-mem/rune`, doesn't run on Windows), all with Python 3.12. It runs all five again on Ubuntu with Python 3.10 and 3.13. It also runs the installer on all three systems, the example above, `node --test lab/tests/node/windows-guards.test.mjs`, `ruff check --select E9,F63,F7,F82`, and a syntax check of the shell and PowerShell scripts.
 
 ## Rules the code keeps
 
