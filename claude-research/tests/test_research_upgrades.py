@@ -54,11 +54,12 @@ def test_history_saves_provider_payload(ctx,mock):
     assert m['raw_sha256'] and m['provider']=='yahoo' and m['retrieved_at']
 
 
-def test_wayback_variants_strip_query():
+def test_wayback_variants_keep_query():
     from clpresearch.fetch import url_variants
     vs=url_variants('https://www.example.com/article/?tracking=1')
-    assert 'https://example.com/article' in vs
-    assert 'https://www.example.com/article/' in vs
+    assert 'https://example.com/article?tracking=1' in vs
+    assert 'https://www.example.com/article/?tracking=1' in vs
+    assert not any('?' not in v for v in vs)
 
 
 def test_fetch_saves_raw_clean_and_find(ctx,mock):

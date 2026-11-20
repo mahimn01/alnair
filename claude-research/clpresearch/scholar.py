@@ -45,7 +45,10 @@ def parse_id(raw: str) -> tuple[str, str]:
     low = s.lower()
     m = re.search(r"(?:doi\.org/|^doi:\s*)(10\.\d{4,9}/\S+)", low) or re.match(r"^(10\.\d{4,9}/\S+)$", low)
     if m:
-        return "doi", m.group(1).rstrip(".,;")
+        doi = m.group(1).rstrip(".,;")
+        while doi.endswith(")") and doi.count(")") > doi.count("("):     # a bracket that only closes the sentence around the DOI
+            doi = doi[:-1].rstrip(".,;")
+        return "doi", doi
     m = re.search(r"arxiv\.org/(?:abs|pdf)/([a-z\-]+(?:\.[a-z]{2})?/\d{7}|\d{4}\.\d{4,5})(?:v\d+)?", low) or \
         re.match(r"^(?:arxiv:\s*)?([a-z\-]+(?:\.[a-z]{2})?/\d{7}|\d{4}\.\d{4,5})(?:v\d+)?$", low)
     if m:
@@ -529,10 +532,14 @@ def _crossref_work_url(doi: str) -> str:
 
 def crossref_norm(w):
     parts=(w.get('published') or w.get('issued') or {}).get('date-parts') or [[]]
+    dp=[]       # year, month, day: stop at the first part that is missing or not a number
+    for p in parts[0] or []:
+        try: dp.append(int(p))
+        except (TypeError, ValueError): break
     return {'src':'crossref','id':w.get('DOI',''),'doi':w.get('DOI'),
-            'date':'-'.join(f'{int(p):02d}' for p in parts[0]) if parts[0] else None,'arxiv':None,'pdf':None,
-            'title':' '.join(w.get('title') or ['(untitled)']),'year':parts[0][0] if parts[0] else None,
-            'authors':[' '.join(filter(None,[a.get('given'),a.get('family')])) for a in w.get('author',[])],
+            'date':'-'.join(f'{p:02d}' for p in dp) if dp else None,'arxiv':None,'pdf':None,
+            'title':' '.join(w.get('title') or ['(untitled)']),'year':dp[0] if dp else None,
+            'authors':[' '.join(filter(None,[a.get('given'),a.get('family')])) or a.get('name') or '' for a in w.get('author',[])],
             'url':w.get('URL'),'landing':w.get('URL'),'venue':' '.join(w.get('container-title') or []),
             'abstract':html_to_text(w.get('abstract',''))[1] if w.get('abstract') else '',
             'type':w.get('type'),'cited_by':w.get('is-referenced-by-count'),'oa':None,'refs':[]}

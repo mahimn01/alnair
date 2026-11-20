@@ -49,6 +49,14 @@ def test_a_ledger_an_older_version_opened_under_the_plain_slug_stays_in_use(tmp_
     assert claims.Ledger(store, "cafè revenue").path != old
 
 
+# ---- RES-3: charset parameter is case-insensitive ------------------------------------------------------------------
+def test_charset_parameter_is_matched_case_insensitively():
+    body = "caf\xe9".encode("latin-1")
+    for ctype in ("text/html; Charset=ISO-8859-1", "text/html; CHARSET=\"iso-8859-1\"; x=y"):
+        assert http.Response(200, {"content-type": ctype}, body, "http://x").text() == "caf\xe9"
+    assert http.Response(200, {"content-type": "text/html"}, "caf\xe9".encode("utf-8"), "http://x").text() == "caf\xe9"
+
+
 # ---- RES-4: Infinity, NaN and very long numbers --------------------------------------------------------------------
 @pytest.mark.parametrize("raw", ["Infinity", "-Infinity", "NaN", float("inf"), float("nan"), "1e999999999"])
 def test_value_that_is_not_a_usable_number_is_refused_cleanly(raw):
@@ -60,6 +68,14 @@ def test_value_with_more_than_28_digits_does_not_crash():
     got = claims.parse_value("12345678901234567890.123456789012345")
     assert claims.show(got[1]) == "12345678901234567890.123456789"
     assert claims.show(Decimal(10) ** 30) == "1" + "0" * 30
+
+
+# ---- RES-6: the Wayback fallback asks for the same URL, query string included --------------------------------------
+def test_url_variants_keep_the_query_string():
+    variants = fetch.url_variants("https://www.example.com/page/?id=5&x=y")
+    assert variants[0] == "https://www.example.com/page/?id=5&x=y"
+    assert all(v.endswith("?id=5&x=y") for v in variants)
+    assert fetch.url_variants("https://example.com/a")[0] == "https://example.com/a"
 
 
 # ---- RES-7: long tokens stay quotable ----------------------------------------------------------------------------------
@@ -87,3 +103,23 @@ def test_two_reports_in_one_second_do_not_overwrite(ctx, monkeypatch):
     first = report.unique_report_path(ctx.store.home / "reports", "inq")
     first.write_text("{}", encoding="utf-8")
     assert report.unique_report_path(ctx.store.home / "reports", "inq") != first
+
+
+# ---- RES-11, 12, 13: Crossref records and DOI parsing ------------------------------------------------------------------
+@pytest.mark.parametrize("parts,date,year", [([[None]], None, None), ([[2020, None]], "2020", 2020), ([[2020, 5, None]], "2020-05", 2020), ([[2020, 5, 3]], "2020-05-03", 2020),
+                                             ([[None, 5]], None, None)])
+def test_crossref_null_date_parts_are_skipped(parts, date, year):
+    got = scholar.crossref_norm({"DOI": "10.1/x", "title": ["T"], "issued": {"date-parts": parts}})
+    assert got["date"] == date and got["year"] == year
+
+
+def test_doi_in_parentheses_loses_the_closing_bracket():
+    assert scholar.parse_id("(https://doi.org/10.1234/abc)") == ("doi", "10.1234/abc")
+    assert scholar.parse_id("(https://doi.org/10.1234/abc).") == ("doi", "10.1234/abc")
+    assert scholar.parse_id("10.1002/(sici)1097-4571(199806)49:8<693::aid-asi4>3.0.co;2-o")[1].endswith("co;2-o")
+    assert scholar.parse_id("10.1016/s0021-9258(18)32555-4") == ("doi", "10.1016/s0021-9258(18)32555-4")
+
+
+def test_crossref_organisation_author_keeps_its_name():
+    got = scholar.crossref_norm({"DOI": "10.1/x", "title": ["T"], "author": [{"name": "WHO Consortium"}, {"given": "Ada", "family": "One"}]})
+    assert got["authors"] == ["WHO Consortium", "Ada One"]

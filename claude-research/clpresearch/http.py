@@ -13,6 +13,7 @@ import http.client
 import json
 import os
 import random
+import re
 import socket
 import ssl
 import time
@@ -43,8 +44,9 @@ class Response:
     def text(self) -> str:
         charset = "utf-8"
         ctype = self.headers.get("content-type", "")
-        if "charset=" in ctype:
-            charset = ctype.split("charset=")[-1].split(";")[0].strip().strip('"') or "utf-8"
+        found = re.search(r"charset\s*=\s*([^;]*)", ctype, re.I)
+        if found:
+            charset = found.group(1).strip().strip('"') or "utf-8"
         try:
             return self.body.decode(charset, errors="replace")
         except LookupError:

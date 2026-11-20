@@ -20,7 +20,7 @@ def url_variants(url):
     host=p.netloc
     hosts=[host, host[4:] if host.startswith('www.') else 'www.'+host]
     paths=[p.path, p.path.rstrip('/'), p.path.rstrip('/')+'/']
-    return list(dict.fromkeys([url]+[urlunsplit((p.scheme,h,path,'','')) for h in hosts for path in paths]))
+    return list(dict.fromkeys([url]+[urlunsplit((p.scheme,h,path,p.query,'')) for h in hosts for path in paths]))
 
 
 class Alternates(HTMLParser):
