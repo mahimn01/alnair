@@ -22,7 +22,18 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 SCHEMA = 1
-TZ = ZoneInfo(os.environ.get("ALNAIR_TZ") or "America/Toronto")
+def _zone():
+    """ALNAIR_TZ when it names a real zone, else the computer's own time zone. Never raises."""
+    # macOS and Linux link /etc/localtime to the zone's file, which gives its name (Europe/Berlin)
+    for name in (os.environ.get("ALNAIR_TZ") or "", os.path.realpath("/etc/localtime").partition("zoneinfo/")[2]):
+        try:
+            return ZoneInfo(name)
+        except Exception:  # noqa: BLE001 - unset, misspelt, or no tz database (Windows without tzdata)
+            continue
+    return datetime.now().astimezone().tzinfo  # the current offset, when the zone's name can't be found
+
+
+TZ = _zone()
 DEFAULT_VAULT = Path(os.environ.get("ALNAIR_VAULT") or Path.home() / "Documents" / "Obsidian Vault").expanduser()
 SESSIONS_FOLDER = "Claude Sessions"
 DEFAULT_STORE = Path.home() / ".clp"
@@ -498,8 +509,10 @@ def short_title(prompts: list[str], fallback: str = "session") -> str:
     return raw[:48]
 
 
-def note_filename(when: datetime, title: str, session_id: str) -> str:
+def note_filename(when: datetime, title: str, session_id: str, copy: int = 1) -> str:
     prefix = (session_id or "unknown")[:8]
+    if copy > 1:
+        prefix += f"-{copy}"
     day = when.strftime("%Y-%m-%d")
     return f"{day} {title} {prefix}.md"
 
@@ -614,7 +627,7 @@ def render_note(
         f"session_id: {session_id}",
         f"created: {created_at}",
         f"updated: {updated_at}",
-        f"timezone: {TZ.key}",
+        f"timezone: {TZ}",
         "source: alnair-codex" if codex else "source: claude-lab-clp",
         f"hooks: [{', '.join(ev_list)}]",
         "---",
@@ -623,7 +636,7 @@ def render_note(
         "",
         *([f"- **Model:** `{parsed['model']}`"] if parsed.get("model") else []),
         *([f"- **Code Mode:** {code_mode}"] if code_mode else []),
-        f"- **When ({TZ.key}):** {updated_at}",
+        f"- **When ({TZ}):** {updated_at}",
         f"- **Working dir / project:** `{project or cwd or '(unknown)'}`",
         f"- **Session id:** `{session_id}`",
         f"- **Last hook:** `{event}`",
@@ -791,6 +804,8 @@ def run(
         session_id = tpath.stem
     if not session_id:
         raise ValueError("session_id is required (env CLAUDE_MEM_SESSION_ID or hook payload)")
+    if "/" in session_id or "\\" in session_id or session_id in {".", ".."}:
+        raise ValueError(f"invalid session id: {session_id!r}")
     if tpath is None or not Path(tpath).is_file():
         found = find_transcript(session_id, cwd)
         if found is not None:
@@ -850,8 +865,10 @@ def run(
         title = short_title(parsed.get("prompts") or [])
         note_path = sessions_dir / note_filename(now, title, session_id)
         # Collision: if file exists without our marker, pick a unique name
-        if note_path.exists() and not marker:
-            note_path = sessions_dir / note_filename(now, title, session_id + "-x")
+        copy = 1
+        while note_path.exists() and not marker:
+            copy += 1
+            note_path = sessions_dir / note_filename(now, title, session_id, copy)
         created_at = now_s
         prior_events = []
 

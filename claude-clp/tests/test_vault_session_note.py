@@ -348,3 +348,32 @@ def test_rows_of_the_wrong_shape_are_skipped_not_fatal(vsn, tmp_path: Path):
     tools = parsed["tool_use"]
     assert set(tools["direct"]) | set(tools["inner"]) <= {"tool"}
     assert tools["repl_scripts"] == 1 and "keep this prompt" in json.dumps(parsed["prompts"])
+
+
+def test_a_name_collision_never_overwrites_another_note(vsn, vault_env, tmp_path: Path):
+    vault, store, pre, pre_hash = vault_env
+    notes = []
+    for sid in ("abcd1234-one", "abcd1234-two", "abcd1234-three"):
+        trans = tmp_path / f"{sid}.jsonl"
+        write_transcript(trans, sid, ["Same prompt"], f"Decision: from {sid}.")
+        r = vsn.run(transcript_path=trans, session_id=sid, cwd="/tmp/proj", event="Stop", vault=vault, store=store, refresh=False)
+        notes.append(Path(r["path"]))
+    assert len(set(notes)) == 3
+    for sid, note in zip(("abcd1234-one", "abcd1234-two", "abcd1234-three"), notes):
+        assert f"Decision: from {sid}." in note.read_text(encoding="utf-8")
+
+
+def test_a_bad_or_missing_timezone_never_breaks_the_import(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("ALNAIR_TZ", "Not/AZone")
+    mod = load_vsn()
+    assert mod.datetime.now(mod.TZ).utcoffset() is not None
+    monkeypatch.setenv("ALNAIR_TZ", "Asia/Tokyo")
+    mod = load_vsn()
+    assert mod.datetime.now(mod.TZ).utcoffset().total_seconds() == 9 * 3600
+
+
+def test_a_session_id_that_climbs_out_of_the_store_is_refused(vsn, vault_env):
+    vault, store, pre, pre_hash = vault_env
+    with pytest.raises(ValueError):
+        vsn.run(session_id="../escape", event="Stop", vault=vault, store=store, refresh=False)
+    assert not (store / "escape").exists() and not (store.parent / "escape").exists()
