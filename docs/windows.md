@@ -40,7 +40,7 @@ Windows.
 | Lab folders | `CLAUDE_LAB_RUN_DIR` and `CLAUDE_LAB_ROOT` start with `/` | `C:\...` is accepted and kept with forward slashes; folders compare without case |
 | lab verify | Check programs matched by exact name | On Windows without case or `.exe` (`Python.EXE` is `python`) |
 | lab verify checks | `env NAME=value ...`, `python3` and bare `npm` start as on macOS | On Windows a leading `env NAME=value` sets those variables for the program (there is no `env` program). `python3` and `python` become a real Python, not the Microsoft Store stub. Other programs are found through `PATHEXT`, so `npm` runs `npm.cmd` |
-| lab doctor | `launcher` is `~/.local/bin/claude-lab` | `%USERPROFILE%\.local\bin\alnair.cmd` on Windows |
+| lab doctor | `launcher` is `~/.local/bin/alnair` | `%USERPROFILE%\.local\bin\alnair.cmd` on Windows |
 | Code Mode | Assumed a current Claude Code | The launchers ask the installed Claude Code its version. Below 2.1.323 (2.1.321, for one) Code Mode is turned off with one line saying why |
 | Keychain | macOS `security` for saved lab accounts | macOS only. Elsewhere the lab says saved accounts need the macOS Keychain; signing in with `claude` works everywhere |
 | bili, the auth fallback supervisor, clp-rune | `setsid`, `killpg`, `termios` | macOS only, unchanged. bili is off by default |

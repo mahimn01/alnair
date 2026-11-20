@@ -900,6 +900,8 @@ def installed_claude() -> str:
         return subprocess.check_output([str(CLAUDE), '--version'], text=True).strip()
     except FileNotFoundError:
         return f"not installed: there is no {CLAUDE}. Install Claude Code with Anthropic's native installer, then sign in once with `claude`."
+    except (OSError, subprocess.SubprocessError) as error:
+        return f"{CLAUDE} is there but couldn't be run: {error}"
 
 
 def doctor() -> dict:
