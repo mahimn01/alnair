@@ -1,0 +1,6 @@
+# Line endings: LF in every checkout, Windows included. Git for Windows would otherwise check text files out
+# with CRLF, which breaks the shell scripts and hook commands that run in Git Bash. Batch files keep CRLF,
+# which is what cmd reads reliably.
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf

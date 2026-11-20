@@ -109,4 +109,16 @@ def _codex_sandbox(monkeypatch, tmp_path_factory):
     def no_exec(*a, **kw):
         raise AssertionError("Unit tests must not exec a session")
     monkeypatch.setattr(os, "execve", no_exec)
+    import subprocess
+    # On Windows a session starts as a child process (native.run_session calls subprocess.call), so a call whose
+    # program is Claude Code or Codex is refused too.
+    real_call = subprocess.call
+
+    def call(args, *rest, **kwargs):
+        first = args[0] if isinstance(args, (list, tuple)) and args else args
+        if str(first).replace("\\", "/").rsplit("/", 1)[-1].lower().split(".")[0] in ("claude", "codex"):
+            raise AssertionError("a test must not start a Claude or Codex session")
+        return real_call(args, *rest, **kwargs)
+
+    monkeypatch.setattr(subprocess, "call", call)
     yield home

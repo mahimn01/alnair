@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -25,6 +26,8 @@ def load_collect():
 
 @pytest.fixture
 def arms(tmp_path) -> Path:
+    if os.name == "nt":  # setup.sh is a bash script, and the bash a Windows program finds first is often WSL's
+        pytest.skip("the A/B kit's setup.sh runs on macOS and Linux")
     result = subprocess.run(["bash", str(BENCH / "setup.sh")], env={"ALNAIR_AB_DIR": str(tmp_path), "PATH": "/usr/bin:/bin"},
                             capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stderr

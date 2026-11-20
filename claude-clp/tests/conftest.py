@@ -70,6 +70,17 @@ def no_session_exec(monkeypatch):
         raise AssertionError("a test must not exec a Claude session")
 
     monkeypatch.setattr(os, "execve", refuse)
+    # On Windows a session starts as a child process (native.run_session calls subprocess.call), so a call whose
+    # program is Claude Code or Codex is refused too.
+    real_call = subprocess.call
+
+    def call(args, *rest, **kwargs):
+        first = args[0] if isinstance(args, (list, tuple)) and args else args
+        if str(first).replace("\\", "/").rsplit("/", 1)[-1].lower().split(".")[0] in ("claude", "codex"):
+            raise AssertionError("a test must not start a Claude or Codex session")
+        return real_call(args, *rest, **kwargs)
+
+    monkeypatch.setattr(subprocess, "call", call)
 
 
 @pytest.fixture(autouse=True)

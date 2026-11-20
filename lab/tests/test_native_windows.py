@@ -129,6 +129,21 @@ def test_a_real_child_gets_utf8_mode_and_its_exit_code_comes_back(windows):
     assert native.run_session([sys.executable, '-c', code], env) == 41
 
 
+def test_the_suite_refuses_to_start_a_real_session_child(windows):
+    """conftest.py refuses a Claude or Codex child, which is how a session starts on Windows."""
+    for program in ('claude.exe', r'C:\Users\u\.local\bin\claude.exe', 'codex.cmd', 'claude'):
+        with pytest.raises(AssertionError, match='must not start'):
+            native.run_session([program, '--version'], {})
+
+
+def test_the_checkout_has_no_symlinks():
+    """git on Windows checks a symlink out as a text file holding its target, so nothing here may be one."""
+    listed = subprocess.run(['git', '-C', str(ROOT), 'ls-files', '-s'], capture_output=True, text=True)
+    if listed.returncode != 0:
+        pytest.skip('not a git checkout')
+    assert [line.split('\t', 1)[1] for line in listed.stdout.splitlines() if line.startswith('120000 ')] == []
+
+
 def test_on_macos_and_linux_the_session_replaces_this_process(monkeypatch):
     monkeypatch.setattr(native, 'WINDOWS', False)
     seen = []
