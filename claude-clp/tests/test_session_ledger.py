@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import io
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -65,3 +67,43 @@ def test_flush_pending_appends_and_deletes(store: Path, tmp_path: Path, capsys):
     rec = tool.session_ledger.read(out["address"], store=store)
     assert rec["kind"] == "compact_flush"
     assert "Sonnet" in rec["text"]
+
+
+APPENDER = """
+import importlib.util, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("session_ledger", sys.argv[1])
+sl = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(sl)
+for i in range(int(sys.argv[4])):
+    sl.append("shared", f"worker {sys.argv[3]} turn {i}", store=Path(sys.argv[2]))
+"""
+
+
+def test_concurrent_appenders_get_unique_seq_numbers(store: Path):
+    script = Path(tool.session_ledger.__file__)
+    procs = [subprocess.Popen([sys.executable, "-c", APPENDER, str(script), str(store), str(n), "15"],
+                              stderr=subprocess.PIPE, text=True) for n in range(5)]
+    errs = [p.communicate(timeout=120)[1] for p in procs]
+    assert [p.returncode for p in procs] == [0] * 5, errs
+    lines = (store / "sessions" / "shared" / "turns.jsonl").read_text(encoding="utf-8").splitlines()
+    seqs = [json.loads(x)["seq"] for x in lines]
+    assert sorted(seqs) == list(range(1, 76))
+    meta = json.loads((store / "sessions" / "shared" / "meta.json").read_text(encoding="utf-8"))
+    assert meta["lastSeq"] == 75
+
+
+def test_torn_last_line_does_not_break_reads_or_the_next_append(store: Path):
+    sl = tool.session_ledger
+    first = sl.append("s1", "kept decision about AMZN", kind="fact", store=store)
+    turns = store / "sessions" / "s1" / "turns.jsonl"
+    with turns.open("a", encoding="utf-8") as fh:
+        fh.write('{"schema": 1, "seq": 2, "text": "half writ')
+    nxt = sl.append("s1", "after the tear", store=store)
+    assert nxt["seq"] == 2
+    assert sl.read(first["address"], store=store)["text"] == "kept decision about AMZN"
+    assert sl.read(nxt["address"], store=store)["text"] == "after the tear"
+    assert [h["seq"] for h in sl.lookup("s1", "AMZN", store=store)] == [1]
+    with turns.open("a", encoding="utf-8") as fh:
+        fh.write('{"schema": 1, "seq": 3, "te')
+    assert [h["seq"] for h in sl.lookup("s1", "tear", store=store)] == [2]

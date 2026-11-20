@@ -12,6 +12,7 @@ import json
 import os
 import re
 import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -103,18 +104,46 @@ def create(session_id: str, project: str | None = None, store: Path | None = Non
     return path
 
 
+@contextmanager
+def _locked(path: Path):
+    """Hold an exclusive lock on <session dir>/.lock so appenders from different processes take turns."""
+    with open(path / ".lock", "a+b") as fh:
+        if os.name == "nt":
+            import msvcrt
+
+            fh.seek(0)
+            while True:
+                try:
+                    msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK, 1)
+                    break
+                except OSError:
+                    continue
+        else:
+            import fcntl
+
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if os.name == "nt":
+                fh.seek(0)
+                msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
 def _next_seq(turns: Path) -> int:
     if not turns.exists() or turns.stat().st_size == 0:
         return 1
     last = 0
-    with turns.open(encoding="utf-8") as fh:
+    with turns.open(encoding="utf-8", errors="replace") as fh:
         for line in fh:
             line = line.strip()
             if not line:
                 continue
             try:
                 last = int(json.loads(line).get("seq") or last)
-            except json.JSONDecodeError:
+            except (ValueError, AttributeError, TypeError):
                 continue
     return last + 1
 
@@ -138,30 +167,39 @@ def append(
         raise ValueError(f"unsupported kind: {kind}")
     if role not in {"user", "assistant", "system"}:
         raise ValueError(f"unsupported role: {role}")
-    path = create(session_id, project=project, store=store)
-    turns = path / "turns.jsonl"
-    seq = _next_seq(turns)
-    digest = _sha(text)
-    short = digest[:12]
-    address = f"sessions/{_safe_id(session_id)}/turns.jsonl#seq={seq}#sha={short}"
-    record = {
-        "schema": SCHEMA,
-        "seq": seq,
-        "ts": _now(),
-        "kind": kind,
-        "role": role,
-        "text": text,
-        "sha256": digest,
-        "address": address,
-        "tags": list(tags or []),
-    }
-    with turns.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(record, ensure_ascii=False) + "\n")
-    meta_path = path / "meta.json"
-    meta = json.loads(meta_path.read_text())
-    meta["updatedAt"] = record["ts"]
-    meta["lastSeq"] = seq
-    _dump_json(meta_path, meta)
+    path = session_dir(session_id, store)
+    try:
+        path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    except FileExistsError:  # another process made it first
+        pass
+    with _locked(path):
+        create(session_id, project=project, store=store)
+        turns = path / "turns.jsonl"
+        seq = _next_seq(turns)
+        digest = _sha(text)
+        short = digest[:12]
+        address = f"sessions/{_safe_id(session_id)}/turns.jsonl#seq={seq}#sha={short}"
+        record = {
+            "schema": SCHEMA,
+            "seq": seq,
+            "ts": _now(),
+            "kind": kind,
+            "role": role,
+            "text": text,
+            "sha256": digest,
+            "address": address,
+            "tags": list(tags or []),
+        }
+        # a crash can leave the last line without its newline; start a fresh line so the new record stays readable
+        with turns.open("rb") as raw:
+            torn = raw.seek(0, os.SEEK_END) > 0 and raw.seek(-1, os.SEEK_END) >= 0 and raw.read(1) != b"\n"
+        with turns.open("a", encoding="utf-8", newline="\n") as fh:
+            fh.write(("\n" if torn else "") + json.dumps(record, ensure_ascii=False) + "\n")
+        meta_path = path / "meta.json"
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        meta["updatedAt"] = record["ts"]
+        meta["lastSeq"] = seq
+        _dump_json(meta_path, meta)
     return record
 
 
@@ -170,12 +208,17 @@ def _load_records(session_id: str, store: Path | None = None) -> list[dict]:
     if not turns.is_file():
         raise FileNotFoundError(f"no session ledger at {turns}")
     out: list[dict] = []
-    with turns.open(encoding="utf-8") as fh:
+    with turns.open(encoding="utf-8", errors="replace") as fh:
         for line in fh:
             line = line.strip()
             if not line:
                 continue
-            out.append(json.loads(line))
+            try:
+                rec = json.loads(line)
+            except ValueError:  # a torn line from a crash
+                continue
+            if isinstance(rec, dict):
+                out.append(rec)
     return out
 
 
