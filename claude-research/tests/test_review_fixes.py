@@ -199,3 +199,23 @@ def test_the_clp_child_runs_in_utf8_with_utf8_arguments():
     assert env["PYTHONUTF8"] == "1" and env["PYTHONIOENCODING"] == "utf-8"
     words = ["py", "caf\u00e9 \u2248"]
     assert config.child_argv(words) == (words if os.name == "nt" else [w.encode("utf-8") for w in words])
+
+
+def test_research_tools_load_without_time_zone_data(monkeypatch):
+    """Windows has no time zone database unless the tzdata package is installed. market.py asked for a zone at
+    import, and tools.py imports market, so without tzdata no research tool loaded at all."""
+    import importlib
+    import zoneinfo
+    from clpresearch import market
+
+    def missing(key):
+        raise zoneinfo.ZoneInfoNotFoundError(key)
+
+    monkeypatch.setattr(zoneinfo, "ZoneInfo", missing)
+    try:
+        again = importlib.reload(market)
+        assert again.TZ_NAME == "UTC" and again.stamp(0) == "1970-01-01T00:00:00+00:00 UTC"
+    finally:
+        monkeypatch.undo()
+        importlib.reload(market)
+    assert market.TZ_NAME == "America/Toronto"

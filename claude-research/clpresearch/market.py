@@ -29,7 +29,18 @@ from . import config
 from .common import Ctx, ToolError, Unavailable, untrusted_preview
 from .netsafe import NetError
 
-TZ = ZoneInfo('America/Toronto')
+
+
+def _zone() -> tuple:
+    """Eastern time for the timestamps shown. UTC when this Python has no time zone data, as on Windows without
+    the tzdata package: the zone is only for display, and without this every research tool failed to load."""
+    try:
+        return ZoneInfo('America/Toronto'), 'America/Toronto'
+    except Exception:  # noqa: BLE001
+        return timezone.utc, 'UTC'
+
+
+TZ, TZ_NAME = _zone()
 # Nasdaq's and Yahoo's public endpoints only answer browser-compatible clients (anything else is left to time out).
 # This generic string carries no personal details and is sent to those two providers only.
 BROWSER_HEADERS = {
@@ -48,12 +59,12 @@ def symbol_check(symbol: str) -> str:
 
 
 def stamp(ts: float) -> str:
-    return datetime.fromtimestamp(ts, timezone.utc).astimezone(TZ).isoformat() + ' America/Toronto'
+    return datetime.fromtimestamp(ts, timezone.utc).astimezone(TZ).isoformat() + ' ' + TZ_NAME
 
 
 def saved(ctx: Ctx, url: str, symbol: str, provider: str, data: dict, raw: bytes | None, **extra) -> str:
     text = json.dumps({'symbol': symbol, 'provider': provider, 'retrieved_at': datetime.now(TZ).isoformat(),
-                       'timezone': 'America/Toronto', 'warning': 'Free/delayed snapshot, not a real-time trading feed. Check source timestamps.', **data}, indent=2, ensure_ascii=False)
+                       'timezone': TZ_NAME, 'warning': 'Free/delayed snapshot, not a real-time trading feed. Check source timestamps.', **data}, indent=2, ensure_ascii=False)
     ref = ctx.save('market', url, provider + ' ' + symbol, text, raw=raw, provider=provider, extra=extra)
     return untrusted_preview(ctx, ref, lines=55, chars=7000)
 

@@ -25,6 +25,7 @@ Fixed:
 - `alnair codex-setup` keeps `config.toml`'s own line endings. On Windows it used to rewrite an LF file with CRLF, and on macOS and Linux a CRLF file with LF
 - on Windows, the research tools no longer fail on saved text outside the system code page (`≈`, `…`): the helper process that reads and checks quotes now runs in UTF-8
 - the notes index database is closed as soon as it is written. It used to stay open until Python's garbage collector ran, so on Windows a second build in the same process stopped with "file in use"
+- the research tools load on a Python that has no time zone data (Windows without the `tzdata` package). Market timestamps are then shown in UTC
 - on Linux under a locale that can't encode a character (a C locale with Python's UTF-8 mode switched off, or an older non-UTF-8 one), the memory server no longer stops on a tool argument that has such a character, and the launcher no longer stops on a `config.env` value that has one
 - clp-rune keeps a `config.star`'s file mode and line endings when it rewrites its block, and explains reversed markers
 - the Code Mode A/B collector counts a check that hangs as a failed check
