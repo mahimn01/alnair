@@ -771,8 +771,12 @@ def check_problem(argv: object) -> str | None:
     if Path(argv[0]).name == 'env':
         # env only sets variables for the program after it; its options (-S, -i, -u, --) are refused.
         words = argv[1:]
-        while words and ENV_ASSIGNMENT.match(words[0]):
+        # env (GNU and BSD) reads every word with an = as a variable, so each must be NAME=value: a word like
+        # x/a=b/pytest would pass for the program pytest here while env set it and ran the next word.
+        while words and '=' in words[0]:
             name = words[0].split('=', 1)[0]
+            if not ENV_ASSIGNMENT.match(words[0]):
+                return f'env reads {words[0]} as a variable, and {name!r} is not a variable name'
             if LOADER_VARIABLES.fullmatch(name):
                 return f'env may not set {name}: it changes which program or library runs'
             words = words[1:]
@@ -819,7 +823,7 @@ def windows_check(argv: list[str]) -> tuple[list[str], dict[str, str] | None]:
     words, extra = list(argv), {}
     if words[0] == 'env':
         words.pop(0)
-        while words and '=' in words[0]:
+        while words and ENV_ASSIGNMENT.match(words[0]):  # check_problem refused any other word with an =
             name, _, value = words.pop(0).partition('=')
             extra[name] = value
     if words[0] in ('python3', 'python'):

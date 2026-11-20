@@ -103,6 +103,8 @@ class VerifyChecksTest(unittest.TestCase):
             ("env", "A=1", "sh", "-c", "true"): "sh",
             ("env", "A=1", "env", "python3", "-c", "0"): "env",
             ("env", "PATH=/tmp/x", "python3", "-c", "0"): "PATH",
+            ("env", "x/a=b/pytest", "git", "push"): "not a variable name",
+            ("env", "A=1", "x/b=c/pytest"): "not a variable name",
             ("env", "DYLD_INSERT_LIBRARIES=/tmp/x.dylib", "python3", "-c", "0"): "DYLD_INSERT_LIBRARIES",
             ("sh", "-c", "true"): "sh",
         }
