@@ -21,7 +21,7 @@ alnair doctor
 Two things can stop a first install on Linux, and the installer names both:
 
 - On Debian and Ubuntu, Python's venv module is a separate package. Run `sudo apt install python3-venv`, then the `get.sh` line again.
-- If `alnair` isn't found afterwards, `~/.local/bin` isn't on your PATH yet. The installer prints the line to add to your shell profile. Open a new terminal after adding it. Claude Code's own installer uses the same folder, so this is usually already done.
+- If `alnair` isn't found afterwards, `~/.local/bin` isn't on your PATH yet. The installer prints the line to add to your shell profile. Open a new terminal after adding it. Claude Code's own installer puts `claude` in the same folder and asks for the same line, so if `claude` already runs in your terminal, this is done.
 
 `get.sh` clones Alnair into `~/alnair` (or fast-forwards a clean checkout already there) and runs `install.sh`. It stops without changing anything if that folder has uncommitted changes or isn't Alnair. A piped script can't take options, so set them on the bash side of the pipe: `ALNAIR_HOME` (the folder), `ALNAIR_REF` (a branch, tag or commit), `ALNAIR_VAULT`, `ALNAIR_BIN`, and `ALNAIR_SKIP_CODEX=1`, `ALNAIR_SKIP_PYTHON_DEPS=1` or `ALNAIR_FORCE=1`. For example, `curl -fsSL .../get.sh | ALNAIR_VAULT=~/Notes bash`.
 

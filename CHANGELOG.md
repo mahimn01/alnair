@@ -29,7 +29,7 @@ Fixed:
 - on Linux under a locale that can't encode a character (a C locale with Python's UTF-8 mode switched off, or an older non-UTF-8 one), the memory server no longer stops on a tool argument that has such a character, and the launcher no longer stops on a `config.env` value that has one
 - clp-rune keeps a `config.star`'s file mode and line endings when it rewrites its block, and explains reversed markers
 - the Code Mode A/B collector counts a check that hangs as a failed check
-- `alnair doctor` on a computer without Claude Code says that it isn't installed and how to install it, and still shows the rest of the lab's report. It used to show one bare "[Errno 2] No such file or directory" in its place. On macOS and Linux the report's `launcher` line names `~/.local/bin/alnair`, the command the installer makes; it used to name `claude-lab`, which a new install doesn't have. Both were found by installing in a fresh Ubuntu 24.04 container
+- `alnair doctor` on a computer without Claude Code says that it isn't installed and how to install it, and still shows the rest of the lab's report. It used to show one bare "[Errno 2] No such file or directory" in its place, and a `claude` that is there but can't be run is reported the same way. On macOS and Linux the report's `launcher` line names `~/.local/bin/alnair`, the command the installer makes; it used to name `claude-lab`, which a new install doesn't have. Both were found by installing in a fresh Ubuntu 24.04 container
 
 Added:
 
@@ -72,7 +72,7 @@ Changed:
 - on Windows, Codex install and update hints name only npm, and `install.ps1` mentions `alnair --model gpt` only when Codex is installed
 - the verify gate and the research citation gate refuse a quote that is cut inside a number or a word. A quote ending in "at 15" used to pass against a source that says "at 150", because the match was a plain substring. Text in scripts written without spaces between words (Chinese, Japanese, Thai and others) is matched as before
 - session notes use your computer's time zone unless `ALNAIR_TZ` is set. The default used to be `America/Toronto`
-- CI runs every suite on macOS, Ubuntu and Windows, again on Python 3.10 and 3.13, and runs the installer on all three systems
+- CI runs every suite on macOS and Ubuntu and four of the five on Windows (clp-rune doesn't run there), runs them all again on Ubuntu with Python 3.10 and 3.13, and runs the installer on all three systems
 - the test suites run on Windows: tests set `USERPROFILE` with `HOME`, run scripts under `sys.executable`, use `.cmd` fakes, and skip symlink and file-mode checks there ([docs/windows.md](docs/windows.md) lists them)
 
 ## 0.2.0 (2026-11-17)
