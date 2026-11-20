@@ -315,3 +315,18 @@ def test_a_claude_code_older_than_code_mode_turns_it_off_with_one_line(project, 
                 CM.OFF_NOTE + "Claude Code 2.1.321 is older than 2.1.323, the first version with Code Mode (update it with claude update)."]
         finally:
             cleanup(shown["run"])
+
+
+def test_a_missing_claude_code_binary_gets_an_install_hint_not_a_bare_errno(project, tmp_path, monkeypatch):
+    monkeypatch.setattr(LAB, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(L, "STATE", tmp_path / "mem-state")
+    monkeypatch.setattr(L, "ensure_session_ledger", lambda *a, **k: None)
+    monkeypatch.setattr(LAB, "auth_environment", lambda env, source=None, token=True: dict(env))  # no Keychain read
+
+    def missing(argv, env):
+        raise FileNotFoundError(2, "No such file or directory")
+
+    monkeypatch.setattr(L.NATIVE, "run_session", missing)
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(RuntimeError, match="Install Claude Code"):
+        L.main(["--project", str(project), "--store", str(tmp_path / "store")])

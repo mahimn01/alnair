@@ -80,7 +80,7 @@ FROM_CONFIG: dict[str, str] = {}
 def load_config(path: Path = CONFIG) -> None:
     """Read KEY=VALUE lines from ~/.config/alnair/config.env. Variables already set in the shell win."""
     try:
-        lines = path.read_text().splitlines()
+        lines = path.read_text(encoding="utf-8-sig").splitlines()  # utf-8-sig: a BOM must not hide the first key
     except OSError:
         return
     for line in lines:
@@ -229,7 +229,7 @@ def hashes() -> dict[str, str]:
 def dump(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(data, indent=2) + "\n")
+    tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     tmp.chmod(0o600)
     tmp.replace(path)
 
@@ -458,10 +458,16 @@ def doctor() -> dict:
     except (OSError, ValueError) as exc:  # noqa: BLE001
         report["research_plugin"] = {"error": str(exc)}
     python = tool_python()
-    probe = quiet([python, "-c", "import sys; print(sys.version.split()[0])"])
-    report["tools_python"] = {"path": python, "version": probe.stdout.strip()}
-    status = quiet([python, str(CLP_ROOT / "bin/clp_tool.py"), "status"], timeout=120)
-    report["corpus"] = (status.stdout if status.returncode == 0 else status.stderr).strip().splitlines()
+    try:
+        probe = quiet([python, "-c", "import sys; print(sys.version.split()[0])"])
+        report["tools_python"] = {"path": python, "version": probe.stdout.strip()}
+    except (OSError, subprocess.SubprocessError) as exc:
+        report["tools_python"] = {"path": python, "error": str(exc)}
+    try:
+        status = quiet([python, str(CLP_ROOT / "bin/clp_tool.py"), "status"], timeout=120)
+        report["corpus"] = (status.stdout if status.returncode == 0 else status.stderr).strip().splitlines()
+    except (OSError, subprocess.SubprocessError) as exc:
+        report["corpus"] = [f"error: {exc}"]
     sl = load_session_ledger()
     report["session_ledger"] = sl.status()
     try:
@@ -833,7 +839,10 @@ def main(argv: list[str] | None = None) -> int:
 
     words = lab.code_mode.WORDS[lab.code_mode.label(status)]
     print(f"Alnair · interactive lab shell + CLP memory · bili off · {words} · run: {run}", file=sys.stderr if opt.print_mode else sys.stdout, flush=True)
-    return NATIVE.run_session(argv_, env)
+    try:
+        return NATIVE.run_session(argv_, env)
+    except FileNotFoundError as error:
+        raise RuntimeError(f"can't start {argv_[0]}: {error.strerror or error}. Install Claude Code with Anthropic's native installer, then sign in once with `claude`.") from error
 
 
 if __name__ == "__main__":

@@ -6,6 +6,8 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -285,3 +287,51 @@ def test_every_test_runs_inside_the_write_recorder():
     import os
     import protected_writes
     assert os.path.abspath(L.HOME / ".claude.json") in protected_writes._state["watched"]
+
+
+def test_config_env_with_a_utf8_bom_keeps_its_first_setting(tmp_path, monkeypatch):
+    monkeypatch.setattr(L, "FROM_CONFIG", {})
+    for key in ("ALNAIR_BOM_FIRST", "ALNAIR_BOM_SECOND"):
+        monkeypatch.setenv(key, "")  # registers the clean-up; the next line removes it for the test
+        monkeypatch.delenv(key)
+    path = tmp_path / "config.env"
+    path.write_bytes(b"\xef\xbb\xbfALNAIR_BOM_FIRST=one\nALNAIR_BOM_SECOND=two\n")  # Notepad saves this way
+    L.load_config(path)
+    assert (os.environ.get("ALNAIR_BOM_FIRST"), os.environ.get("ALNAIR_BOM_SECOND")) == ("one", "two")
+
+
+def test_config_files_are_read_and_written_as_utf8_whatever_the_default_encoding(tmp_path):
+    """A fresh Python with UTF-8 mode off and no locale coercion: ASCII on Linux and macOS, cp1252 on Windows."""
+    code = (
+        "import os, sys\n"
+        "from pathlib import Path\n"
+        "sys.path.insert(0, sys.argv[1])\n"
+        "from memload import launcher as L\n"
+        "home = Path(sys.argv[2])\n"
+        "L.load_config(home / 'config.env')\n"
+        "assert os.environ['ALNAIR_ENC_TEST'] == '\\u00c1lvaro', os.environ.get('ALNAIR_ENC_TEST')\n"
+        "cb = L.load_codex()\n"
+        "cb.setup_config(L.REPO, '/py', home=home)\n"
+        "assert '\\u00c1lvaro' in (home / 'config.toml').read_text(encoding='utf-8')\n"
+        "cb.remove_config(home=home)\n"
+        "assert (home / 'config.toml').read_bytes() == ('# \\u00c1lvaro\\n').encode('utf-8')\n"
+    )
+    (tmp_path / "config.env").write_bytes("ALNAIR_ENC_TEST=\u00c1lvaro\n".encode("utf-8"))
+    (tmp_path / "config.toml").write_bytes("# \u00c1lvaro\n".encode("utf-8"))
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONUTF8", "PYTHONIOENCODING", "ALNAIR_ENC_TEST")}
+    env.update(PYTHONUTF8="0", PYTHONCOERCECLOCALE="0", LC_ALL="C", HOME=str(tmp_path), USERPROFILE=str(tmp_path))
+    done = subprocess.run([sys.executable, "-c", code, str(Path(__file__).resolve().parent), str(tmp_path)],
+                          env=env, capture_output=True, text=True, timeout=120, check=False)
+    assert done.returncode == 0, done.stderr[-800:]
+
+
+def test_doctor_reports_a_tools_python_that_times_out_instead_of_failing(monkeypatch, capsys):
+    def hung(argv, timeout=60):
+        raise subprocess.TimeoutExpired(argv, timeout)
+
+    monkeypatch.setattr(L, "quiet", hung)
+    assert L.main(["doctor"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert "error" in report["tools_python"] and "timed out" in report["tools_python"]["error"]
+    assert report["corpus"] and report["corpus"][0].startswith("error:")
+    assert "codex" in report and "note" in report  # the rest of the report is still there
