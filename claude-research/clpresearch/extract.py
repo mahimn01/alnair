@@ -27,7 +27,7 @@ class _Text(HTMLParser):
         self.title = ""
         self._in_title = False
         self._skip = 0
-        self._stack: list[bool] = []
+        self._stack: list[tuple[str, bool]] = []
 
     def handle_starttag(self, tag, attrs):
         if tag in _VOID:
@@ -35,7 +35,7 @@ class _Text(HTMLParser):
                 self.out.append("\n")
             return
         hidden = tag in _SKIP or bool(_HIDDEN.search(dict(attrs).get("style") or "")) or "hidden" in dict(attrs)
-        self._stack.append(hidden)
+        self._stack.append((tag, hidden))
         if hidden:
             self._skip += 1
         if tag == "title":
@@ -54,9 +54,14 @@ class _Text(HTMLParser):
             return
         if tag == "title":
             self._in_title = False
-        if self._stack:
-            if self._stack.pop():
-                self._skip -= 1
+        # An end tag closes its own element and any unclosed ones inside it; one with no open element is ignored.
+        if any(t == tag for t, _ in self._stack):
+            while True:
+                t, hidden = self._stack.pop()
+                if hidden:
+                    self._skip -= 1
+                if t == tag:
+                    break
         if not self._skip and tag in _BLOCK:
             self.out.append("\n")
 
@@ -72,7 +77,13 @@ def wrap_lines(text: str, width: int = config.LINE_WRAP) -> str:
     for line in text.split("\n"):
         while len(line) > width:
             cut = line.rfind(" ", width // 2, width)
-            cut = cut if cut > 0 else width
+            if cut <= 0:
+                # No space in the window: break after the token (a long URL) so a quote through it still matches.
+                # A token longer than 4 widths is a data blob and is cut, which keeps every line a readable size.
+                cut = line.find(" ", width, width * 4)
+                if cut < 0 and len(line) <= width * 4:
+                    break
+                cut = cut if cut > 0 else width
             out.append(line[:cut].rstrip())
             line = line[cut:].lstrip()
         out.append(line)
