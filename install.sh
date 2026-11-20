@@ -38,7 +38,7 @@ warn() { printf 'warning: %s\n' "$*" >&2; }
 case "$(uname -s)" in
   Darwin) OS=mac ;;
   Linux) OS=linux ;;
-  *) echo "install.sh supports macOS and Linux. On Windows, try install.ps1 (experimental)." >&2; exit 1 ;;
+  *) echo "install.sh supports macOS and Linux. On Windows, run .\install.ps1 in PowerShell (see docs/windows.md)." >&2; exit 1 ;;
 esac
 
 # Python 3.10 or newer runs the launcher and the memory tools.
