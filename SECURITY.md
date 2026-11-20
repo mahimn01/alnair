@@ -11,4 +11,4 @@ Things I especially want to hear about:
 
 ## Supported versions
 
-Fixes go to `main` and into the next release. Older releases don't get patches, so update first (run the `get.sh` or `get.ps1` line again, or `git pull` and `./install.sh`) and check that the problem is still there.
+Fixes go to `main` and into the next release. Older releases don't get patches, so update first (run the `get.sh` or `get.ps1` line again, or `git pull` and then `./install.sh`, which is `.\install.ps1` on Windows) and check that the problem is still there.
