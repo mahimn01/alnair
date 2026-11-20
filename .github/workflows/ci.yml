@@ -97,10 +97,15 @@ jobs:
           python -m venv .venv
           .venv/bin/python -m pip install pytest hypothesis -r claude-research/requirements.txt
       - run: .venv/bin/python -m pytest -q claude-clp/tests
+        if: ${{ !cancelled() }}
       - run: .venv/bin/python -m pytest -q claude-mem/tests
+        if: ${{ !cancelled() }}
       - run: .venv/bin/python -m pytest -q claude-mem/rune/tests
+        if: ${{ !cancelled() }}
       - run: .venv/bin/python -m pytest -q lab/tests
+        if: ${{ !cancelled() }}
       - run: .venv/bin/python -m pytest -q claude-research/tests
+        if: ${{ !cancelled() }}
 
   # Run the real installer on each system, then the command it installs, the example and the guard tests.
   install:
