@@ -3,6 +3,7 @@
 // compact task state outside the user's repositories and memory vault.
 // Budgets are soft: counters feed status warnings and guidance; they never stop work.
 import CATALOG from './model-catalog.js';
+import {windowsPath, splitPowerShell, hostCommand, startProcessWords, PS_HOSTS, PS_DATA} from './windows-shell.js';
 const SONNET = CATALOG.models.sonnet.id;
 const OPUS = CATALOG.models.opus.id;
 const FABLE = CATALOG.models.fable.id;
@@ -195,10 +196,13 @@ const KEYWORDS = new Set(['!','{','}','if','then','else','elif','fi','do','done'
 const SHELLS = new Set(['sh','bash','zsh','dash','ksh','fish','csh','tcsh']);
 const NESTED_SESSION = 'Use the lab specialists (the Agent tool) instead of starting another Claude, Alnair or Codex session: a nested session bypasses the lab routing, worker budget and handoffs. Version, help and `claude plugin validate|test` are allowed.';
 // Whole-text check for commands the splitter cannot read (an unbalanced quote): the pre-Code-Mode
-// rule, widened from claude/claude-rotate to every launcher and to `codex exec`.
-const DEEP_NESTED = /(?:^|[^\w.-])(?:claude(?:-[a-z]+)*|alnair)(?![\w.-])|(?:^|[^\w.-])codex\s+(?:exec|e)(?![\w.-])/i;
-const LOOSE_NESTED = /(?:^|[;&|\s])(?:claude(?:-[a-z]+)*|alnair)(?=\s|$)|(?:^|[;&|\s])codex\s+(?:exec|e)(?=\s|$)/;
-const base = word => word.split('/').pop();
+// rule, widened from claude/claude-rotate to every launcher and to `codex exec`, in any case and with the
+// .exe, .cmd, .bat or .ps1 Windows adds (C:\Tools\CLAUDE.EXE).
+const DEEP_NESTED = /(?:^|[^\w.-])(?:claude(?:-[a-z]+)*|alnair)(?:\.(?:exe|cmd|bat|ps1))?(?![\w.-])|(?:^|[^\w.-])codex(?:\.(?:exe|cmd))?\s+(?:exec|e)(?![\w.-])/i;
+const LOOSE_NESTED = /(?:^|[;&|\s\\/(])(?:claude(?:-[a-z]+)*|alnair)(?:\.(?:exe|cmd|bat|ps1))?(?=[\s;&|)]|$)|(?:^|[;&|\s\\/(])codex(?:\.(?:exe|cmd))?\s+(?:exec|e)(?=\s|$)/i;
+// A program's name from its path: the last part after / or \ (C:\Tools\claude.exe), in lower case, without the
+// .exe, .cmd, .bat or .ps1 Windows adds. macOS and Windows find a program whatever case it is typed in.
+const base = word => word.split(/[\\/]/).pop().toLowerCase().replace(/\.(?:exe|cmd|bat|ps1)$/, '');
 
 // Splits a shell command line into simple commands (words with quotes removed) at &&, ||, ;, |, &,
 // newlines and parentheses, so `cd 'app' && claude -p x` is read as two commands. Text inside $(...),
@@ -399,6 +403,8 @@ function commandDenial(words, subs, depth, scan = true) {
   // also read as that command line. A launcher path with spaces in its folders ("/Users/u/Application
   // Support/x/claude") is that launcher, checked as one below.
   if (/\s/.test(program) && !LAUNCHERS.has(name) && name !== 'codex') { const inner = nestedSessionDenial(program, depth + 1); if (inner) return inner; }
+  // PowerShell and cmd run the text they are given (pwsh -c '...', cmd /c ...): it is read as they read it.
+  if (PS_HOSTS.has(name) || name === 'cmd') { const reason = hostDenial(name, args, depth); if (reason) return reason; }
   if (LAUNCHERS.has(name)) {
     if (args.length === 1 && INFO_ARGS.has(args[0])) return null;
     if (name === 'claude' && args[0] === 'plugin' && ['validate','test'].includes(args[1]) && !args.some(a => SESSION_FLAGS.has(a))) return null;
@@ -590,7 +596,8 @@ export function nestedSessionDenial(command, depth = 0) {
   // backslashes taken out, it still names a launcher (a fifth bash -c around claude -p x).
   if (depth >= 4) return DEEP_NESTED.test(text.replace(/["'\\]/g, '')) ? NESTED_SESSION : null;
   const lexed = splitShell(text);
-  if (!lexed) return LOOSE_NESTED.test(text) ? NESTED_SESSION : null;
+  // Read as written and with quotes and escapes taken out (c`laude, cl^aude, cl"aude).
+  if (!lexed) return LOOSE_NESTED.test(text) || LOOSE_NESTED.test(text.replace(/["'\\\x60^]/g, '')) ? NESTED_SESSION : null;
   for (const inner of lexed.subs) { const reason = nestedSessionDenial(inner, depth + 1); if (reason) return reason; }
   for (const words of lexed.commands) { const reason = commandDenial(words, lexed.subs, depth); if (reason) return reason; }
   for (const words of xargsRuns(lexed.commands, lexed, bodies)) { const reason = commandDenial(words, lexed.subs, depth); if (reason) return reason; }
@@ -602,17 +609,88 @@ export function nestedSessionDenial(command, depth = 0) {
   return null;
 }
 
+// PowerShell and cmd text (the PowerShell tool, pwsh -c '...', cmd /c ...): why it must not run, or null.
+// Each statement is read as PowerShell (or cmd) reads it and then judged by the shell rules above, except that
+// the commands that only print or read (PS_DATA) may name a launcher. Text that can't be read with certainty
+// is refused when, as written or with quotes and escapes taken out, it names a launcher.
+const PIPED_CODE = 'Invoke-Expression here runs text the lab cannot read (from a pipe or a subexpression), so it is refused. Run the command itself instead.';
+const psPlain = text => String(text).replace(/["'\x60^\u{2018}-\u{201E}]/gu, '');
+const subsNameLauncher = subs => subs.some(s => [...s.matchAll(/[^\s;&|()'"\x60,]+/g)].some(m => LAUNCHERS.has(base(m[0]))));
+export function powershellDenial(command, depth = 0, cmd = false) {
+  const text = String(command || '');
+  if (!text.trim()) return null;
+  if (depth >= 4) return DEEP_NESTED.test(psPlain(text)) ? NESTED_SESSION : null;
+  const lexed = splitPowerShell(text, {cmd});
+  if (!lexed) return LOOSE_NESTED.test(text) || LOOSE_NESTED.test(psPlain(text)) ? NESTED_SESSION : null;
+  for (const inner of lexed.subs) { const reason = powershellDenial(inner, depth + 1); if (reason) return reason; }
+  const vars = new Map();
+  for (const st of lexed.statements) { const reason = statementDenial(st, lexed.subs, depth, vars, cmd); if (reason) return reason; }
+  return null;
+}
+// $name and ${name} put back from the variables set earlier in the same text (case is ignored, as in PowerShell).
+const psExpand = (word, vars) => vars.size ? word.replace(/\$(?:\{([\w:]+)\}|([\w:]+))/g, (m, a, b) => vars.get((a || b).toLowerCase()) ?? m) : word;
+// The command a PowerShell statement runs, as words with variables put back, or null when it runs none: an
+// expression ($x.Count, 'text', [IO.File]::Exists(...)) runs no command, and $x = ... runs what follows the =.
+// A variable set to one word is remembered for the statements after it; one set from a command keeps the
+// launcher that command names ($c = Get-Command claude), or the path Join-Path builds.
+function statementWords({words, quoted, call}, vars, cmd) {
+  words = words.map(w => psExpand(w, vars));
+  if (cmd || !words.length) return words;
+  let name = null, rhs, rq;
+  if (!quoted[0] && /^\$[\w:]+$/.test(words[0]) && /^[-+*\/%]?=$/.test(words[1] || '')) { name = words[0].slice(1); rhs = words.slice(2); rq = quoted.slice(2); }
+  else {
+    const m = /^\$([\w:]+)[-+*\/%]?=([^]*)$/.exec(words[0]);
+    if (m) { name = m[1]; rhs = m[2] ? [m[2], ...words.slice(1)] : words.slice(1); rq = m[2] ? quoted : quoted.slice(1); }
+  }
+  if (name !== null) {
+    const joined = base(rhs[0] || '') === 'join-path' ? rhs.slice(1).filter(w => !w.startsWith('-') && w !== ',').join('/') : null;
+    vars.set(name.toLowerCase(), rhs.length === 1 ? rhs[0] : joined || rhs.find(w => LAUNCHERS.has(base(w))) || '\0');
+    words = rhs; quoted = rq;
+    if (!words.length) return null;
+  }
+  if (!call && (quoted[0] || /^[$[\d@\0-]/.test(words[0]))) return null;
+  return words;
+}
+function statementDenial(st, subs, depth, vars, cmd) {
+  const words = statementWords(st, vars, cmd);
+  if (!words?.length) return null;
+  const program = words[0], name = base(program), args = words.slice(1);
+  // A program a subexpression finds: & (Get-Command claude) -p.
+  if (program.includes('\0') && subsNameLauncher(subs)) return NESTED_SESSION;
+  if (!cmd && (name === 'iex' || name === 'invoke-expression')) {
+    const code = args.filter(a => a !== ',' && !/^-command$/i.test(a)).map(a => a.replace(/^-command:/i, '')).join(' ');
+    if (code.includes('\0') || (!code.trim() && st.piped)) return PIPED_CODE;
+    return powershellDenial(code, depth + 1);
+  }
+  if (!cmd && ['start-process', 'saps', 'start'].includes(name)) {
+    const run = startProcessWords(args);
+    if (run) return statementDenial({words: run, quoted: run.map(() => false), call: true, piped: false}, subs, depth, vars, false);
+  }
+  if (PS_DATA.has(name)) return null;
+  return commandDenial(words.filter(w => w !== ','), subs, depth);
+}
+// pwsh -c '...', powershell -EncodedCommand ..., cmd /c ...: the text they run, read as PowerShell or cmd.
+function hostDenial(name, args, depth) {
+  const run = hostCommand(name, args);
+  if (run.unknown) return 'The lab could not read the command text given to ' + name + ' (an -EncodedCommand that is not valid base64), so it is refused.';
+  return run.text === undefined ? null : powershellDenial(run.text, depth + 1, run.cmd);
+}
+
 // The user's own Claude settings files. The lab never changes them (Code Mode is enabled through the
 // child environment only), and neither may a tool call from the model or from a script.
 const SETTINGS_DENIAL = 'The lab leaves ~/.claude/settings.json and ~/.claude.json unchanged. Ask the user to change Claude settings themselves outside this session; use /lab-model for routing.';
 // A path as the shell resolves it: ~ and $HOME expanded, a relative path taken from `cwd`, . and ..
 // folded, repeated slashes merged. Null when it can't be known (relative with no cwd, or built at run time).
-function resolvePath(path, home, cwd) {
+// With `windows` the path is first read as Windows writes it (C:\Users\me\x, %USERPROFILE%\x: see
+// windowsPath). A home or cwd that Windows gave (C:\...) is always read that way.
+const systemPath = p => /^(?:[A-Za-z]:[\\/]|\\\\)/.test(p || '') ? windowsPath(p, null) : p;
+function resolvePath(path, home, cwd, windows = false) {
   let p = String(path ?? '');
   if (!p || p.includes('\0')) return null;
-  p = p.replace(/^(?:~|\$HOME|\$\{HOME\})(?=\/|$)/, home || '~');
+  home = systemPath(home);
+  p = windows ? windowsPath(p, home) : p.replace(/^(?:~|\$HOME|\$\{HOME\})(?=\/|$)/, home || '~');
   if (p.includes('$')) return null;
-  if (!p.startsWith('/')) { if (!cwd) return null; p = cwd + '/' + p; }
+  if (!p.startsWith('/')) { if (!cwd) return null; p = systemPath(cwd) + '/' + p; }
   const parts = [];
   for (const seg of p.split('/')) {
     if (seg === '..') parts.pop();
@@ -621,11 +699,17 @@ function resolvePath(path, home, cwd) {
   return '/' + parts.join('/');
 }
 const same = (a, b) => a !== null && b !== null && a.toLowerCase() === b.toLowerCase();  // macOS volumes ignore case
-function protectedPaths(home) { return home ? [resolvePath(home + '/.claude/settings.json', home, null), resolvePath(home + '/.claude.json', home, null)] : []; }
+// Each way a path may be read: as the shell reads it and as Windows does. The guards check every reading,
+// so the Windows one only ever adds a refusal.
+function pathReadings(path, home, cwd) {
+  const shell = resolvePath(path, home, cwd), win = resolvePath(path, home, cwd, true);
+  return [shell, win].filter((p, k) => p !== null && (k === 0 || p !== shell));
+}
+function protectedPaths(home) { return home ? [home + '/.claude/settings.json', home + '/.claude.json'].flatMap(p => pathReadings(p, home, null)) : []; }
 export function isProtectedPath(path, home, cwd = null) {
   if (!home) return false;
-  const p = resolvePath(path, home, cwd);
-  return protectedPaths(home).some(x => same(x, p));
+  const targets = protectedPaths(home);
+  return pathReadings(path, home, cwd).some(p => targets.some(x => same(x, p)));
 }
 
 // Programs that only read the files they are given. Any other program handed one of the settings files
@@ -638,7 +722,7 @@ const COPIERS = new Set(['cp','ln','install','rsync','ditto','scp','mv']);  // w
 // Programs that run the command after their own options: env X=1 cp ..., timeout 5 tee ..., xargs rm ...
 const WRAPPERS = new Set(['env','nohup','nice','timeout','gtimeout','xargs','sudo','doas','command','builtin','exec','time','stdbuf','caffeinate']);
 const INTERPRETER = /^(?:python[\d.]*|pypy[\d.]*|node|bun|deno|perl|ruby|php|lua|osascript|swift)$/;
-const NAMES_SETTINGS = /\.claude(?:\.json|['"`]?\s*(?:,|\+|\/)\s*['"`]?\/?settings\.json)/i;
+const NAMES_SETTINGS = /\.claude(?:\.json|['"`]?\s*(?:,|\+|[\\/])\s*['"`]?[\\/]*settings\.json)/i;
 // Calls in interpreter code (-c/-e text or a here-document) that write, move or delete a file. Reads,
 // print, json.dumps and sys.stdout.write are not writes. The argument scans are bounded (300 characters)
 // so text with thousands of open( stays fast.
@@ -657,7 +741,8 @@ const CODE_WRITES = new RegExp([
 // Whether interpreter code writes a settings file. It names the file in full, or by its bare name when
 // the code runs in the folder that holds it (cd ~/.claude && python3 -c "open('settings.json','w')").
 function codeWritesSettings(code, home, dirs) {
-  const inClaude = dirs.some(d => same(resolvePath(d, home, null), resolvePath(home + '/.claude', home, null)));
+  const claudeDir = pathReadings(home + '/.claude', home, null);
+  const inClaude = dirs.some(d => pathReadings(d, home, null).some(r => claudeDir.some(c => same(r, c))));
   return (NAMES_SETTINGS.test(code) || (inClaude && /(?:^|[^\w.-])settings\.json/i.test(code))) && CODE_WRITES.test(code);
 }
 // A shell glob (one path segment) as a test for a file name. Like the shell, * and ? never match a leading dot.
@@ -666,7 +751,7 @@ function globMatches(glob, name) {
   const pattern = glob.replace(/[.+^${}()|\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
   try { return new RegExp('^' + pattern + '$', 'i').test(name); } catch { return true; }
 }
-const LOOSE_SETTINGS = /(?:>|\btee\b|\bmv\b|\bcp\b|\bln\b|\brm\b|\bdd\b|\bsed\s+-i|\btruncate\b)[^\n;&|]*(?:~|\$\{?HOME\}?|\/)[^\s;&|]*\/\.claude(?:\/settings\.json|\.json)(?![\w.-])/i;
+const LOOSE_SETTINGS = /(?:>|\btee\b|\bmv\b|\bcp\b|\bln\b|\brm\b|\bdd\b|\bsed\s+-i|\btruncate\b)[^\n;&|]*(?:~|\$\{?HOME\}?|\/|\\|[A-Za-z]:|%USERPROFILE%|\$\{?env:USERPROFILE\}?)[^\s;&|]*[\\/]\.claude(?:[\\/]settings\.json|\.json)(?![\w.-])/i;
 
 // Whether one simple command (its words) writes a settings file. `dirs` are the folders a relative path
 // may be taken from: the session's folder and every folder the line cds into.
@@ -686,15 +771,20 @@ function writesSettings(words, home, dirs, depth, scan = true) {
   const named = a => hit(a) || (a.includes('=') && hit(a.slice(a.indexOf('=') + 1)));
   // A path that takes a settings file with it when removed or moved: the file, a folder holding it
   // (~/.claude, ~, /), or a glob in such a folder that matches its name (~/.claude/*).
-  const covers = a => dirs.some(d => {
-    const r = resolvePath(a, home, d);
-    if (r === null) return false;
+  const covers = a => dirs.some(d => pathReadings(a, home, d).some(r => {
     const last = r.slice(r.lastIndexOf('/') + 1);
     if (!/[*?[]/.test(last)) return protectedPaths(home).some(x => same(x, r) || x.toLowerCase().startsWith(r.toLowerCase() + '/') || r === '/');
     const folder = (r.slice(0, r.lastIndexOf('/')) || '') + '/';
     // A glob removes what its last segment matches in `folder`: the file itself or the folder above it.
     return protectedPaths(home).some(x => x.toLowerCase().startsWith(folder.toLowerCase()) && globMatches(last, x.slice(folder.length).split('/')[0]));
-  });
+  }));
+  // pwsh -c '...' and cmd /c '...' write what the text they run writes, read as PowerShell or cmd reads it; a
+  // command text that can't be decoded is taken as a write. robocopy and xcopy are read as the copies they make.
+  if (PS_HOSTS.has(name) || name === 'cmd') {
+    const run = hostCommand(name, rest);
+    if (run.unknown || (run.text !== undefined && psWritesSettings(run.text, home, dirs, depth + 1, run.cmd))) return true;
+  }
+  if (name === 'robocopy' || name === 'xcopy') return psAsBash(words.slice(i)).some(w => writesSettings(w, home, dirs, depth, false));
   // Any other program that runs a shell or interpreter among its words (uv run python3 -c, npx node -e):
   // each is checked once, with the words up to the next one, as commandDenial does.
   if (scan && !DATA_PROGRAMS.has(name)) {
@@ -739,8 +829,8 @@ function writesSettings(words, home, dirs, depth, scan = true) {
     if (hit(target)) return true;
     // Copying into ~ or ~/.claude: a source with the settings file's name (or one only known at run
     // time: a glob, a variable, {} from xargs, a folder's contents) lands on it.
-    const unknown = s => /[{}*?$\0[\]]|\/$/.test(s);
-    const into = (dir, file) => dirs.some(d => same(resolvePath(target, home, d), resolvePath(dir, home, null)))
+    const unknown = s => /[{}*?$\0[\]]|[\\/]$/.test(s);
+    const into = (dir, file) => dirs.some(d => pathReadings(target, home, d).some(t => pathReadings(dir, home, null).some(x => same(t, x))))
       && sources.some(s => unknown(s) || base(s).toLowerCase() === file);
     return into(home, '.claude.json') || into(home, '.claude') || into(home + '/.claude', 'settings.json');
   }
@@ -777,8 +867,7 @@ function shellWritesSettings(command, home, dirs, depth) {
     if (target === '-') continue;
     const reached = [];
     for (const d of known.length <= 64 ? [...known] : last) {
-      const r = resolvePath(target, home, d);
-      if (r && !seen.has(r)) { seen.add(r); known.push(r); reached.push(r); }
+      for (const r of pathReadings(target, home, d)) if (!seen.has(r)) { seen.add(r); known.push(r); reached.push(r); }
     }
     if (reached.length) last = reached;
   }
@@ -802,8 +891,103 @@ export function settingsWriteDenial(command, home, cwd = null) {
   // Quotes and backslashes taken out, so ~/.cla""ude.json or ~/.cl\aude.json still names the file; an ANSI-C
   // word ($'\x2eclaude.json') can spell anything, so it always gets the full reading.
   const plain = text.replace(/["'\\]/g, '');
-  if (!home || (!text.includes("$'") && !/\.claude|settings\.json|\b(?:rm|mv|trash|srm|shred|unlink)\b/i.test(plain))) return null;
+  if (!home || (!text.includes("$'") && !/\.claude|settings\.json|\b(?:rm|mv|trash|srm|shred|unlink|pwsh|powershell|powershell_ise|cmd|robocopy|xcopy)\b/i.test(plain))) return null;
   return shellWritesSettings(text, home, [cwd], 0) ? SETTINGS_DENIAL : null;
+}
+
+// Windows file commands in the shape writesSettings reads: -Name:value split in two, removers named rm, movers
+// mv, copiers cp (with -Destination last), Rename-Item as a mv within its folder, robocopy as the copies it
+// makes (and with /mir, /purge or /move the removals), and the commands that only read or list named cat.
+const PS_AS = {'remove-item': 'rm', ri: 'rm', del: 'rm', erase: 'rm', rd: 'rm', rmdir: 'rm', rm: 'rm', 'clear-content': 'rm', clc: 'rm',
+  'clear-item': 'rm', cli: 'rm', 'move-item': 'mv', mi: 'mv', move: 'mv', mv: 'mv', 'copy-item': 'cp', cpi: 'cp', copy: 'cp', cp: 'cp',
+  xcopy: 'cp', 'get-content': 'cat', gc: 'cat', type: 'cat', 'select-string': 'cat', sls: 'cat', 'test-path': 'cat', 'get-item': 'cat',
+  gi: 'cat', 'get-itemproperty': 'cat', gp: 'cat', 'get-childitem': 'cat', gci: 'cat', dir: 'cat', 'resolve-path': 'cat', rvpa: 'cat',
+  'get-filehash': 'cat', 'format-hex': 'cat', fhx: 'cat', 'get-acl': 'cat', 'import-csv': 'cat', 'import-clixml': 'cat',
+  'split-path': 'cat', 'join-path': 'cat', 'convertfrom-json': 'cat', 'compare-object': 'cat', findstr: 'cat',
+  'write-output': 'echo', 'write-host': 'echo', 'set-location': 'cd', sl: 'cd', chdir: 'cd', 'push-location': 'pushd'};
+// cmd's own commands take /x switches, which are not paths.
+const CMD_SWITCHES = new Set(['del', 'erase', 'rd', 'rmdir', 'copy', 'xcopy', 'move', 'ren', 'rename', 'type', 'robocopy']);
+function psAsBash(words) {
+  let w = words.flatMap(x => { const m = /^-([A-Za-z][\w-]*):([^]+)$/.exec(x); return m ? ['-' + m[1], m[2]] : [x]; }).filter(x => x !== ',');
+  const name = base(w[0] || '');
+  if (CMD_SWITCHES.has(name)) w = [w[0], ...w.slice(1).filter(x => !/^\/[A-Za-z?][\w-]*(?::\S*)?$/.test(x))];
+  // The value of the first option named by a prefix (at least `least` letters) of one of names, taken out of w.
+  const take = (names, least) => {
+    const k = w.findIndex(x => { const p = /^-[A-Za-z]/.test(x) ? x.slice(1).toLowerCase() : ''; return p.length >= least && names.some(n => n.startsWith(p)); });
+    if (k < 0) return undefined;
+    const value = w[k + 1];
+    w.splice(k, 2);
+    return value;
+  };
+  if (['rename-item', 'ren', 'rni', 'rename'].includes(name)) {
+    const to = take(['newname'], 1), from = take(['path', 'literalpath', 'pspath', 'lp'], 1);
+    const plain = w.slice(1).filter(x => !x.startsWith('-'));
+    const source = from ?? plain.shift(), target = to ?? plain.shift();
+    if (source === undefined || target === undefined) return [];
+    return [['mv', source, /[\\/]/.test(target) ? target : source.replace(/[^\\/]*$/, '') + target]];
+  }
+  if (name === 'robocopy') {
+    const [src, dst, ...files] = w.slice(1);
+    if (dst === undefined) return [];
+    const flags = words.slice(1).map(x => x.toLowerCase()), sources = files.length ? files.map(f => src + '/' + f) : [src + '/*'];
+    const out = [['cp', ...sources, dst]];
+    if (flags.includes('/mir') || flags.includes('/purge')) out.push(['rm', dst + '/*']);
+    if (flags.includes('/mov') || flags.includes('/move')) out.push(['rm', ...sources]);
+    return out;
+  }
+  const as = PS_AS[name];
+  if (as === 'cp' || as === 'mv') { const dest = take(['destination'], 2); return [[as, ...w.slice(1), ...(dest === undefined ? [] : [dest])]]; }
+  return [as ? [as, ...w.slice(1)] : w];
+}
+// Whether PowerShell (or cmd) text writes a settings file: its redirections, each command read as the shell
+// command that acts the same (psAsBash), the PowerShell, cmd and Start-Process commands it starts, and .NET
+// file calls ([IO.File]::WriteAllText(...)) in text that names a settings file. Past four levels of nesting,
+// or when the text can't be read with certainty, any mention of the files or of a remove or move is refused.
+const WINDOWS_TOUCHES = /\b(?:pwsh|powershell|powershell_ise|cmd|iex|invoke-expression|del|erase|rd|rmdir|ri|mi|rni|ren|move|rename|remove|clear|clc|copy|cpi|xcopy|robocopy|delete|rm|mv|cp)\b/i;
+const NET_WRITE = /\[(?:System\.)?IO\.(?:File|Directory|FileInfo|DirectoryInfo)\]::\s*(?:Write|Append|Delete|Move|Copy|Replace|Create|Open(?!Read|Text))|(?:System\.)?IO\.(?:StreamWriter|FileStream)\b|\.(?:WriteAll\w*|AppendAll\w*|CopyTo|MoveTo|Delete|Replace)\s*\(/i;
+const PS_LOOSE = /(?:>|\b(?:set-content|add-content|out-file|tee-object|tee|new-item|ni|sc|ac|copy-item|cpi|copy|xcopy|robocopy|move-item|mi|move|mv|rename-item|ren|rni|remove-item|ri|del|erase|rd|rmdir|rm|clear-content|clc|cp)\b)[^\n;&|]*\.claude(?:[\\/]settings\.json|\.json)?(?![\w.-])/i;
+function psWritesSettings(command, home, dirs, depth, cmd = false) {
+  const text = String(command || ''), plain = psPlain(text);
+  if (depth >= 4) return /\.claude|settings\.json/i.test(plain) || WINDOWS_TOUCHES.test(plain);
+  if (NET_WRITE.test(plain) && NAMES_SETTINGS.test(plain)) return true;
+  const lexed = splitPowerShell(text, {cmd});
+  if (!lexed) return LOOSE_SETTINGS.test(text) || PS_LOOSE.test(plain);
+  const vars = new Map(), commands = [];
+  for (const st of lexed.statements) {
+    const words = statementWords(st, vars, cmd);
+    if (!words?.length) continue;
+    const name = base(words[0]);
+    if (!cmd && (name === 'iex' || name === 'invoke-expression')) {
+      if (psWritesSettings(words.slice(1).filter(a => a !== ',').map(a => a.replace(/^-command:?/i, '')).join(' '), home, dirs, depth + 1)) return true;
+      continue;
+    }
+    const run = !cmd && ['start-process', 'saps', 'start'].includes(name) ? startProcessWords(words.slice(1)) : null;
+    commands.push(...(run ? psAsBash(run) : []), ...psAsBash(words));
+  }
+  // Each cd is taken from every folder known so far while there are at most 64, as shellWritesSettings does.
+  const known = [...dirs], seen = new Set(dirs);
+  let last = [...dirs];
+  for (const words of commands) {
+    if (!['cd', 'pushd'].includes(base(words[0] || ''))) continue;
+    const target = words.slice(1).filter(a => !a.startsWith('-'))[0] ?? '~';
+    const reached = [];
+    for (const d of known.length <= 64 ? [...known] : last)
+      for (const r of pathReadings(target, home, d)) if (!seen.has(r)) { seen.add(r); known.push(r); reached.push(r); }
+    if (reached.length) last = reached;
+  }
+  if (lexed.writes.some(w => known.some(d => isProtectedPath(psExpand(w, vars), home, d)))) return true;
+  for (const words of commands) {
+    if (writesSettings(words, home, known, depth)) return true;
+    // A path a subexpression builds: Set-Content (Join-Path $HOME .claude.json) x.
+    if (!READ_ONLY.has(base(words[0] || '')) && words.slice(1).some(w => w.includes('\0')) && lexed.subs.some(s => /\.claude/i.test(psPlain(s)))) return true;
+  }
+  return lexed.subs.some(inner => psWritesSettings(inner, home, known, depth + 1));
+}
+// Why PowerShell text (the PowerShell tool's command) writes one of the settings files, or null. Reads stay allowed.
+export function powershellSettingsDenial(command, home, cwd = null) {
+  const text = String(command || '');
+  if (!home || !(/\.claude|settings\.json/i.test(psPlain(text)) || WINDOWS_TOUCHES.test(text))) return null;
+  return psWritesSettings(text, home, [cwd], 0) ? SETTINGS_DENIAL : null;
 }
 
 // A first look at a whole REPL script, before any of its calls run. Each inner call is still checked on
@@ -857,6 +1041,15 @@ function scriptShellTexts(text) {
   // A ${...} part is one placeholder word: its value is known only when the call runs.
   return out.map(t => t.replace(/\$\{[^}]*\}/g, 'X'));
 }
+// What a script hands the PowerShell tool (and Monitor, which may run its command in PowerShell on Windows):
+// the command of each PowerShell({command: ...}) or Monitor({command: ...}) call. A ${...} part of a template
+// string is one placeholder word; elsewhere ${env:USERPROFILE} is PowerShell's own and is kept.
+function scriptPowerShellTexts(text) {
+  const out = [], code = codeOnly(text);
+  for (const m of text.matchAll(/\b(?:PowerShell|Monitor)\s*\(\s*\{[^}]*?\bcommand\s*:\s*(['"\x60])((?:\\[^]|(?!\1)[^\\])*)\1/g))
+    if (code[m.index] === m[0][0]) out.push(m[1] === '\x60' ? m[2].replace(/\$\{[^}]*\}/g, 'X') : m[2]);
+  return out;
+}
 // The top-level arguments of the call whose ( is at `open` (or the properties of the { at `open`).
 function callArgs(text, open) {
   const args = [];
@@ -874,7 +1067,7 @@ function callArgs(text, open) {
 // A path expression as text: string literals, joined with + or path.join, with os.homedir() and
 // process.env.HOME read as ~. Null when part of it is a variable (known only at run time).
 function jsPath(expr) {
-  const e = String(expr).trim().replace(/\b(?:os\.)?homedir\(\)|\bprocess\.env\.HOME\b|\bprocess\.env\[['"]HOME['"]\]/g, "'~'");
+  const e = String(expr).trim().replace(/\b(?:os\.)?homedir\(\)|\bprocess\.env\.(?:HOME|USERPROFILE)\b|\bprocess\.env\[['"](?:HOME|USERPROFILE)['"]\]/g, "'~'");
   const join = /^(?:path\.)?(?:join|resolve)\s*\(([^]*)\)$/.exec(e);
   const parts = join ? callArgs('(' + join[1] + ')', 0) : e.split('+');
   let out = '';
@@ -905,6 +1098,12 @@ function scriptWritePaths(text) {
   return out.filter(Boolean);
 }
 // A guard that fails while reading a command refuses it: a crash must not let the command through.
+// Whether path is inside folder dir. A Windows folder (C:\...) matches with either slash and in any case.
+export function within(path, dir) {
+  if (!/^[A-Za-z]:[\\/]/.test(dir || '')) return String(path).startsWith(dir + '/');
+  const fold = s => String(s).replace(/\\/g, '/').toLowerCase();
+  return fold(path).startsWith(fold(dir) + '/');
+}
 export const guardFailed = error => 'The lab could not check this command safely (' + String(error?.message || error).slice(0, 120)
   + '), so it is refused. Split it into shorter commands.';
 export function scriptDenial(code, home, cwd = null) {
@@ -913,6 +1112,12 @@ export function scriptDenial(code, home, cwd = null) {
     try {
       if (nestedSessionDenial(shell)) return 'This script starts another Claude, Alnair or Codex session. ' + NESTED_SESSION;
       if (settingsWriteDenial(shell, home, cwd)) return SETTINGS_DENIAL;
+    } catch (error) { return guardFailed(error); }
+  }
+  for (const shell of scriptPowerShellTexts(text)) {
+    try {
+      if (powershellDenial(shell)) return 'This script starts another Claude, Alnair or Codex session. ' + NESTED_SESSION;
+      if (powershellSettingsDenial(shell, home, cwd)) return SETTINGS_DENIAL;
     } catch (error) { return guardFailed(error); }
   }
   if (scriptWritePaths(text).some(path => isProtectedPath(path, home, cwd))) return SETTINGS_DENIAL;
@@ -948,21 +1153,27 @@ export function isUserPrompt(e) {
 // Keeps a raised session effort (/effort) and raises a lower one to what the route needs.
 function atLeast(current, wanted) { return EFFORTS.indexOf(current) >= EFFORTS.indexOf(wanted) ? current : wanted; }
 
-let cfg, state, run, root, home;
+let cfg, state, run, root, home, python;
 let authSource, authEnabled, authGeneration;
 let lock = Promise.resolve();
   async function init($) {
     if (state) return;
     run = await $.env.get('CLAUDE_LAB_RUN_DIR');
     root = await $.env.get('CLAUDE_LAB_ROOT');
-    if (!run?.startsWith('/') || !root?.startsWith('/')) throw new Error('Launch with claude-lab');
+    // Windows gives these folders as C:\...; they are kept with forward slashes, which Windows reads the same.
+    const windowsFolder = p => /^[A-Za-z]:[\\/]/.test(p || '');
+    if (!(run?.startsWith('/') || windowsFolder(run)) || !(root?.startsWith('/') || windowsFolder(root))) throw new Error('Launch with claude-lab');
+    if (windowsFolder(run)) run = run.replace(/\\/g, '/');
+    if (windowsFolder(root)) root = root.replace(/\\/g, '/');
     cfg = JSON.parse(await $.fs.read(run + '/runtime.json'));
     state = JSON.parse(await $.fs.read(run + '/metrics.json'));
     if (!cfg.project || !state.agents) throw new Error('Invalid lab state');
     authSource = await $.env.get('CLAUDE_LAB_AUTH_SOURCE');
     authEnabled = await $.env.get('CLAUDE_LAB_AUTH_FALLBACK') === '1';
     authGeneration = await $.env.get('CLAUDE_LAB_AUTH_GENERATION');
-    home = (await $.env.get('HOME')) || '';
+    home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE')) || '';
+    // The Python that runs lab.py: the launcher's own on Windows (CLAUDE_LAB_PYTHON), python3 elsewhere.
+    python = (await $.env.get('CLAUDE_LAB_PYTHON')) || 'python3';
   }
   async function change($, fn) {
     const previous = lock;
@@ -998,7 +1209,7 @@ let lock = Promise.resolve();
       windows:state.authQuotaWindows,checkedAt:Date.now()}));
   }
   async function refreshProject($) {
-    const result = await $.process.run(['python3',root + '/bin/lab.py','fingerprint','--run',run],{timeoutMs:10000});
+    const result = await $.process.run([python,root + '/bin/lab.py','fingerprint','--run',run],{timeoutMs:10000});
     if (result.exitCode !== 0) throw new Error('Cannot verify current source state');
     const scope = JSON.parse(result.stdout);
     const current = scope.sha256;
@@ -1077,7 +1288,7 @@ let lock = Promise.resolve();
       await change($, () => { state.verification = {passed:false,revision:state.revision,taskSerial:state.taskSerial || 0}; });
       return {result:JSON.stringify({evidence,rejected:guarded,next:REFUSED_NEXT})};
     }
-    const command = 'python3 ' + shellQuote(root + '/bin/lab.py') + ' verify --run ' + shellQuote(run);
+    const command = (python === 'python3' ? 'python3' : shellQuote(python)) + ' ' + shellQuote(root + '/bin/lab.py') + ' verify --run ' + shellQuote(run);
     const checked = await $.tool.call({tool:'Bash',command,description:'Run the lab acceptance checks and record their exit codes'});
     // A denied call ran nothing, so a file on disk is older evidence, not this verify's.
     const evidence = checked.deny ? null : await proof($);
@@ -1099,7 +1310,7 @@ let lock = Promise.resolve();
     if (!path?.trim()) return {result:'Use /lab-project /absolute/path/to/project.'};
     // Workers retain their captured cwd/scope. Moving the lead must not wait for a reviewer.
     return change($, async () => {
-      const result = await $.process.run(['python3',root + '/bin/lab.py','scope','--run',run,'--project',path.trim()],{timeoutMs:10000});
+      const result = await $.process.run([python,root + '/bin/lab.py','scope','--run',run,'--project',path.trim()],{timeoutMs:10000});
       if (result.exitCode !== 0) return {result:redact(result.stderr || 'Could not select the verification folder.')};
       const scope = JSON.parse(result.stdout);
       cfg = JSON.parse(await $.fs.read(run + '/runtime.json'));
@@ -1219,7 +1430,7 @@ export function register(on) {
     try {
       if (REVIEW_ROLE.test(e.subagentType)) {
         const base = state?.verificationProject || cfg?.project;
-        const checked = await $.process.run(['python3',root + '/bin/review_paths.py',...(base ? ['--base',String(base)] : []),'--run',run,'--prompt',String(e.prompt ?? '')],{timeoutMs:10000});
+        const checked = await $.process.run([python,root + '/bin/review_paths.py',...(base ? ['--base',String(base)] : []),'--run',run,'--prompt',String(e.prompt ?? '')],{timeoutMs:10000});
         if (checked.exitCode !== 0) return {deny:redact(checked.stderr || 'Reviewer artifact validation failed; save the report and use real absolute paths.')};
         const resolved = JSON.parse(checked.stdout);
         if (typeof resolved.prompt !== 'string') return {deny:'Reviewer path validation returned no resolved prompt.'};
@@ -1333,7 +1544,7 @@ export function register(on) {
       // Say now which checks lab verify will refuse, instead of at verify time.
       let refused = await guardedChecks($);
       try {
-        const listed = await $.process.run(['python3',root + '/bin/lab.py','checks','--run',run],{timeoutMs:10000});
+        const listed = await $.process.run([python,root + '/bin/lab.py','checks','--run',run],{timeoutMs:10000});
         if (listed.exitCode === 0) refused = [...JSON.parse(listed.stdout).rejected, ...refused];
       } catch { /* lab verify reports the same refusals */ }
       const note = refused.length ? '\nlab verify will refuse these checks and run none until they are re-recorded:\n' +
@@ -1347,19 +1558,26 @@ export function register(on) {
     }
     if (cfg.homeWorkspace && ['Write','Edit','MultiEdit','NotebookEdit'].includes(e.tool)) {
       const path = e.file_path || e.notebook_path || '';
-      if (!path.startsWith(run + '/') && (state.scopeRequired || !path.startsWith(state.verificationProject + '/')))
+      if (!within(path, run) && (state.scopeRequired || !within(path, state.verificationProject)))
         return {deny:'Select the specific work folder containing this file with the select_project tool or /lab-project before editing it. Home-directory browsing remains available.'};
     }
     if (e.agentId && (e.tool === 'Agent' || e.tool === 'Workflow')) return {deny:'Nested delegation is disabled in this lab.'};
     if (e.tool === 'Workflow') return {deny:'Use the bounded lab specialists. Open-ended workflows are disabled in this variation.'};
     if (['Write','Edit','MultiEdit','NotebookEdit'].includes(e.tool) && isProtectedPath(e.file_path || e.notebook_path, home))
       return {deny:SETTINGS_DENIAL};
-    if (['Bash','Monitor'].includes(e.tool)) {
+    // Bash text is read as the shell reads it, PowerShell text (the PowerShell tool on Windows) as PowerShell
+    // does, and Monitor's both ways, since on Windows it may run in either.
+    const powershell = /^powershell$/i.test(String(e.tool || ''));
+    if (['Bash','Monitor'].includes(e.tool) || powershell) {
       const command = e.command || '';
       let denial;
       try {
-        denial = nestedSessionDenial(command) || mcporterDenial(command)
-          || settingsWriteDenial(command, home, /\.claude/i.test(command) ? await sessionCwd($) : null);
+        if (powershell && typeof e.command !== 'string') throw new Error('the PowerShell call has no command text');
+        const cwd = async () => /\.claude/i.test(command) ? await sessionCwd($) : null;
+        denial = (powershell ? null : nestedSessionDenial(command)) || (e.tool === 'Bash' ? null : powershellDenial(command))
+          || mcporterDenial(command)
+          || (powershell ? null : settingsWriteDenial(command, home, await cwd()))
+          || (e.tool === 'Bash' ? null : powershellSettingsDenial(command, home, await cwd()));
       } catch (error) { denial = guardFailed(error); }
       if (denial) return {deny:denial};
     }
@@ -1367,7 +1585,7 @@ export function register(on) {
     const result = await next(e);
     if (!result.deny && !result.isError && ['Write','Edit','MultiEdit','NotebookEdit'].includes(e.tool)) {
       const path = e.file_path || e.notebook_path || '';
-      if (path && !path.startsWith(run + '/')) await change($, () => {
+      if (path && !within(path, run)) await change($, () => {
         state.revision += 1;
         if (/\.(?:py|[cm]?[jt]sx?|json|toml|yaml|yml|rs|go|c|cpp|h|ipynb)$/.test(path)) state.codeEdited = true;
         state.review = null;

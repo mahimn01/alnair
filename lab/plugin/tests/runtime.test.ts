@@ -1082,3 +1082,25 @@ test('the settings guard sees through quotes and escapes, and leaves paths with 
     'cat "/home/u/Café/ノート.md" > "/home/u/out put.txt"','mv notes/00\\ Index.md "notes/01 Index.md"'])
     expect(settingsWriteDenial(c,HOME)).toBe(null);
 });
+
+test('on Windows the PowerShell tool is guarded like Bash, and lab folders given as C:\\ paths work', async ($,on) => {
+  const env = {CLAUDE_LAB_ROOT:'C:\\lab\\root',CLAUDE_LAB_RUN_DIR:'C:\\lab\\run',HOME:'',USERPROFILE:'C:\\Users\\yatin',
+    CLAUDE_LAB_PYTHON:'C:\\Users\\yatin\\alnair\\.venv\\Scripts\\python.exe'};
+  const f=fixture(on,{},{},env);
+  // Windows reads C:/lab/run as absolute; on macOS and Linux the test harness resolves it against the plugin folder.
+  const plugin = decodeURIComponent(new URL('../', import.meta.url).pathname);
+  for (const [k,v] of [...f.files]) for (const to of ['C:/lab/run/', 'C:\\lab\\run\\', plugin + 'C:/lab/run/']) f.files.set(k.replace('/lab/run/', to),v);
+  await start($);
+  for (const command of ['claude.exe -p hi','& claude -p hi','cmd /c claude -p','Start-Process claude -ArgumentList "-p"',
+    "Set-Content $env:USERPROFILE\\.claude.json '{}'",'Remove-Item -Recurse ~\\.claude','mcporter call obsidian-staging.write_note path=a'])
+    expect((await $.tool.call({tool:'PowerShell',command})).deny).toBeTruthy();
+  expect((await $.tool.call({tool:'PowerShell'})).deny).toBeTruthy();
+  expect((await $.tool.call({tool:'Bash',command:'echo x > /c/Users/yatin/.claude.json'})).deny).toBeTruthy();
+  expect((await $.tool.call({tool:'Monitor',command:'& claude -p hi'})).deny).toBeTruthy();
+  for (const command of ['Get-Content ~\\.claude\\settings.json','claude --version','Get-ChildItem'])
+    expect((await $.tool.call({tool:'PowerShell',command})).deny).toBeFalsy();
+  expect(f.calls.filter(t => t === 'PowerShell').length).toBe(3);
+  // lab.py runs under the launcher's own Python, given by CLAUDE_LAB_PYTHON.
+  await $.tool.call({tool:'mcp__harness-lab__checkpoint',context:'c',plan:'p',implementation:'i',unresolved:[],criteria:[],checks:[{argv:['python','-m','pytest','-q']}]});
+  expect(f.processArgv.length > 0 && f.processArgv.every(argv => argv[0] === env.CLAUDE_LAB_PYTHON)).toBe(true);
+});
