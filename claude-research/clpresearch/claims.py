@@ -25,7 +25,7 @@ from decimal import Decimal, DivisionByZero, InvalidOperation, localcontext
 
 from . import filelock, memory, passages, reliability
 from .common import Ctx, ToolError
-from .store import Store, StoreError, now_iso, slugify
+from .store import Store, StoreError, now_iso, sha256, slugify
 
 NEUTRAL_ANSWER = "ANSWER: claims recorded"   # the gate also checks this line: it must hold no values
 MAX_CLAIMS = 12
@@ -133,6 +133,12 @@ def without_dates(text: str, compact: bool = True) -> str:
     return " ".join(out + [text[last:]])
 
 
+def _finite(kind: str, d: Decimal) -> tuple[str, object]:
+    if not d.is_finite() or d.adjusted() > 100:
+        raise ToolError(f"value {d} is not a usable number")
+    return kind, d
+
+
 def parse_value(raw) -> tuple[str, object] | None:
     """("number", Decimal) | ("date", date) | ("text", str) for a claim's value, None when not given."""
     if raw is None or raw == "":
@@ -140,7 +146,7 @@ def parse_value(raw) -> tuple[str, object] | None:
     if isinstance(raw, bool):
         return "text", str(raw).lower()
     if isinstance(raw, (int, float)):
-        return "number", Decimal(str(raw))
+        return _finite("number", Decimal(str(raw)))
     s = str(raw).strip()
     m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", s)
     if m:
@@ -149,7 +155,7 @@ def parse_value(raw) -> tuple[str, object] | None:
             raise ToolError(f"value {s!r} is not a real date")
         return "date", d
     try:
-        return "number", Decimal(s.replace(",", "").replace("_", ""))
+        return _finite("number", Decimal(s.replace(",", "").replace("_", "")))
     except InvalidOperation:
         return "text", s
 
@@ -161,7 +167,9 @@ def show(v) -> str:
     if isinstance(v, Decimal):
         if v == v.to_integral_value():
             return str(int(v))
-        return format(v.quantize(Decimal("1e-10")).normalize(), "f")
+        with localcontext() as ctx:
+            ctx.prec = max(ctx.prec, v.adjusted() + 12)     # the default 28 digits cannot hold a long number plus 10 decimals
+            return format(v.quantize(Decimal("1e-10")).normalize(), "f")
     return str(v)
 
 
@@ -336,6 +344,11 @@ class Ledger:
         self.name = name[:120]
         self.slug = slugify(name, 60)
         self.path = store.home / "inquiries" / f"{self.slug}.jsonl"
+        # Letters outside a-z all slug to the same text, so such a name gets a hash of itself added.
+        # A ledger an older version already opened under the plain slug for this very name stays in use.
+        if not name.isascii() and not any(e.get("t") == "open" and e.get("inquiry") == self.name for e in self.events()):
+            self.slug = slugify(name, 50) + "-" + sha256(name.casefold())[:8]
+            self.path = store.home / "inquiries" / f"{self.slug}.jsonl"
 
     def events(self) -> list[dict]:
         try:

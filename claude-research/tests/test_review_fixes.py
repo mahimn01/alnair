@@ -31,6 +31,37 @@ def test_stray_end_tag_does_not_close_a_hidden_element():
     assert "secret" not in text and "visible" in text
 
 
+# ---- RES-2: non-Latin inquiry names ---------------------------------------------------------------------------------
+def test_non_latin_inquiry_names_get_their_own_ledgers(tmp_path):
+    store = Store(tmp_path / "home")
+    a, b = claims.Ledger(store, "日本の売上"), claims.Ledger(store, "中国の利益")
+    assert a.path != b.path
+    assert claims.Ledger(store, "日本の売上").path == a.path
+    assert claims.Ledger(store, "netflix revenue").slug == "netflix-revenue"
+
+
+def test_a_ledger_an_older_version_opened_under_the_plain_slug_stays_in_use(tmp_path):
+    store = Store(tmp_path / "home")
+    old = store.home / "inquiries" / "caf-revenue.jsonl"
+    old.parent.mkdir(parents=True)
+    old.write_text(json.dumps({"t": "open", "inquiry": "café revenue", "question": "q"}) + "\n", encoding="utf-8")
+    assert claims.Ledger(store, "café revenue").path == old
+    assert claims.Ledger(store, "cafè revenue").path != old
+
+
+# ---- RES-4: Infinity, NaN and very long numbers --------------------------------------------------------------------
+@pytest.mark.parametrize("raw", ["Infinity", "-Infinity", "NaN", float("inf"), float("nan"), "1e999999999"])
+def test_value_that_is_not_a_usable_number_is_refused_cleanly(raw):
+    with pytest.raises(ToolError):
+        claims.parse_value(raw)
+
+
+def test_value_with_more_than_28_digits_does_not_crash():
+    got = claims.parse_value("12345678901234567890.123456789012345")
+    assert claims.show(got[1]) == "12345678901234567890.123456789"
+    assert claims.show(Decimal(10) ** 30) == "1" + "0" * 30
+
+
 # ---- RES-7: long tokens stay quotable ----------------------------------------------------------------------------------
 def test_long_token_is_not_cut_and_a_quote_through_it_matches():
     token = "A" * 1000
@@ -47,3 +78,12 @@ def test_a_token_that_is_a_data_blob_is_still_cut_so_lines_stay_small():
 def test_wrap_still_breaks_ordinary_long_lines_at_spaces():
     out = extract.wrap_lines("word " * 300)
     assert max(len(line) for line in out.split("\n")) <= 400 and len(out.split("\n")) > 1
+
+
+# ---- RES-10: two reports in one second keep separate files --------------------------------------------------------------
+def test_two_reports_in_one_second_do_not_overwrite(ctx, monkeypatch):
+    monkeypatch.setattr(report.time, "gmtime", lambda *a: __import__("time").struct_time((2026, 1, 2, 3, 4, 5, 4, 2, 0)))
+    ctx.store.home.joinpath("reports").mkdir(parents=True, exist_ok=True)
+    first = report.unique_report_path(ctx.store.home / "reports", "inq")
+    first.write_text("{}", encoding="utf-8")
+    assert report.unique_report_path(ctx.store.home / "reports", "inq") != first

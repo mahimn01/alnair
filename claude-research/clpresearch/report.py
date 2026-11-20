@@ -16,6 +16,7 @@ import time
 import unicodedata
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 from . import claims as cl
 from . import memory, passages
@@ -199,6 +200,16 @@ def _row(rec: dict, quote_cap: int) -> dict:
     return row
 
 
+def unique_report_path(folder: Path, slug: str) -> Path:
+    """A report file name with a one-second timestamp; a second report in the same second gets -2, -3 ... so none is overwritten."""
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    path, n = folder / f"{slug}-{stamp}.json", 1
+    while path.exists():
+        n += 1
+        path = folder / f"{slug}-{stamp}-{n}.json"
+    return path
+
+
 def build(ctx: Ctx, inquiry: str, answer: str | None = None, asked_question: str | None = None) -> tuple[bool, str]:
     """(accepted?, reply text). Not accepted = the answer holds values no standing claim covers."""
     led = cl.Ledger(ctx.store, inquiry)
@@ -255,7 +266,7 @@ def build(ctx: Ctx, inquiry: str, answer: str | None = None, asked_question: str
         return {k: v for k, v in rep.items() if v not in ([], "", None)}
 
     full = assemble(10**6, True)
-    path = ctx.store.home / "reports" / f"{led.slug}-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}.json"
+    path = unique_report_path(ctx.store.home / "reports", led.slug)
     atomic_write(path, json.dumps(full, indent=1, ensure_ascii=False))
     led.append([{"t": "report", "status": status, "file": path.name, "uncovered": uncovered}])
     shown, note = full, ""
