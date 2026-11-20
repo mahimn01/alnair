@@ -166,12 +166,15 @@ def criteria(folder: Path | None, seed_file: Path | None) -> dict:
         return {"passed": False, "error": "task folder not found"}
     out: dict = {}
     links = folder / "broken-links.txt"
-    lines = [ln.strip() for ln in links.read_text().splitlines() if ln.strip()] if links.is_file() else None
+    lines = [ln.strip() for ln in links.read_text(encoding="utf-8").splitlines() if ln.strip()] if links.is_file() else None
     out["broken_links_diff"] = links_diff(lines)
     out["broken_links"] = lines is not None and not out["broken_links_diff"]
-    check = subprocess.run([sys.executable, "-B", "code/check_limits.py"], cwd=folder, capture_output=True, text=True, timeout=60)
-    out["check"] = check.returncode == 0 and "check passed" in check.stdout
-    out["check_output"] = (check.stdout + check.stderr).strip()[-600:]
+    try:
+        check = subprocess.run([sys.executable, "-B", "code/check_limits.py"], cwd=folder, capture_output=True, text=True, timeout=60)
+        out["check"] = check.returncode == 0 and "check passed" in check.stdout
+        out["check_output"] = (check.stdout + check.stderr).strip()[-600:]
+    except (OSError, subprocess.SubprocessError) as exc:  # a hung or unstartable check is a failed check, not a crash
+        out["check"], out["check_output"] = False, f"check could not finish: {exc}"
     seed = read_json(seed_file) if seed_file else {}
     before = seed.get("files") or {}
     # Claude Code itself may write <folder>/.claude/ (a "don't ask again" answer goes to settings.local.json),

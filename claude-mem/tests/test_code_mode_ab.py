@@ -173,3 +173,32 @@ def test_a_titled_or_reordered_answer_fails_with_a_diff(arms, capsys):
     assert "on broken-links.txt does not match the answer key:" in capsys.readouterr().out
     (folder / "broken-links.txt").write_text("\n".join(unquoted for unquoted in map(collect.unquote, collect.EXPECTED_LINKS)) + "\n")
     assert collect.criteria(folder, seed)["broken_links_diff"] == ""
+
+
+def test_a_check_that_times_out_is_a_failed_check_not_a_crash(tmp_path, monkeypatch):
+    collect = load_collect()
+    (tmp_path / "code").mkdir()
+
+    def hung(argv, **kwargs):
+        raise subprocess.TimeoutExpired(argv, kwargs.get("timeout", 60))
+
+    monkeypatch.setattr(collect.subprocess, "run", hung)
+    result = collect.criteria(tmp_path, None)
+    assert result["check"] is False and "timed out" in result["check_output"] and result["passed"] is False
+
+
+def test_broken_links_txt_is_read_as_utf8(tmp_path, monkeypatch):
+    collect = load_collect()
+    (tmp_path / "broken-links.txt").write_text("caf\u00e9.md\n", encoding="utf-8")
+    encodings: list = []
+    real = Path.read_text
+
+    def spy(self, *args, **kwargs):
+        if self.name == "broken-links.txt":
+            encodings.append(kwargs.get("encoding"))
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", spy)
+    monkeypatch.setattr(collect.subprocess, "run", lambda argv, **kw: subprocess.CompletedProcess(argv, 1, "", ""))
+    collect.criteria(tmp_path, None)
+    assert encodings == ["utf-8"]
