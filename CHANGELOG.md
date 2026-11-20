@@ -29,6 +29,7 @@ Fixed:
 - on Linux under a locale that can't encode a character (a C locale with Python's UTF-8 mode switched off, or an older non-UTF-8 one), the memory server no longer stops on a tool argument that has such a character, and the launcher no longer stops on a `config.env` value that has one
 - clp-rune keeps a `config.star`'s file mode and line endings when it rewrites its block, and explains reversed markers
 - the Code Mode A/B collector counts a check that hangs as a failed check
+- `alnair doctor` on a computer without Claude Code says that it isn't installed and how to install it, and still shows the rest of the lab's report. It used to show one bare "[Errno 2] No such file or directory" in its place. On macOS and Linux the report's `launcher` line names `~/.local/bin/alnair`, the command the installer makes; it used to name `claude-lab`, which a new install doesn't have. Both were found by installing in a fresh Ubuntu 24.04 container
 
 Added:
 
@@ -55,6 +56,8 @@ Added:
 - `scripts/test.ps1`, the test runner for Windows, and tests that simulate Windows on macOS and Linux
 - `examples/verify-gate.sh`, which runs the verify gate on two sample notes with no model call: one answer passes and one is refused
 - `docs/` pages for install, everyday use, model routing, Codex, Code Mode and settings, moved out of the README, with removal steps in [docs/install.md](docs/install.md#removing-it)
+- a recording of that example at the top of the README (`docs/demo/verify-gate.gif`), made with `vhs docs/demo/demo.tape`. `DEMO_PAUSE=1.5` makes `examples/verify-gate.sh` wait before each step so a recording can be read; what it prints is unchanged
+- docs: where session notes go and how `ALNAIR_VAULT` changes it, in the README and [docs/install.md](docs/install.md#your-notes-folder), and the two things a first install on Debian or Ubuntu can stop on (`python3-venv`, and `~/.local/bin` on the PATH)
 
 Changed:
 
