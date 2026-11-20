@@ -289,11 +289,18 @@ def _backup_path(path: Path) -> Path:
     return backup
 
 
-def _write_config(path: Path, text: str) -> None:
-    """Replace config.toml in one step. A symlinked config.toml (a dotfile manager) stays a link: its target is written."""
+def _read_config(path: Path) -> tuple[str, str]:
+    """config.toml's text with \n line ends, and the line ending the file itself uses, so a rewrite can keep it."""
+    raw = path.read_bytes().decode("utf-8")
+    return raw.replace("\r\n", "\n"), ("\r\n" if "\r\n" in raw else "\n")
+
+
+def _write_config(path: Path, text: str, eol: str = "\n") -> None:
+    """Replace config.toml in one step. A symlinked config.toml (a dotfile manager) stays a link: its target is written.
+    Lines end the way the file's own lines did (eol), on every system."""
     target = path.resolve()
     tmp = target.with_name(".config.toml.alnair-tmp")
-    tmp.write_text(text, encoding="utf-8")
+    tmp.write_bytes(text.replace("\n", eol).encode("utf-8"))
     try:
         os.chmod(tmp, (target.stat().st_mode & 0o777) if target.exists() else 0o600)
     except OSError:
@@ -305,7 +312,7 @@ def setup_config(repo: Path, python: str, home: Path | None = None, dry_run: boo
     """Add or refresh Alnair's MCP servers in config.toml. Idempotent; backs the file up before any change."""
     home = home or codex_home()
     path = home / "config.toml"
-    old = path.read_text(encoding="utf-8") if path.exists() else ""
+    old, eol = _read_config(path) if path.exists() else ("", "\n")
     base = _strip_block(old)
     toml = _toml()
     if toml is not None:
@@ -325,7 +332,7 @@ def setup_config(repo: Path, python: str, home: Path | None = None, dry_run: boo
     if path.exists():
         backup = _backup_path(path)
         shutil.copy2(path, backup)
-    _write_config(path, new)
+    _write_config(path, new, eol)
     return {"path": str(path), "changed": True, "backup": str(backup) if backup else None}
 
 
@@ -335,10 +342,10 @@ def remove_config(home: Path | None = None) -> dict:
     path = home / "config.toml"
     if not path.exists() or BEGIN not in path.read_text(encoding="utf-8"):
         return {"path": str(path), "changed": False}
-    old = path.read_text(encoding="utf-8")
+    old, eol = _read_config(path)
     backup = _backup_path(path)
     shutil.copy2(path, backup)
-    _write_config(path, _strip_block(old))
+    _write_config(path, _strip_block(old), eol)
     return {"path": str(path), "changed": True, "backup": str(backup)}
 
 

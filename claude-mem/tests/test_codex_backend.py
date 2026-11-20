@@ -196,6 +196,25 @@ def test_setup_config_backs_up_appends_once_and_round_trips(tmp_path):
     assert removed["changed"] and cfg.read_text().rstrip("\n") == ORIGINAL.rstrip("\n")
 
 
+def test_config_toml_keeps_its_own_line_endings(tmp_path):
+    """A CRLF config.toml stays CRLF and an LF one stays LF on every system, and remove gives the same bytes back.
+    Text mode used to turn LF into CRLF on Windows, and a CRLF file into LF on macOS and Linux."""
+    cfg = tmp_path / "config.toml"
+    for eol in ("\r\n", "\n"):
+        original = ORIGINAL.replace("\n", eol).encode("utf-8")
+        cfg.write_bytes(original)
+        assert CB.setup_config(REPO, "/py", home=tmp_path)["changed"]
+        written = cfg.read_bytes()
+        assert written.startswith(original) and CB.BEGIN.encode() in written
+        if eol == "\r\n":
+            assert b"\n" not in written.replace(b"\r\n", b""), "a bare LF in a CRLF file"
+        else:
+            assert b"\r" not in written
+        assert CB.setup_config(REPO, "/py", home=tmp_path)["changed"] is False
+        assert CB.remove_config(home=tmp_path)["changed"]
+        assert cfg.read_bytes().rstrip(b"\r\n") == original.rstrip(b"\r\n")
+
+
 def test_setup_config_dry_run_writes_nothing(tmp_path):
     out = CB.setup_config(REPO, "/py", home=tmp_path, dry_run=True)
     assert out["dryRun"] and not (tmp_path / "config.toml").exists()
