@@ -108,4 +108,4 @@ cd ~/alnair   # your checkout
 .venv/bin/python -m pytest claude-mem/rune/tests claude-mem/tests -q
 .venv/bin/python claude-mem/rune/bench/bench_helpers.py
 ```
-Design/plan: `docs/superpowers/specs/2026-11-09-clp-lab-rune-design.md`.
+Design/plan: `docs/design/clp-lab-rune.md`.
