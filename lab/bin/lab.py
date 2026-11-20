@@ -145,7 +145,8 @@ def scrub(text: str) -> str:
 def dump(path: Path, data: dict) -> None:
     """Replace lab state atomically and keep its permissions private."""
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    tmp = path.with_name(path.name + '.tmp')
+    # A name of its own per write, so two writers of one file never share or delete each other's temp file.
+    tmp = path.with_name(f'{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp')
     tmp.write_text(json.dumps(data, indent=2) + '\n')
     tmp.chmod(0o600)
     tmp.replace(path)
@@ -250,7 +251,7 @@ def hashes() -> dict:
 def core_and_trading() -> tuple[str, str]:
     """Scope a fresh read of the user's instructions; never edit the source."""
     source = USER / '.claude/CLAUDE.md'
-    text = source.read_text() if source.is_file() else ''
+    text = source.read_text(encoding='utf-8') if source.is_file() else ''
     sections = re.split(r'(?m)(?=^## )', text)
     core, trading = [], []
     for section in sections:
@@ -604,7 +605,7 @@ def prepare(project: Path, mode: str, model: str, run: Path | None = None, full_
     run.mkdir(parents=True, exist_ok=True, mode=0o700)
     core, trading = core_and_trading()
     for name, text in [('personal-core.md', core), ('trading-policy.md', trading)]:
-        (run / name).write_text(text)
+        (run / name).write_text(text, encoding='utf-8')
         (run / name).chmod(0o600)
     try:
         session_id = str(uuid.UUID(run.name))
@@ -646,7 +647,7 @@ def upgrade_run(run: Path, full_tools: bool = False) -> dict:
         core, trading = core_and_trading()
         for name, text in [('personal-core.md', core), ('trading-policy.md', trading)]:
             if not (run / name).is_file():
-                (run / name).write_text(text)
+                (run / name).write_text(text, encoding='utf-8')
                 (run / name).chmod(0o600)
     return cfg
 
@@ -700,8 +701,8 @@ def launch_command(run: Path, prompt: str = '', resume: bool = False, load_auth:
             metrics['route']['pinned'] = False
         dump(run / 'metrics.json', metrics)
         dump(run / 'settings.json', layer)
-    core = (run / 'personal-core.md').read_text()
-    task_instructions = (ROOT / 'references/coordinator.md').read_text()
+    core = (run / 'personal-core.md').read_text(encoding='utf-8')
+    task_instructions = (ROOT / 'references/coordinator.md').read_text(encoding='utf-8')
     if cfg.get('homeWorkspace'):
         task_instructions += ('\nThis session starts in the user home directory. Browse and handle general tasks normally. '
                               'Before coding or running code acceptance checks, use mcp__harness-lab__select_project '
@@ -709,7 +710,7 @@ def launch_command(run: Path, prompt: str = '', resume: bool = False, load_auth:
                               'Use absolute file paths and explicit project directories in Bash commands. '
                               'The user can also select the folder with /lab-project /absolute/path.')
     if code_env == '1':
-        task_instructions += '\n' + (ROOT / 'references/code-mode.md').read_text()
+        task_instructions += '\n' + (ROOT / 'references/code-mode.md').read_text(encoding='utf-8')
     env = auth_environment(os.environ, auth_source, token=load_auth)
     # Code Mode follows the run's record only: 1, 0 or removed, never the parent's value or restart markers.
     env = code_mode.child_env(env, code_env)
@@ -861,18 +862,19 @@ def verify(run: Path) -> dict:
         timeout = min(60, max(1, int(check.get('timeoutSeconds', 60))))
         command, env = windows_check(argv) if native.WINDOWS else (argv, None)
         try:
-            result = subprocess.run(command, cwd=project, env=env, text=True, stdout=subprocess.PIPE,
+            # Read as bytes: output that is not UTF-8 must not crash verify, and a timeout hands back bytes too.
+            result = subprocess.run(command, cwd=project, env=env, stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, timeout=timeout, check=False)
-            code, output = result.returncode, result.stdout
+            code, output = result.returncode, result.stdout.decode('utf-8', 'replace')
         # Not `as error`: Python deletes that name when the handler ends, and the report below reads error.
         except subprocess.TimeoutExpired as exc:
             code = 124
-            output = str(exc.stdout or '') + '\nCheck timed out.'
+            output = (exc.stdout or b'').decode('utf-8', 'replace') + '\nCheck timed out.'
         except OSError as exc:
             code, output = 127, str(exc)
         clean = scrub(output)
         log = run / f'check-{index}.log'
-        log.write_text(clean)
+        log.write_text(clean, encoding='utf-8')
         log.chmod(0o600)
         results.append({'argv': argv, 'exitCode': code, 'log': str(log), 'tail': clean[-1800:]})
     final = fingerprint(Path(project))['sha256'] if results else initial

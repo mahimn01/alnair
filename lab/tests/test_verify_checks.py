@@ -77,6 +77,59 @@ class VerifyChecksTest(unittest.TestCase):
         self.assertFalse(report["passed"])
         self.assertEqual(report["checks"][0]["exitCode"], 127)
 
+    def test_a_check_that_prints_non_utf8_bytes_is_recorded_not_fatal(self):
+        # verify crashed with UnicodeDecodeError and left no verified-checks.json.
+        self.checks([lab.sys.executable, "-c", "import sys; sys.stdout.buffer.write(b'caf\\xe9 ok'); sys.exit(1)"])
+        report = lab.verify(self.run_dir)
+        self.assertEqual(report["checks"][0]["exitCode"], 1)
+        self.assertIn("ok", report["checks"][0]["tail"])
+        self.assertEqual(self.evidence()["checks"][0]["exitCode"], 1)
+
+    def test_a_timed_out_check_records_its_output_as_text(self):
+        # The output was recorded as the repr of bytes: b'started\\n'.
+        code = "import time; print('started', flush=True); time.sleep(5)"
+        lab.dump(self.run_dir / "acceptance.json", {"criteria": [], "checks": [
+            {"argv": [lab.sys.executable, "-u", "-c", code], "timeoutSeconds": 1}]})
+        tail = lab.verify(self.run_dir)["checks"][0]["tail"]
+        self.assertNotIn("b'", tail)
+        self.assertIn("Check timed out.", tail)
+
+    def test_two_writers_of_one_state_file_do_not_share_a_temp_file(self):
+        target = self.run_dir / "shared.json"
+        real_replace = Path.replace
+        seen = []
+
+        def replace(path, dest):
+            seen.append(path.name)
+            return real_replace(path, dest)
+        with patch.object(Path, "replace", replace):
+            lab.dump(target, {"a": 1})
+            lab.dump(target, {"a": 2})
+        self.assertEqual(len(set(seen)), 2, seen)
+        self.assertEqual(json.loads(target.read_text()), {"a": 2})
+
+    def test_instruction_files_are_read_and_written_as_utf8(self):
+        # On Windows the locale encoding (cp1252) cannot hold every character of the user's instructions.
+        calls = []
+        real_read, real_write = Path.read_text, Path.write_text
+
+        def read(path, *args, **kwargs):
+            calls.append((path.name, kwargs.get("encoding", args[0] if args else None)))
+            return real_read(path, *args, **kwargs)
+
+        def write(path, data, *args, **kwargs):
+            calls.append((path.name, kwargs.get("encoding", args[0] if args else None)))
+            return real_write(path, data, *args, **kwargs)
+        with patch.object(Path, "read_text", read), patch.object(Path, "write_text", write):
+            lab.upgrade_run(self.run_dir)
+            (self.run_dir / "trading-policy.md").unlink()
+            lab.upgrade_run(self.run_dir)
+            lab.launch_command(self.run_dir, None, False)
+        wanted = {"personal-core.md", "trading-policy.md", "coordinator.md"}
+        got = [c for c in calls if c[0] in wanted]
+        self.assertTrue(got)
+        self.assertEqual([c for c in got if c[1] != "utf-8"], [])
+
     def test_on_windows_env_assignments_become_the_environment_and_python3_a_real_python(self):
         found = {"python3": r"C:\Users\u\AppData\Local\Microsoft\WindowsApps\python3.EXE",
                  "python": r"C:\Python312\python.EXE", "npm": r"C:\nodejs\npm.CMD"}
