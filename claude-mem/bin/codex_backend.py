@@ -63,7 +63,7 @@ def codex_binary() -> str:
     found = shutil.which("codex")
     if found:
         return found
-    local = Path.home() / ".local/bin/codex"
+    local = Path.home() / (".local/bin/codex.exe" if os.name == "nt" else ".local/bin/codex")
     if local.exists():
         return str(local)
     raise RuntimeError("Codex CLI isn't installed. Install it with `brew install --cask codex` or "

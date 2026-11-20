@@ -23,11 +23,16 @@ from datetime import datetime, timezone
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
+_native_spec = importlib.util.spec_from_file_location('lab_native', ROOT / 'bin/native.py')
+native = importlib.util.module_from_spec(_native_spec); _native_spec.loader.exec_module(native)
 USER = Path.home()
 # The notes vault the lab must never hold run state in (ALNAIR_VAULT, default ~/Documents/Obsidian Vault).
 VAULT = Path(os.environ.get('ALNAIR_VAULT') or USER / 'Documents/Obsidian Vault').expanduser()
 STATE = USER / '.local/state/claude-lab/runs'
-CLAUDE = USER / '.local/bin/claude'
+CLAUDE = native.program(USER / '.local/bin/claude')
+# The Python that hooks and the status line run lab scripts with: the system one on macOS and Linux, as always;
+# on Windows the launcher's own (there is no /usr/bin/python3, and python3 may be the Microsoft Store stub).
+HOOK_PYTHON = sys.executable if native.WINDOWS else '/usr/bin/python3'
 SOURCE = USER / '.claude/settings.json'
 AUTH = STATE.parent / 'auth.json'
 TOKEN_SERVICE = 'local.claude-lab.oauth.v1'
@@ -347,21 +352,33 @@ def settings_layers(run: Path, cfg: dict) -> tuple[list[dict], list[dict]]:
     return read(run / 'settings.json'), project
 
 
+def claude_version() -> str | None:
+    """The installed Claude Code's version ('2.1.328'), from `claude --version`, for the Code Mode version check.
+    None when it can't be read (not installed, or no answer in 5 seconds): then nothing is ruled out."""
+    try:
+        out = subprocess.run([str(CLAUDE), '--version'], capture_output=True, text=True, timeout=5, check=False).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    found = re.search(r'\d+\.\d+\.\d+', out or '')
+    return found.group() if found else None
+
+
 def plan_code_mode(run: Path, env: dict | None, *, request: tuple[bool, str], resume: bool, bili: bool = False,
                    flag: bool | None = None, args: list[str] | None = None,
-                   remote_control: bool = False) -> tuple[dict, list[str]]:
+                   remote_control: bool = False, claude_version: str | None = None) -> tuple[dict, list[str]]:
     """This launch's Code Mode record and the lines to show the person. It reads the run and writes nothing
     (save_code_mode does); nothing is ever refused.
 
     A new session, or a resumed run with no record: the request (flag, shell, config.env, else on). When something
     rules Code Mode out, the record turns it off with the variable removed and one line says why. env None skips
     the environment checks: the first pass, before the launch is built; the caller checks again with the final env.
+    claude_version is the installed Claude Code's (claude_version()); one older than Code Mode rules it out.
     A resumed run with a record keeps how it was launched. When a Code Mode launch can't run here, one line warns
     instead of refusing: only Claude Code knows whether the session really ran in Code Mode, and it resumes one
     that didn't (the confirm prompt declined, the feature not open to the account yet)."""
     cfg = json.loads((run / 'runtime.json').read_text())
     own, project = settings_layers(run, cfg)
-    reasons = code_mode.blockers(env or {}, own, run_models(cfg), args or [], remote_control, project)
+    reasons = code_mode.blockers(env or {}, own, run_models(cfg), args or [], remote_control, project, claude_version)
     launched = code_mode.started(cfg) if resume else None
     if launched is None:
         if bili:  # bili's proxy is what sets ANTHROPIC_BASE_URL; say so once
@@ -527,7 +544,7 @@ def settings(run: Path, home: bool = False, full_tools: bool = False, execution_
         if selected:
             kept_hooks[event] = selected
     kept_hooks.setdefault('UserPromptSubmit', []).insert(0, {'hooks':[{'type':'command',
-        'command':'/usr/bin/python3 ' + __import__('shlex').quote(str(ROOT/'bin/ready_guard.py')), 'timeout':5}]})
+        'command':native.command_line([HOOK_PYTHON, ROOT/'bin/ready_guard.py']), 'timeout':5}]})
     out = {k: original[k] for k in ['permissions', 'autoMode', 'theme', 'tui'] if k in original}
     out['permissions'] = lab_permissions(original.get('permissions', {}), home, hide=not full_tools)
     # Flag settings outrank project settings, so web plugins are left out rather than set false.
@@ -545,7 +562,7 @@ def settings(run: Path, home: bool = False, full_tools: bool = False, execution_
                 'enabledPlugins': {**plugins, 'claude-mem@thedotmack': False},
                 'skillOverrides': {} if full_tools else {name: 'user-invocable-only' for name in QUIET_SKILLS},
                 'statusLine': {'type': 'command', 'padding': 0,
-                               'command': '/usr/bin/python3 ' + __import__('shlex').quote(str(ROOT / 'bin/lab_statusline.py'))},
+                               'command': native.command_line([HOOK_PYTHON, ROOT / 'bin/lab_statusline.py'])},
                 'hooks': kept_hooks,
                 'env': {'CLAUDE_LAB_ROOT': str(ROOT), 'CLAUDE_LAB_RUN_DIR': str(run),
                         'CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH': '1',
@@ -728,6 +745,8 @@ def launch_command(run: Path, prompt: str = '', resume: bool = False, load_auth:
         policy=auth_policy()
         env.update({'CLAUDE_LAB_AUTH_SOURCE':auth_source or ('token' if policy=='token' else 'primary'),
                     'CLAUDE_LAB_AUTH_FALLBACK':'1' if policy=='fallback' else '0'})
+    if native.WINDOWS:
+        env['CLAUDE_LAB_PYTHON'] = sys.executable  # the plugin runs lab scripts with it (no python3 there)
     lsp = USER / '.local/share/claude-lab/lsp/node_modules/.bin'
     if lsp.exists():
         env['PATH'] = str(lsp) + os.pathsep + env.get('PATH', '')
@@ -762,6 +781,8 @@ def check_problem(argv: object) -> str | None:
         if words[0].startswith('-'):
             return f'env option {words[0]} is not supported; write env NAME=value ... program'
     program = Path(words[0]).name
+    if native.WINDOWS and program.lower().endswith('.exe'):
+        program = program[:-4]  # python.exe is python, claude.exe is claude
     if program == 'claude':
         # The plugin test runner and validator start no session, so they may be checks; nothing else may.
         rest = words[1:]
@@ -811,8 +832,10 @@ def verify(run: Path) -> dict:
     for index, check in enumerate(checks if error is None else []):
         argv = check['argv']
         timeout = min(60, max(1, int(check.get('timeoutSeconds', 60))))
+        # On Windows npm, npx and pytest are .cmd or .exe files, which a bare name doesn't start there.
+        command = [shutil.which(argv[0]) or argv[0], *argv[1:]] if native.WINDOWS else argv
         try:
-            result = subprocess.run(argv, cwd=project, text=True, stdout=subprocess.PIPE,
+            result = subprocess.run(command, cwd=project, text=True, stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, timeout=timeout, check=False)
             code, output = result.returncode, result.stdout
         except subprocess.TimeoutExpired as error:
@@ -979,7 +1002,8 @@ def main() -> int:
     # against the final child environment; the launch is rebuilt only when that changes it. A launch that asks
     # for bili is first built without Code Mode so the proxy can be tried; Code Mode is ruled out only when the
     # proxy really routes the session. A preview starts no proxy, so it shows what a launch that starts it gets.
-    plan = {'request': code_request, 'resume': bool(opt.resume), 'bili': use_bili, 'flag': opt.code_mode}
+    plan = {'request': code_request, 'resume': bool(opt.resume), 'bili': use_bili, 'flag': opt.code_mode,
+            'claude_version': claude_version()}
     status, _ = plan_code_mode(run, None, **plan)
     argv, env = launch_command(run, opt.text, bool(opt.resume), load_auth=not preview, start_proxy=not preview, code_mode_status=status)
     if not preview:
@@ -1016,8 +1040,7 @@ def main() -> int:
         return module.supervise(argv,env,run,config_dir,lambda sid:resume_account(sid,'token',True),
             primary_command=lambda sid,continue_turn:resume_account(sid,'primary',continue_turn),account_policy=policy,
             account_command=resume_account,policy_loader=accounts.load)
-    os.execve(str(CLAUDE), argv, env)
-    return 0
+    return native.run_session(argv, env)
 
 
 if __name__ == '__main__':

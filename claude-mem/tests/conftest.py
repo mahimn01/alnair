@@ -59,13 +59,15 @@ def _mock_native_claude_metadata(monkeypatch):
     from pathlib import Path
     real_run = subprocess.run
     def guarded_run(args, *a, **kw):
-        if isinstance(args, (list, tuple)) and args and Path(str(args[0])).name == "codex":
+        name = Path(str(args[0])).name.removesuffix(".exe") if isinstance(args, (list, tuple)) and args else ""
+        if name == "codex":
             if list(args[1:]) == ["--version"]:
                 return subprocess.CompletedProcess(args, 0, "codex-cli 0.169.0\n", "")
             raise AssertionError("Unit tests must not launch Codex")
-        if isinstance(args, (list, tuple)) and args and Path(str(args[0])).name == "claude":
+        if name == "claude":
+            # A Claude Code with Code Mode (2.1.323+); tests of the version check stub an older one themselves.
             if list(args[1:]) == ["--version"]:
-                return subprocess.CompletedProcess(args, 0, "2.1.321 (Claude Code)\n", "")
+                return subprocess.CompletedProcess(args, 0, "2.1.328 (Claude Code)\n", "")
             if list(args[1:]) == ["--help"]:
                 return subprocess.CompletedProcess(args, 0, 'model aliases: "sonnet", "opus", "fable"\n', "")
             raise AssertionError("Unit tests must not launch Claude sessions")

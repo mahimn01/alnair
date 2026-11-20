@@ -17,6 +17,9 @@ What the session's environment gets (CLAUDE_CODE_EXPERIMENTAL_CODE_MODE):
 A 1 is a request: Claude Code can still start without Code Mode (the one-time confirm prompt declined, the
 feature not open to the account yet, a plugin it doesn't support). It says so on a line near the top.
 
+Claude Code older than 2.1.323 has no Code Mode: the launchers pass the installed version in, and Code Mode is
+auto-disabled there with a note that says so.
+
 What this module does: pure checks only. It reads the environment and ~/.config/alnair/config.env and writes
 nothing. lab.py (claude-lab and alnair) and claude-clp both use it. Code Mode is turned on only through the
 child process environment, never by writing ~/.claude/settings.json or ~/.claude.json.
@@ -53,6 +56,9 @@ REPL_NAMES = {'REPL', 'Eval'}
 ON_WORDS = {'1', 'true', 'yes', 'on'}
 OFF_WORDS = {'0', 'false', 'no', 'off'}
 OFF_NOTE = 'Alnair: Code Mode is off for this session: '
+# The first Claude Code release with Code Mode. An older one ignores the variable, so a launch there says why
+# Code Mode is off instead of claiming it is on.
+MIN_VERSION = (2, 1, 323)
 # Environment names a launch preview may show; the values of these are never printed, only that they are set.
 SECRET_NAMES = {'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', CUSTOM_HEADERS}
 
@@ -185,6 +191,16 @@ def env_report(env: Mapping[str, str]) -> dict:
     return report
 
 
+def version_reason(version: str | None) -> str | None:
+    """Why this Claude Code version can't run Code Mode, or None. An unknown version (Claude Code missing, or
+    no answer to --version) rules nothing out: the launch itself says what is wrong."""
+    found = re.search(r'(\d+)\.(\d+)\.(\d+)', str(version or ''))
+    if not found or tuple(map(int, found.groups())) >= MIN_VERSION:
+        return None
+    return (f'Claude Code {found.group()} is older than {".".join(map(str, MIN_VERSION))}, the first version '
+            'with Code Mode (update it with claude update)')
+
+
 def tool_names(value: str) -> list[str]:
     return [name for name in re.split(r'[\s,]+', value) if name]
 
@@ -207,11 +223,12 @@ def _env_of(layer: dict) -> dict:
 
 
 def blockers(env: Mapping[str, str], layers: list[dict], models: list[str], args: list[str],
-             remote_control: bool = False, project: list[dict] | tuple = ()) -> list[str]:
+             remote_control: bool = False, project: list[dict] | tuple = (), claude_version: str | None = None) -> list[str]:
     """Plain-words reasons Code Mode cannot start with this final child environment, the session's own settings
-    layers (the --settings file), the project's settings files, these models and these extra claude flags.
-    Empty means it can start."""
-    reasons = []
+    layers (the --settings file), the project's settings files, these models, these extra claude flags and the
+    installed Claude Code version (None: not known, not checked). Empty means it can start."""
+    too_old = version_reason(claude_version)
+    reasons = [too_old] if too_old else []
     own: list[Mapping] = [env, *map(_env_of, layers)]
     theirs: list[Mapping] = list(map(_env_of, project))
     # Every source is checked on its own: which one wins inside Claude Code isn't documented for each name, so a

@@ -36,6 +36,7 @@ import os
 import shutil
 import subprocess
 import sys
+import re
 import tempfile
 import uuid
 from datetime import datetime, timezone
@@ -44,8 +45,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
 HOME = Path.home()
+_native_spec = importlib.util.spec_from_file_location("clp_native", REPO / "lab/bin/native.py")
+if _native_spec is None or _native_spec.loader is None:
+    raise RuntimeError(f"lab/bin/native.py not found under {REPO}")
+# How this OS starts Claude Code (exec on macOS and Linux; a child with its exit code passed on, on Windows).
+NATIVE = importlib.util.module_from_spec(_native_spec)
+_native_spec.loader.exec_module(NATIVE)
 STATE = HOME / ".local/state/claude-clp/runs"
-CLAUDE = HOME / ".local/bin/claude"
+CLAUDE = NATIVE.program(HOME / ".local/bin/claude")
 SOURCE = HOME / ".claude/settings.json"
 LOCAL = HOME / ".claude/settings.local.json"
 PLUGIN = ROOT / "plugin"
@@ -116,7 +123,7 @@ def hashes() -> dict[str, str]:
 
 def tool_python() -> str:
     """The interpreter the tools run under: the repo's virtualenv (it has the anthropic SDK for ask), else this one."""
-    venv = REPO / ".venv/bin/python"
+    venv = NATIVE.venv_python(REPO / ".venv")
     return str(venv) if venv.exists() else sys.executable
 
 
@@ -155,6 +162,17 @@ def session_settings(run: Path, home: bool, store: Path | None) -> dict:
     return out
 
 
+def claude_version() -> str | None:
+    """The installed Claude Code's version ('2.1.328'), for the Code Mode version check; None when it can't be
+    read (then nothing is ruled out)."""
+    try:
+        out = quiet([claude_binary(), "--version"], timeout=5).stdout
+    except (RuntimeError, OSError, subprocess.SubprocessError):
+        return None
+    found = re.search(r"\d+\.\d+\.\d+", out or "")
+    return found.group() if found else None
+
+
 def code_mode_blockers(project: Path, layer: dict, env: dict) -> list[str]:
     """Why Code Mode cannot start for this launch: the environment, the session layer, the project's own
     settings files (a home launch loads none) and the model the layer copies from your settings."""
@@ -170,7 +188,7 @@ def code_mode_blockers(project: Path, layer: dict, env: dict) -> list[str]:
                 files.append(value)
     # Kept apart from the session layer: Claude Code ignores some variables in a project's own files.
     models = [m for m in (lay.get("model") for lay in [layer, *files]) if m]
-    return CODE_MODE.blockers(env, [layer], models, [], project=files)
+    return CODE_MODE.blockers(env, [layer], models, [], project=files, claude_version=claude_version())
 
 
 def prepare(project: Path, run: Path, store: Path | None = None, code_mode: dict | None = None) -> tuple[Path, dict]:
@@ -303,8 +321,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     print(f"Claude CLP · CLP tools on · {CODE_MODE.WORDS[CODE_MODE.label(status)]} · run files: {run}", flush=True)
     os.chdir(cfg["project"])
-    os.execve(argv_[0], argv_, env)
-    return 0
+    return NATIVE.run_session(argv_, env)
 
 
 if __name__ == "__main__":

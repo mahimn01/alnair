@@ -29,10 +29,18 @@ def no_writes_to_real_claude_files():
     assert writes == [], f"a test wrote the user's real Claude files: {writes}"
 
 
+# The installed Claude Code, where the launcher looks for it first (~/.local/bin/claude, claude.exe on Windows).
+INSTALLED_CLAUDE = str(_launcher.CLAUDE)
+
+
 def _no_security_tool(args, *rest, **kwargs):
     argv0 = args[0] if isinstance(args, (list, tuple)) and args else str(args).split(" ")[0]
     if str(argv0).endswith("security"):
         raise RuntimeError("the security tool is disabled in tests")
+    # The launcher asks Claude Code for its version (Code Mode needs 2.1.323+). It answers as a current one, so
+    # the suite gives the same result on a machine with an older Claude Code; version tests stub their own.
+    if isinstance(args, (list, tuple)) and list(args) == [INSTALLED_CLAUDE, "--version"]:
+        return subprocess.CompletedProcess(list(args), 0, "2.1.328 (Claude Code)\n", "")
     return _REAL_RUN(args, *rest, **kwargs)
 
 
@@ -47,6 +55,10 @@ def no_network_no_keys(monkeypatch, tmp_path_factory):
     monkeypatch.setattr(socket, "create_connection", refuse)
     monkeypatch.setattr(socket, "getaddrinfo", refuse)
     for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE", "ANTHROPIC_BASE_URL", "CLP_STORE"):
+        monkeypatch.delenv(name, raising=False)
+    # A suite run from inside an Alnair session inherits that session's variables (its run folder, session id,
+    # tool roots); the tests describe a plain shell, so those go too.
+    for name in [n for n in os.environ if n.startswith(("CLAUDE_", "ALNAIR_"))]:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("ANTHROPIC_CONFIG_DIR", str(tmp_path_factory.mktemp("anthropic-config")))
 

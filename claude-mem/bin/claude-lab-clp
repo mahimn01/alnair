@@ -58,6 +58,20 @@ HOME = Path.home()
 CONFIG = Path(os.environ.get("ALNAIR_CONFIG") or HOME / ".config/alnair/config.env").expanduser()
 
 
+def load_native():
+    """lab/bin/native.py from this repo: how this OS starts Claude Code (exec on macOS and Linux; a child
+    process with its exit code passed on, on Windows) and the file names that differ there."""
+    spec = importlib.util.spec_from_file_location("alnair_native", REPO / "lab/bin/native.py")
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"lab/bin/native.py not found under {REPO}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+NATIVE = load_native()
+
+
 # Variables load_config copied from config.env into the environment (name -> value), so a setting can still
 # tell the shell's own value from config.env's (Code Mode: flag > shell > config.env > on).
 FROM_CONFIG: dict[str, str] = {}
@@ -90,8 +104,9 @@ VAULT = Path(os.environ.get("ALNAIR_VAULT") or HOME / "Documents/Obsidian Vault"
 os.environ.setdefault("ALNAIR_VAULT", str(VAULT))
 os.environ.setdefault("CLAUDE_MEM_VAULT", str(VAULT))
 STATE = HOME / ".local/state/claude-mem/runs"
-LINK = HOME / ".local/bin/alnair"
-CLAUDE = HOME / ".local/bin/claude"
+# install.sh links ~/.local/bin/alnair here; install.ps1 writes an alnair.cmd that runs this file.
+LINK = HOME / (".local/bin/alnair.cmd" if NATIVE.WINDOWS else ".local/bin/alnair")
+CLAUDE = NATIVE.program(HOME / ".local/bin/claude")
 SOURCE = HOME / ".claude/settings.json"
 LOCAL = HOME / ".claude/settings.local.json"
 
@@ -203,7 +218,7 @@ def load_session_ledger():
 
 
 def tool_python() -> str:
-    venv = REPO / ".venv/bin/python"
+    venv = NATIVE.venv_python(REPO / ".venv")
     return str(venv) if venv.exists() else sys.executable
 
 
@@ -230,10 +245,9 @@ def vault_note_hooks() -> dict:
     Stop / SessionEnd / PreCompact all invoke the same offline script with the hook JSON
     on stdin. Timeout is generous; the script fails soft (exit 0) and logs under ~/.clp/logs.
     """
-    import shlex
     python = tool_python()
     script = str(CLP_ROOT / "bin" / "vault_session_note.py")
-    cmd = f"{shlex.quote(python)} {shlex.quote(script)} --stdin-payload --json"
+    cmd = NATIVE.command_line([python, script, "--stdin-payload", "--json"])
     entry = {"hooks": [{"type": "command", "command": cmd, "timeout": 45}]}
     return {
         "Stop": [entry],
@@ -460,14 +474,22 @@ def doctor() -> dict:
         report["codex"] = load_codex().status(REPO, tool_python())
     except Exception as exc:  # noqa: BLE001
         report["codex"] = {"error": str(exc)}
-    report["launcher_on_path"] = {
-        "link": str(LINK),
-        "points_here": LINK.exists() and LINK.resolve() == Path(__file__).resolve(),
-    }
+    report["launcher_on_path"] = {"link": str(LINK), "points_here": launcher_points_here()}
     report["writes"] = [str(STATE), str(HOME / ".local/state/claude-lab/runs"), str(HOME / ".clp/sessions")]
     report["never_writes"] = [str(p) for p in PROTECTED + PROTECTED_DIRS]
     report["note"] = "doctor started no Claude session or Codex session and made no API call."
     return report
+
+
+def launcher_points_here() -> bool:
+    """Whether the alnair command in ~/.local/bin runs this file: a symlink to it on macOS and Linux, a .cmd
+    shim that names it on Windows (where paths compare without case)."""
+    if not NATIVE.WINDOWS:
+        return LINK.exists() and LINK.resolve() == Path(__file__).resolve()
+    try:
+        return str(Path(__file__).resolve()).lower() in LINK.read_text(errors="replace").lower()
+    except OSError:
+        return False
 
 
 def launch_argv_env(
@@ -592,8 +614,7 @@ def run_codex(opt, passthrough: list[str]) -> int:
     dump(STATE / run_id / "mem.json", meta)
     ensure_session_ledger(run_id, str(project), run, store)
     print(f"Alnair · Codex · {model} · run: {run}", flush=True)
-    os.execve(argv_[0], argv_, env)
-    return 0
+    return NATIVE.run_session(argv_, env)
 
 
 def research_opts(opt, resume: bool = False) -> dict:
@@ -762,7 +783,7 @@ def main(argv: list[str] | None = None) -> int:
     launch = {"print_mode": opt.print_mode, "output_format": opt.output_format, "permission_mode": opt.permission_mode,
               "extra_claude_args": opt.claude_args, "preview": opt.dry_run}
     plan = {"request": code_request, "resume": resume, "flag": opt.code_mode, "args": opt.claude_args,
-            "remote_control": opt.remote_control is not None}
+            "remote_control": opt.remote_control is not None, "claude_version": lab.claude_version()}
     status, _ = lab.plan_code_mode(run, None, **plan)
     argv_, env = launch_argv_env(lab, run, prompt, resume=resume, code_mode_status=status, **launch)
     status, code_notes = lab.plan_code_mode(run, env, **plan)
@@ -812,8 +833,7 @@ def main(argv: list[str] | None = None) -> int:
 
     words = lab.code_mode.WORDS[lab.code_mode.label(status)]
     print(f"Alnair · interactive lab shell + CLP memory · bili off · {words} · run: {run}", file=sys.stderr if opt.print_mode else sys.stdout, flush=True)
-    os.execve(argv_[0], argv_, env)
-    return 0
+    return NATIVE.run_session(argv_, env)
 
 
 if __name__ == "__main__":
