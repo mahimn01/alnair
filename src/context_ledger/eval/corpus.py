@@ -25,10 +25,10 @@ available; there is no silent fallback.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import math
-import os
 import random
 import re
 import sqlite3
@@ -316,25 +316,15 @@ def corpus_id(inputs: dict) -> str:
     return "c" + sha256_hex(canonical_json(inputs))[:12]
 
 
-def _remove(path: Path, tries: int = 20) -> None:
-    """Delete a file if it is there. Windows won't delete a file another program still has open (a virus scanner
-    reading a file that was just written, a lookup in another session), so there it waits up to two seconds."""
-    for attempt in range(tries):
-        try:
-            path.unlink(missing_ok=True)
-            return
-        except PermissionError:
-            if os.name != "nt" or attempt == tries - 1:
-                raise
-            time.sleep(0.1)
-
-
 def build_index(directory: Path, texts: dict[str, str], order: Sequence[str], cuts: dict[int, int], progress: Callable[[str], None]) -> None:
     """(Re)write index.sqlite with one FTS5 table per rho over that corpus's chunks."""
     require_fts5()
     db_path = directory / "index.sqlite"
-    _remove(db_path)
-    with sqlite3.connect(db_path) as db:
+    if db_path.exists():
+        db_path.unlink()
+    # closing(): "with connect() as db" commits but leaves the file open until the garbage collector runs, and
+    # Windows can't delete an open file, so a second build in the same process failed
+    with contextlib.closing(sqlite3.connect(db_path)) as db, db:
         for rho, n in sorted(cuts.items()):
             started = time.monotonic()
             db.execute(f"CREATE VIRTUAL TABLE chunks_{rho} USING fts5(path UNINDEXED, start UNINDEXED, end UNINDEXED, body)")
