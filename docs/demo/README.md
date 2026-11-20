@@ -1,25 +1,26 @@
 # Recording the demo
 
-The README shows the output of [examples/verify-gate.sh](../../examples/verify-gate.sh) as text. A moving picture of the same run, and of a real session, would do more on the first screen. Neither is in the repository yet, because a recording has to be made by a person at a terminal.
-
 ## The verify gate (scripted)
 
-[demo.tape](demo.tape) is a script for [vhs](https://github.com/charmbracelet/vhs). From the repository root:
+[verify-gate.gif](verify-gate.gif) is the recording at the top of the README. It shows [examples/verify-gate.sh](../../examples/verify-gate.sh) running: one answer passes and one is refused.
+
+[demo.tape](demo.tape) is the script that records it, for [vhs](https://github.com/charmbracelet/vhs). To record it again, from the repository root:
 
 ```sh
 brew install vhs          # or see the vhs README for other systems
 vhs docs/demo/demo.tape   # writes docs/demo/verify-gate.gif
 ```
 
-The tape was written without vhs installed, so check the result before you use it. If lines wrap badly, change `Set Width` or `Set FontSize` in the tape. When the GIF looks right, put it in the README above the text output:
+Two things to know:
 
-```markdown
-![The verify gate passing one answer and refusing another](docs/demo/verify-gate.gif)
-```
+- The example prints the folder it runs from, so record from a checkout whose path you don't mind showing. The GIF here was recorded from a clone in `/tmp/alnair`.
+- The tape sets `DEMO_PAUSE=1.5`, which makes the example wait 1.5 seconds before each step so the recording can be read. The output is the same without it, and the example then takes about a second.
+
+Look at the result before you commit it. If lines wrap badly, change `Set Width` or `Set FontSize` in the tape.
 
 ## A real session (by hand)
 
-vhs can't drive a model session in a way that comes out the same twice, so record this one yourself with any screen recorder. Keep it under 30 seconds. A sequence that shows what Alnair adds:
+There is no recording of a real session yet. vhs can't drive a model session in a way that comes out the same twice, so record this one yourself with any screen recorder. Keep it under 30 seconds. A sequence that shows what Alnair adds:
 
 1. `alnair demo`, so the session opens on the sample notes and nothing private is on screen.
 2. Ask "What is my AMZN exit plan?" and let the lookup, read and verify steps show.

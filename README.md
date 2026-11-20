@@ -7,9 +7,9 @@
 
 Alnair is a launcher for the Claude Code and Codex command-line tools. It starts their normal interactive session on your own subscription and adds three things. It picks the Claude model for each task. It keeps what a long session settled in a ledger the model can read back. And it refuses an answer whose quote is not in the file or page it cites. It never edits `~/.claude`.
 
-![alnair --help and a GPT dry run in a terminal](docs/terminal.png)
+![Terminal recording: the verify gate indexes two sample notes, passes an answer that quotes them word for word, and refuses one where 25% became 20%](docs/demo/verify-gate.gif)
 
-*Real output of `alnair --help` and `alnair --model gpt --dry-run`, captured from a fresh clone in a scratch home folder and rendered as an image. A dry run starts no session.*
+*A recording of [examples/verify-gate.sh](examples/verify-gate.sh), which makes no model call. The gate passes an answer that quotes the note word for word and refuses one where 25% became 20%. The recording waits before each step so you can read it; the script itself takes about a second. You can [run it yourself](#try-the-verify-gate-without-a-session).*
 
 ## Why I built it
 
@@ -111,6 +111,10 @@ alnair --dry-run "..."        # print the exact command and settings, start noth
 alnair doctor                 # offline readiness report for Claude and Codex
 alnair --version
 ```
+
+![alnair --help and a GPT dry run in a terminal](docs/terminal.png)
+
+*Real output of `alnair --help` and `alnair --model gpt --dry-run`, captured from a fresh clone in a scratch home folder and rendered as an image. A dry run starts no session.*
 
 Index your notes once so lookups have something to search. This copies the folder into `~/.clp` and never writes to the original:
 

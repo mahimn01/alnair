@@ -19,7 +19,9 @@ PY="$REPO/.venv/bin/python"
 STORE="$(mktemp -d)"
 trap 'rm -rf "$STORE"' EXIT
 clp() { "$PY" "$REPO/claude-clp/bin/clp_tool.py" "$@"; }
-step() { printf '\n== %s\n' "$*"; }
+# DEMO_PAUSE=1.5 waits that many seconds before each step, so a recording can be read (docs/demo/demo.tape
+# sets it). The output is the same with or without it.
+step() { [ -z "${DEMO_PAUSE:-}" ] || sleep "$DEMO_PAUSE"; printf '\n== %s\n' "$*"; }
 
 step "1. Index the two sample notes"
 clp init "$REPO/claude-clp/fixture/notes" --name demo --store "$STORE"
