@@ -37,6 +37,7 @@ Not the third-party plugin claude-mem@thedotmack (that stays disabled; unverifie
 from __future__ import annotations
 
 import argparse
+import atexit
 import hashlib
 import importlib.util
 import json
@@ -409,6 +410,13 @@ def demo_prompt() -> str:
     )
 
 
+def preview_dir() -> Path:
+    """The temporary run folder of a --dry-run. It is removed when this process ends, so a preview leaves nothing behind."""
+    path = Path(tempfile.mkdtemp(prefix="claude-mem-preview-"))
+    atexit.register(shutil.rmtree, path, True)
+    return path
+
+
 def build_demo_project() -> Path:
     """Copy the lab demo project outside the run dir (prepare requires an empty run)."""
     project = STATE.parent / "demo-projects" / str(uuid.uuid4())
@@ -769,7 +777,7 @@ def main(argv: list[str] | None = None) -> int:
             # lab.prepare rejects a non-empty run dir. Create the lab demo project outside
             # the run, prepare an empty run, then place the CLP corpus inside the run.
             run_id = str(uuid.uuid4())
-            run_path = Path(tempfile.mkdtemp(prefix="claude-mem-preview-")) if opt.dry_run else (lab.STATE / run_id)
+            run_path = preview_dir() if opt.dry_run else (lab.STATE / run_id)
             project = build_demo_project()
             prompt = demo_prompt()
             run, cfg = lab.prepare(project, opt.mode, opt.model, run_path, opt.full_tools, headless=opt.print_mode)
@@ -779,7 +787,7 @@ def main(argv: list[str] | None = None) -> int:
                 opt.project,
                 opt.mode,
                 opt.model,
-                Path(tempfile.mkdtemp(prefix="claude-mem-preview-")),
+                preview_dir(),
                 opt.full_tools, headless=opt.print_mode,
             )
         else:

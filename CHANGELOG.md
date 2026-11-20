@@ -13,7 +13,7 @@ Fixed:
 - on Python 3.10, GPT sessions read `~/.codex/config.toml` again. Without `tomllib` the file was treated as empty, which dropped your own hooks from the session and hid a server-name clash from `codex-setup`
 - the lab guard no longer refuses a command only because a URL or a `gh` repository in it is named `alnair` or `claude`, and its `mcporter` check no longer slows to a halt on a command with many `--flag=value` options
 - `lab verify` no longer crashes when a check prints bytes that aren't UTF-8, records a timed-out check's output as text, and survives two writers saving state at the same moment
-- `alnair --dry-run` removes the preview folder it makes
+- `alnair --dry-run` and `claude-lab --dry-run` remove the preview folder they make when they finish
 - `bili stop` and `bili off` no longer raise on Windows, where `os.killpg` doesn't exist (checked by simulation only)
 - the memory and research MCP servers stay up on a malformed request, and read and write UTF-8 whatever the locale. A request with the wrong shape gets an error reply instead of ending the server
 - session notes never overwrite a note the hook didn't create (two session ids with the same first eight characters used to share a file name), a session id containing `../` is refused, and a bad `ALNAIR_TZ` no longer crashes the hook

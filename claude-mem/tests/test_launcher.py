@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import atexit
 import hashlib
 import json
 import os
@@ -27,6 +28,22 @@ def project(tmp_path: Path) -> Path:
     path.mkdir()
     (path / "README.md").write_text("demo\n")
     return path
+
+
+def test_a_dry_run_removes_its_preview_folder_when_the_process_ends(project, capsys, monkeypatch):
+    """Each alnair --dry-run left a claude-mem-preview-* folder in the temporary directory for good."""
+    at_exit = []
+    monkeypatch.setattr(atexit, "register", lambda fn, *args, **kwargs: at_exit.append((fn, args, kwargs)))
+    assert L.main(["--dry-run", "--project", str(project)]) == 0
+    run = Path(json.loads(capsys.readouterr().out)["run"])
+    try:
+        assert run.is_dir() and "claude-mem-preview-" in run.name  # still there while the process runs
+        for fn, args, kwargs in at_exit:  # the shown path is resolved (/private/var on macOS), the registered one may not be
+            if any(isinstance(a, Path) and a.resolve() == run.resolve() for a in args):
+                fn(*args, **kwargs)
+        assert not run.exists()
+    finally:
+        shutil.rmtree(run, ignore_errors=True)
 
 
 def test_dry_run_dual_plugins_300k_bili_off(project, capsys):
