@@ -251,7 +251,12 @@ def backup(d: Path, now: float | None = None) -> tuple[Path | None, list[str]]:
 def write_atomic(path: Path, text: str) -> None:
     path = path.resolve()  # keep a symlinked dotfile a symlink: write the real target
     tmp = path.with_name(f".{path.name}.clp-tmp")
-    tmp.write_text(text, encoding="utf-8")
+    with open(tmp, "w", encoding="utf-8", newline="") as f:  # no newline translation: line endings stay as given
+        f.write(text)
+    try:
+        os.chmod(tmp, path.stat().st_mode & 0o777)  # a 0600 file stays 0600
+    except OSError:
+        pass
     os.replace(tmp, path)
 
 
@@ -265,14 +270,17 @@ def apply(d: Path | None = None, rescore: bool = False, dry_run: bool = True, no
         return 2, ["both config.yaml and config.star exist; Rune expects one. Nothing changed."]
     new_yaml = render_yaml(rescore)
     if s.exists():
-        text = s.read_text(encoding="utf-8")
-        block = render_star_block(rescore)
+        text = s.read_bytes().decode("utf-8")  # read raw so a CRLF file keeps its line endings
+        eol = "\r\n" if "\r\n" in text else "\n"
+        block = render_star_block(rescore).replace("\n", eol)
         if STAR_BEGIN in text and STAR_END in text:
             a, rest = text.split(STAR_BEGIN, 1)
+            if STAR_END not in rest:
+                return 2, ["config.star has Alnair's end marker before its start marker; fix it by hand. Nothing changed."]
             _, b = rest.split(STAR_END, 1)
-            merged = a.rstrip("\n") + ("\n\n" if a.strip() else "") + block + b.lstrip("\n")
+            merged = a.rstrip("\r\n") + (eol * 2 if a.strip() else "") + block + b.lstrip("\r\n")
         else:
-            merged = text.rstrip("\n") + ("\n\n" if text.strip() else "") + block
+            merged = text.rstrip("\r\n") + (eol * 2 if text.strip() else "") + block
         rep.append(f"config.star: {'replace' if STAR_BEGIN in text else 'append'} marked block ({len(block.splitlines())} lines); rest untouched")
         if merged == text:
             return 0, rep + ["already up to date"]

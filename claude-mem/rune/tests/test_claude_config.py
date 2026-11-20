@@ -371,3 +371,35 @@ def test_apply_preserves_user_theme_and_proposes_no_theme(tmp_path):
     assert (tmp_path / "config.yaml").read_text() == mine
     proposal = (tmp_path / "config.clp-proposal.yaml").read_text()
     assert "default_theme" not in proposal and "themes" not in proposal
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
+def test_apply_keeps_the_mode_of_a_private_config_star(tmp_path):
+    d = tmp_path / "r"; d.mkdir()
+    star = d / "config.star"
+    star.write_text("# mine\n", encoding="utf-8")
+    star.chmod(0o600)
+    config.apply(d, dry_run=False)
+    assert config.STAR_BEGIN in star.read_text(encoding="utf-8")
+    assert star.stat().st_mode & 0o777 == 0o600
+
+
+def test_apply_keeps_the_crlf_endings_of_a_config_star(tmp_path):
+    d = tmp_path / "r"; d.mkdir()
+    star = d / "config.star"
+    star.write_bytes(b"# mine\r\nx = 1\r\n")
+    config.apply(d, dry_run=False)
+    first = star.read_bytes()
+    assert first.startswith(b"# mine\r\nx = 1\r\n") and config.STAR_BEGIN.encode() in first
+    assert b"\n" not in first.replace(b"\r\n", b"")  # every line ends CRLF
+    rc, report = config.apply(d, dry_run=False)
+    assert rc == 0 and "already up to date" in report and star.read_bytes() == first
+
+
+def test_apply_says_what_is_wrong_when_the_markers_are_in_the_wrong_order(tmp_path):
+    d = tmp_path / "r"; d.mkdir()
+    star = d / "config.star"
+    star.write_text(f"{config.STAR_END}\nx = 1\n{config.STAR_BEGIN}\n", encoding="utf-8")
+    rc, report = config.apply(d, dry_run=False)
+    assert rc == 2 and "before its start marker" in " ".join(report)
+    assert star.read_text(encoding="utf-8").startswith(config.STAR_END)  # nothing was changed
