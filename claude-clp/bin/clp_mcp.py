@@ -185,6 +185,7 @@ def serve(stdin=sys.stdin, stdout=sys.stdout) -> None:
 
 if __name__ == "__main__":
     # the MCP wire is UTF-8 whatever the locale (Windows pipes default to cp1252)
-    sys.stdin.reconfigure(encoding="utf-8")
+    # a byte that isn't UTF-8 becomes a parse error for that one line, not the end of the server
+    sys.stdin.reconfigure(encoding="utf-8", errors="replace")
     sys.stdout.reconfigure(encoding="utf-8")
     serve()

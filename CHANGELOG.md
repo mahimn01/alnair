@@ -15,7 +15,7 @@ Fixed:
 - `lab verify` no longer crashes when a check prints bytes that aren't UTF-8, records a timed-out check's output as text, and survives two writers saving state at the same moment
 - `alnair --dry-run` and `claude-lab --dry-run` remove the preview folder they make when they finish
 - `bili stop` and `bili off` no longer raise on Windows, where `os.killpg` doesn't exist (checked by simulation only)
-- the memory and research MCP servers stay up on a malformed request, and read and write UTF-8 whatever the locale. A request with the wrong shape gets an error reply instead of ending the server
+- the memory and research MCP servers stay up on a malformed request, and read and write UTF-8 whatever the locale. A request with the wrong shape gets an error reply instead of ending the server, and so does a line with bytes that aren't UTF-8
 - session notes never overwrite a note the hook didn't create (two session ids with the same first eight characters used to share a file name), a session id containing `../` is refused, and a bad `ALNAIR_TZ` no longer crashes the hook
 - the session ledger is locked while a fact is appended, so two writers can't give two facts the same number, and a half-written last line no longer breaks reads and lookups
 - `clp_tool.py init`: a store inside the indexed folder is skipped instead of being indexed into itself, an unreadable file is skipped with a note instead of stopping the run, a corpus name with `/` or `..` is refused, and `verify` refuses a cited line range that runs past the end of the file

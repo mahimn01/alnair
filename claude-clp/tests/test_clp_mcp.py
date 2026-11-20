@@ -94,3 +94,12 @@ def test_server_keeps_utf8_on_a_non_utf8_locale(tmp_path):
     assert "caf\u00e9" in lines[0]["error"]["message"]
     assert lines[1]["result"]["isError"] is False, lines[1]
     assert "caf\u00e9 \u20ac5 \u2713" in lines[2]["result"]["content"][0]["text"]
+
+
+def test_server_survives_input_that_is_not_utf8():
+    """A byte that isn't UTF-8 ended the server with UnicodeDecodeError. It is now a parse error for that line only."""
+    good = json.dumps({"jsonrpc": "2.0", "id": 9, "method": "ping"}).encode("utf-8")
+    done = subprocess.run([sys.executable, str(ROOT / "bin" / "clp_mcp.py")], input=b"\xff\xfe bad\n" + good + b"\n", capture_output=True, timeout=60)
+    lines = [json.loads(x) for x in done.stdout.decode("utf-8").splitlines()]
+    assert [x.get("id") for x in lines] == [None, 9] and lines[0]["error"]["code"] == -32700, done.stderr.decode("utf-8", "replace")[-300:]
+
