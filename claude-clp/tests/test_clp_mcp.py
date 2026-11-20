@@ -5,7 +5,9 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -62,3 +64,33 @@ def test_serve_speaks_one_json_message_per_line():
     M.serve(io.StringIO('{"jsonrpc":"2.0","id":7,"method":"ping"}\nnot json\n'), out)
     lines = [json.loads(x) for x in out.getvalue().splitlines()]
     assert lines[0] == {"jsonrpc": "2.0", "id": 7, "result": {}} and lines[1]["error"]["code"] == -32700
+
+
+def test_malformed_requests_get_an_error_not_a_crash():
+    bad = [{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": [1]},
+           {"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": "x"},
+           {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "status", "arguments": {"corpus": 5}}},
+           {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "lookup", "arguments": {"query": "q", "limit": "x"}}},
+           {"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "session_append", "arguments": {"text": "t", "kind": 3, "session": "s"}}}]
+    out = io.StringIO()
+    M.serve(io.StringIO("\n".join(json.dumps(m) for m in bad) + "\n" + '{"jsonrpc":"2.0","id":9,"method":"ping"}\n'), out)
+    lines = [json.loads(x) for x in out.getvalue().splitlines()]
+    assert len(lines) == 6 and lines[-1]["result"] == {}
+    for line in lines[:-1]:
+        assert "error" in line or line["result"]["isError"] is True, line
+
+
+def test_server_keeps_utf8_on_a_non_utf8_locale(tmp_path):
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONIOENCODING", "PYTHONUTF8", "CLAUDE_MEM_SESSION_ID")}
+    env.update(PYTHONUTF8="0", PYTHONCOERCECLOCALE="0", LC_ALL="C", CLP_STORE=str(tmp_path / "store"),
+               CLAUDE_MEM_SESSION_ID="11111111-2222-4333-8444-555555555555")
+    calls = [{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "caf\u00e9", "arguments": {}}},
+             {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "session_append", "arguments": {"text": "Decided: caf\u00e9 \u20ac5 \u2713", "kind": "fact"}}},
+             {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "session_lookup", "arguments": {"query": "caf\u00e9"}}}]
+    data = "".join(json.dumps(m, ensure_ascii=False) + "\n" for m in calls).encode("utf-8")
+    done = subprocess.run([sys.executable, str(ROOT / "bin" / "clp_mcp.py")], input=data, capture_output=True, env=env, timeout=120)
+    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
+    lines = [json.loads(x) for x in done.stdout.decode("utf-8").splitlines()]
+    assert "caf\u00e9" in lines[0]["error"]["message"]
+    assert lines[1]["result"]["isError"] is False, lines[1]
+    assert "caf\u00e9 \u20ac5 \u2713" in lines[2]["result"]["content"][0]["text"]

@@ -118,9 +118,14 @@ def call(name: str, args: dict) -> tuple[bool, str]:
         argv = [python(), str(TOOL), *spec["argv"](args)]
     except ValueError as exc:
         return True, str(exc)
+    except (TypeError, KeyError, AttributeError):
+        return True, "an argument is missing or has the wrong type"
     stdin = spec["stdin"](args) if "stdin" in spec else None
+    # UTF-8 both ways, whatever the locale: the child reads and prints through its own stdin and stdout
+    env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
     try:
-        done = subprocess.run(argv, input=stdin, capture_output=True, text=True, timeout=spec["timeout"], check=False)
+        done = subprocess.run(argv, input=stdin, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env,
+                              timeout=spec["timeout"], check=False)
     except subprocess.TimeoutExpired:
         return True, f"clp_tool {name} timed out after {spec['timeout']}s"
     text = "\n".join(s.strip() for s in (done.stdout, done.stderr) if s and s.strip()) or "(no output)"
@@ -139,6 +144,8 @@ def handle(msg: dict) -> dict | None:
         return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32600, "message": "invalid request"}}
     if mid is None:
         return None
+    if not isinstance(params, dict):
+        return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32602, "message": "params must be an object"}}
     if method == "initialize":
         return {"jsonrpc": "2.0", "id": mid, "result": {"protocolVersion": params.get("protocolVersion") or PROTOCOL,
                                                        "capabilities": {"tools": {"listChanged": False}},
@@ -175,4 +182,7 @@ def serve(stdin=sys.stdin, stdout=sys.stdout) -> None:
 
 
 if __name__ == "__main__":
+    # the MCP wire is UTF-8 whatever the locale (Windows pipes default to cp1252)
+    sys.stdin.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")
     serve()
