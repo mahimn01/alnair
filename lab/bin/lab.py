@@ -893,6 +893,15 @@ def verify(run: Path) -> dict:
     return report
 
 
+def installed_claude() -> str:
+    """What `claude --version` prints, or what to do when Claude Code isn't installed. Without this the doctor
+    report for a new machine was one bare "[Errno 2] No such file or directory"."""
+    try:
+        return subprocess.check_output([str(CLAUDE), '--version'], text=True).strip()
+    except FileNotFoundError:
+        return f"not installed: there is no {CLAUDE}. Install Claude Code with Anthropic's native installer, then sign in once with `claude`."
+
+
 def doctor() -> dict:
     baseline = ROOT / 'installation-baseline.json'
     before = json.loads(baseline.read_text()) if baseline.exists() else {}
@@ -903,7 +912,7 @@ def doctor() -> dict:
     stable = json.loads(scope_file.read_text()) if scope_file.exists() else {}
     stable_check = {key:hashlib.sha256(json.dumps(main.get(key),sort_keys=True).encode()).hexdigest() == digest
                     for key,digest in stable.items()}
-    return {'claude': subprocess.check_output([str(CLAUDE), '--version'], text=True).strip(),
+    return {'claude': installed_claude(),
             'original_files_unchanged': {p: current.get(p) == value for p, value in before.items()},
             'original_main_config_sections_unchanged': stable_check,
             **({} if before or stable or not native.WINDOWS else {'original_files_note': 'Not compared: no installation baseline is recorded on this '
@@ -911,7 +920,7 @@ def doctor() -> dict:
             'lab_plugin': str(ROOT / 'plugin'), 'runtime_root': str(STATE),
             'modelCatalog': sync_models(),
             'fable': {**fable_status(), 'flag':str(FABLE_FLAG), 'check':'claude-lab-clp fable-check (local evidence only)'},
-            'launcher': str(USER / ('.local/bin/alnair.cmd' if native.WINDOWS else '.local/bin/claude-lab')),
+            'launcher': str(USER / ('.local/bin/alnair.cmd' if native.WINDOWS else '.local/bin/alnair')),
             'lsp': {p: (USER / '.local/share/claude-lab/lsp/node_modules/.bin' / p).exists()
                     for p in ['typescript-language-server', 'pyright-langserver']},
             'note': 'Ordinary Claude runtime metadata may change when you use Claude. No original configuration is rewritten by the lab.'}
