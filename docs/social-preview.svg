@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <!-- Social preview for github.com/mahimn01/alnair (GitHub asks for 1280x640). The terminal lines are real
+       output of examples/verify-gate.sh. Render: rsvg-convert -w 1280 -h 640 docs/social-preview.svg -o docs/social-preview.png -->
+  <rect width="1280" height="640" fill="#0d1117"/>
+  <!-- a four-point star: Alnair is the brightest star in the constellation Grus -->
+  <path d="M112 76 L122 118 L164 128 L122 138 L112 180 L102 138 L60 128 L102 118 Z" fill="#e3b341"/>
+  <text x="190" y="158" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="96" font-weight="700" fill="#f0f6fc">Alnair</text>
+  <text x="1220" y="150" font-family="Menlo, 'DejaVu Sans Mono', Consolas, monospace" font-size="24" fill="#8b949e" text-anchor="end">github.com/mahimn01/alnair</text>
+  <text x="60" y="246" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="37" fill="#c9d1d9">Claude Code and Codex with a model router, memory that</text>
+  <text x="60" y="294" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="37" fill="#c9d1d9">survives compaction, and answers checked against their sources.</text>
+  <rect x="60" y="340" width="1160" height="250" rx="14" fill="#161b22" stroke="#30363d" stroke-width="2"/>
+  <circle cx="92" cy="368" r="7" fill="#f85149"/><circle cx="116" cy="368" r="7" fill="#e3b341"/><circle cx="140" cy="368" r="7" fill="#3fb950"/>
+  <g font-family="Menlo, 'DejaVu Sans Mono', Consolas, monospace" font-size="22">
+    <text x="88" y="420" fill="#8b949e">$</text>
+    <text x="114" y="420" fill="#c9d1d9">./examples/verify-gate.sh</text>
+    <text x="88" y="458" fill="#8b949e">== 4. Verify an answer that quotes the note word for word</text>
+    <text x="88" y="490" fill="#3fb950">PASS: verified against your files.</text>
+    <text x="88" y="528" fill="#8b949e">== 5. Verify an answer that gets the number wrong (25% became 20%)</text>
+    <text x="88" y="560" fill="#f85149">REFUSED: not verified (2 problems). Do not present this answer as fact.</text>
+  </g>
+</svg>
