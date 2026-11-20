@@ -210,6 +210,32 @@ def test_init_refuses_a_corpus_name_that_is_not_a_plain_name(clp, tmp_path, bad)
     assert sorted(p.name for p in clp.store.iterdir() if p.is_dir()) == ["demo"]
 
 
+def test_a_quote_cut_inside_a_number_or_word_does_not_witness_it():
+    from context_ledger.verify.tier1 import quote_on_boundaries as on
+
+    base = "bought 100 shares at 15"
+    assert not on(base, "bought 100 shares at 150")
+    assert not on(base, "bought 100 shares at 15.50") and not on(base, "bought 100 shares at 15,000")
+    assert on(base, "bought 100 shares at 15.") and on(base, "bought 100 shares at 15 dollars")
+    assert on(base, "bought 100 shares at 15, then sold") and on(base, "bought 100 shares at 15")
+    assert not on("ares at 150", "bought 100 shares at 150") and not on("bought 100 shar", "bought 100 shares at 150")
+    assert not on("5 shares bought now", "paid 2.5 shares bought now") and on("5 shares bought now", "paid 25 shares bought now x 5 shares bought now")
+    assert on(base, "bought 100 shares at 150; bought 100 shares at 15")
+    # Chinese has no spaces between words, so a neighbouring character is not a cut; a number cut short still is
+    assert on("买了150股", "我们买了150股票") and not on("买了15", "我们买了150股票")
+
+
+def test_verify_refuses_a_quote_cut_inside_a_number(clp):
+    (clp.folder / "trade.md").write_text("bought 100 shares at 150\n", encoding="utf-8")
+    assert clp.run("refresh")[0] == 0
+    cut = [claim("I bought 100 shares at 15", "trade.md:1", "bought 100 shares at 15")]
+    code, out = verify(clp, "What did I pay?", "15", cut)
+    assert code == 1 and "word for word" in out, out
+    whole = [claim("I bought 100 shares at 150", "trade.md:1", "bought 100 shares at 150")]
+    code, out = verify(clp, "What did I pay?", "150", whole)
+    assert code == 0, out
+
+
 def test_verify_refuses_a_cited_range_past_the_end_of_the_file(clp):
     code, out = verify(clp, "What is the exit plan in [[AMZN]]?", "Sell on a daily close 25% below the highest close",
                        [claim("The exit plan sells on a daily close 25% below the highest close", "notes/AMZN.md:1-99", EXIT)])  # fmt: skip

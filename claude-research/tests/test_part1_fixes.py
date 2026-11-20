@@ -530,8 +530,8 @@ def gate(ctx, quote, text="The quarterly revenue was 4213 million dollars in fis
 
 def test_default_minimum_is_twenty_characters_and_matching_stays_word_for_word(ctx):
     assert gate(ctx, "The quarterly revenue was 4213 million")[0] == 0
-    code, out = gate(ctx, "4213 milli")                                                    # 10 characters: real text, still refused
-    assert code == 1 and "10 characters; quote at least 20" in out
+    code, out = gate(ctx, "was 4213")                                                      # 8 characters: real text, still refused
+    assert code == 1 and "8 characters; quote at least 20" in out
     assert gate(ctx, "revenue was 4213")[0] == 1                                            # 16 characters
     assert gate(ctx, "The quarterly revenue was 4214 million")[0] == 1                      # one digit off
 
@@ -539,9 +539,9 @@ def test_default_minimum_is_twenty_characters_and_matching_stays_word_for_word(c
 def test_operator_can_lower_the_minimum_but_never_below_twelve(ctx, monkeypatch):
     monkeypatch.setenv("RESEARCH_MIN_QUOTE", "12")
     assert gate(ctx, "revenue was 4213")[0] == 0                                            # 16 characters now passes
-    assert gate(ctx, "4213 milli")[0] == 1                                                  # 10 characters never does
+    assert gate(ctx, "was 4213")[0] == 1                                                    # 8 characters never does
     monkeypatch.setenv("RESEARCH_MIN_QUOTE", "3")                                           # clamped to the floor of 12
-    code, out = gate(ctx, "4213 milli")
+    code, out = gate(ctx, "was 4213")
     assert code == 1 and "quote at least 12" in out and config.min_quote() == 12
 
 

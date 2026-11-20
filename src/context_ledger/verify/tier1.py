@@ -24,7 +24,8 @@ Anchoring never vouches for a value, so `BaseContext.violet_juniper_sparrow = 'i
 against the quote `violet_juniper_sparrow = 'igoore'` still fails (value_not_covered). Spans
 without a Python anchor (text spans) only get rule (a). A citation passes when it cites a span
 that is verbatim in the window (Tier 0) with a quote that occurs in the span text after
-normalize_for_match and is at least min(20, len(span text)) characters long.
+normalize_for_match on token boundaries (a quote cut inside a word or a number, "at 15" in
+"at 150", does not count) and is at least min(20, len(span text)) characters long.
 
 Two more witnesses (v2), both resting on how the ledger registered the passing citation's span:
 
@@ -272,6 +273,38 @@ def innermost_anchor(state: WindowState, span, span_text: str, quote: str, blobs
     return None if inner is span else inner
 
 
+def _spaced(ch: str) -> bool:
+    """A letter or digit of a script that puts spaces between words. Chinese, Japanese, Thai, Lao,
+    Khmer and Burmese do not, so a quote may start or end next to one of their characters."""
+    return ch.isalnum() and not (
+        "\u0e00" <= ch <= "\u0eff" or "\u1000" <= ch <= "\u109f" or "\u1780" <= ch <= "\u17ff"
+        or "\u2e80" <= ch <= "\u9fff" or "\uf900" <= ch <= "\ufaff" or ch >= "\U00020000"
+    )  # fmt: skip
+
+
+def quote_on_boundaries(quote: str, text: str) -> bool:
+    """True if `quote` occurs in `text` at least once on token boundaries. An occurrence is cut
+    inside a token, and does not count, when (a) the quote's first character and the character
+    before it are both letters or digits, (b) its last character and the character after it are
+    both letters or digits, (c) it ends with a digit and a "." or "," and a digit follow (the
+    number goes on), or (d) it starts with a digit and a digit and a "." or "," come before it.
+    In (a) and (b) only scripts that put spaces between words count (`_spaced`)."""
+    start = text.find(quote)
+    while quote and start != -1:
+        end = start + len(quote)
+        before, after = text[start - 1 : start] if start else "", text[end : end + 1]
+        cut = (
+            (_spaced(quote[0]) and _spaced(before))
+            or (_spaced(quote[-1]) and _spaced(after))
+            or (quote[-1].isdigit() and after in (".", ",") and text[end + 1 : end + 2].isdigit())
+            or (quote[0].isdigit() and before in (".", ",") and text[start - 2 : start - 1].isdigit() and start >= 2)
+        )
+        if not cut:
+            return True
+        start = text.find(quote, start + 1)
+    return False
+
+
 @dataclass(frozen=True)
 class Passing:
     """One passing citation (BUILD-V3): its span ref, its source's uri, the quote as the model
@@ -286,7 +319,8 @@ class Passing:
 def passing_citations(claim: Claim, state: WindowState, blobs: BlobStore) -> tuple[tuple[str, ...], list[Passing]]:
     """(the verbatim span refs `claim` cites directly, sorted; its passing citations, in claim
     order). A citation passes when it cites a span verbatim in the window with a quote that is
-    a substring of the span text after normalize_for_match and at least
+    a substring of the span text after normalize_for_match that sits on token boundaries
+    (`quote_on_boundaries`: "at 15" does not witness "at 150") and at least
     min(20, len(normalized span text)) chars. `tier1` and the answer gate read the same list."""
     verbatim_cited: list[str] = []
     passing: list[Passing] = []
@@ -300,7 +334,7 @@ def passing_citations(claim: Claim, state: WindowState, blobs: BlobStore) -> tup
         span = state.spans[ref]
         span_text = normalize_for_match(blobs.get(span.text_hash).decode("utf-8"))
         quote = normalize_for_match(citation.quote)
-        if quote and quote in span_text and len(quote) >= min(_MIN_QUOTE, len(span_text)):
+        if quote and quote in span_text and quote_on_boundaries(quote, span_text) and len(quote) >= min(_MIN_QUOTE, len(span_text)):
             paths: list[tuple[str, ...]] = []
             if isinstance(span.anchor, PyAnchor):
                 paths.append(anchored_path(span.anchor))

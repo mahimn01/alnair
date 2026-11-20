@@ -80,6 +80,26 @@ def part_texts(store: Store, meta: dict) -> list[tuple[str, str]]:
     return [(name, (store.docs / name).read_text(encoding="utf-8")) for name in meta["parts"]]
 
 
+def _spaced(ch: str) -> bool:
+    """A letter or digit of a script that puts spaces between words (not Chinese, Japanese, Thai, Lao, Khmer or Burmese)."""
+    return ch.isalnum() and not ("\u0e00" <= ch <= "\u0eff" or "\u1000" <= ch <= "\u109f" or "\u1780" <= ch <= "\u17ff"
+                                 or "\u2e80" <= ch <= "\u9fff" or "\uf900" <= ch <= "\ufaff" or ch >= "\U00020000")
+
+
+def _on_token_boundary(hay: str, at: int, q: str) -> bool:
+    """False when the quote at hay[at:] starts or ends in the middle of a word or number ("15" inside "150" or "15.5")."""
+    before, after = hay[at - 1] if at else "", hay[at + len(q):at + len(q) + 1]
+    if _spaced(q[0]) and _spaced(before):
+        return False
+    if _spaced(q[-1]) and _spaced(after):
+        return False
+    if q[-1].isdigit() and after in (".", ",") and hay[at + len(q) + 1:at + len(q) + 2].isdigit():
+        return False
+    if q[0].isdigit() and before in (".", ",") and at >= 2 and hay[at - 2].isdigit():
+        return False
+    return True
+
+
 def _find_in(text: str, quote_n: str, lo: int = 1, hi: int | None = None) -> tuple[int, int] | None:
     """Smallest line range (1-based) of `text` within lo..hi whose normalised text contains quote_n."""
     lines = text.split("\n")
@@ -96,6 +116,8 @@ def _find_in(text: str, quote_n: str, lo: int = 1, hi: int | None = None) -> tup
         pos += len(n) + 1
     hay = " ".join(joined)
     at = hay.find(quote_n)
+    while at >= 0 and not _on_token_boundary(hay, at, quote_n):
+        at = hay.find(quote_n, at + 1)
     if at < 0:
         return None
     last = at + len(quote_n) - 1

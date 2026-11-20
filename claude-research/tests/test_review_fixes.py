@@ -114,6 +114,28 @@ def test_wrap_still_breaks_ordinary_long_lines_at_spaces():
     assert max(len(line) for line in out.split("\n")) <= 400 and len(out.split("\n")) > 1
 
 
+# ---- quote token boundaries (the citation gate in claude-research) -------------------------------------------------
+@pytest.mark.parametrize("quote,text,ok", [
+    ("bought 100 shares at 15", "bought 100 shares at 150", False),
+    ("bought 100 shares at 15", "bought 100 shares at 15.", True),
+    ("bought 100 shares at 15", "bought 100 shares at 15 dollars", True),
+    ("revenue was 15", "revenue was 15.5 million", False),
+    ("revenue was 15", "revenue was 15,000 million", False),
+    ("was 15", "revenue was 15, then fell", True),
+    ("5 million in revenue", "revenue was 15 million in revenue", False),
+    ("5 million in revenue", "revenue was 3.5 million in revenue", False),
+    ("5 million in revenue", "revenue was 1 5 million in revenue", True),
+    ("the cat sat", "the cat sat down", True),
+    ("he cat sat", "the cat sat down", False),
+    ("the cat sa", "the cat sat down", False),
+    ("revenue was 15", "revenue was 150 and later revenue was 15 again", True),
+    ("买了150股", "我们买了150股票", True),      # Chinese has no spaces between words, so its neighbours are not a cut
+    ("买了15", "我们买了150股票", False),        # but a number cut short still is
+])
+def test_quote_must_sit_on_token_boundaries(quote, text, ok):
+    assert (passages._find_in(text, passages.norm(quote)) is not None) is ok
+
+
 # ---- RES-8: UTF-8 whatever the locale -------------------------------------------------------------------------------
 def test_research_tool_call_uses_utf8_for_stdin_and_stdout(tmp_path):
     env = {**os.environ, "PYTHONIOENCODING": "ascii", "RESEARCH_HOME": str(tmp_path / "home")}

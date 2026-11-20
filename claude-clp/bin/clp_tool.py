@@ -59,6 +59,7 @@ from context_ledger.eval.prompts import AnswerFormatError, parse_pilot_answer_v2
 from context_ledger.index import IndexError_  # noqa: E402
 from context_ledger.index.build import file_symbols, span_sha  # noqa: E402
 from context_ledger.live.gate import REFUSED_ENV  # noqa: E402
+from context_ledger.verify.tier1 import quote_on_boundaries  # noqa: E402
 
 # Session ledger (sibling module; durable turns under ~/.clp/sessions)
 import importlib.util as _ilu  # noqa: E402
@@ -298,7 +299,7 @@ def check_citation(corpus: DailyCorpus, citation: Citation) -> Passing | str:
     cited = f"{display_path(stored)}:{start}-{end}"
     if not quote:
         return f"`{citation.ref}` has no quote. Copy the words the claim rests on exactly."
-    if quote not in span:
+    if quote not in span or not quote_on_boundaries(quote, span):
         return f"the quote is not in {cited} word for word. Read those lines again and copy the quote exactly, or cite the lines that hold it."
     if len(quote) < min(MIN_QUOTE, len(span)):
         return f"the quote from {cited} is {len(quote)} characters; quote at least {MIN_QUOTE}, or the whole line."
