@@ -6,6 +6,28 @@ Fixed:
 
 - running Alnair no longer leaves the checkout dirty, so `get.sh` and `get.ps1` can update it. The lab used to write what it learned about models (new aliases from `claude --help`, served model ids) into the tracked `lab/plugin/hooks/model-catalog.js`. That file is now the shipped default and is never written; what the lab learns goes to `~/.clp/model-catalog.json` (or `CLAUDE_LAB_MODEL_CATALOG`), merged over the default when the lab reads it and handed to the plugin in each run's `runtime.json`. `get.sh` and `get.ps1` move a catalog an older Alnair wrote into the checkout to `~/.clp/model-catalog.json` (keeping one already there) and restore the tracked file, instead of stopping
 - the `tsconfig.json` Claude Code writes next to each plugin for its type definitions is ignored by git instead of showing up as untracked (and `lab/plugin/tsconfig.json` is no longer tracked)
+- settings: a `config.env` saved with a UTF-8 byte-order mark lost its first setting, in the launcher and in the lab. It is now read as UTF-8 with or without the mark, whatever the system's locale, and a `# comment` after a value no longer stops the launch
+- a missing Claude Code ends with how to install it, instead of a bare "No such file" error, and `alnair doctor` finishes its report when one of its checks times out or can't start
+- `install.sh --vault` with a relative path stores the absolute path. Before, each session resolved it against its own folder. A Python without the venv module now gets a hint (`python3-venv` on Debian and Ubuntu), and the half-made `.venv` is removed
+- `alnair codex-setup`: a `~/.codex/config.toml` that is a symlink stays a symlink, a backup is never overwritten by a second run in the same second, the file is replaced in one step, and a path with an emoji no longer produces TOML that Codex can't parse
+- on Python 3.10, GPT sessions read `~/.codex/config.toml` again. Without `tomllib` the file was treated as empty, which dropped your own hooks from the session and hid a server-name clash from `codex-setup`
+- the lab guard no longer refuses a command only because a URL or a `gh` repository in it is named `alnair` or `claude`, and its `mcporter` check no longer slows to a halt on a command with many `--flag=value` options
+- `lab verify` no longer crashes when a check prints bytes that aren't UTF-8, records a timed-out check's output as text, and survives two writers saving state at the same moment
+- `alnair --dry-run` removes the preview folder it makes
+- `bili stop` and `bili off` no longer raise on Windows, where `os.killpg` doesn't exist (checked by simulation only)
+- the memory and research MCP servers stay up on a malformed request, and read and write UTF-8 whatever the locale. A request with the wrong shape gets an error reply instead of ending the server
+- session notes never overwrite a note the hook didn't create (two session ids with the same first eight characters used to share a file name), a session id containing `../` is refused, and a bad `ALNAIR_TZ` no longer crashes the hook
+- the session ledger is locked while a fact is appended, so two writers can't give two facts the same number, and a half-written last line no longer breaks reads and lookups
+- `clp_tool.py init`: a store inside the indexed folder is skipped instead of being indexed into itself, an unreadable file is skipped with a note instead of stopping the run, a corpus name with `/` or `..` is refused, and `verify` refuses a cited line range that runs past the end of the file
+- research page text: an unclosed tag inside a hidden element no longer hides the rest of the page, and a very long unbroken token is no longer cut in a way that stops a true quote from matching
+- research claims: inquiry names in non-Latin scripts get separate ledgers (they all used to share one), a value of `Infinity` or `NaN` is refused cleanly, and two reports written in the same second no longer overwrite each other
+- research fetching: the Wayback fallback keeps the query string, so it can't save a capture of a different page; a Crossref record with a null date no longer fails the whole papers search; a DOI quoted in parentheses is looked up without the closing bracket; an organisation author keeps its name; `Charset=` in a header is matched without case
+- `alnair codex-setup` keeps `config.toml`'s own line endings. On Windows it used to rewrite an LF file with CRLF, and on macOS and Linux a CRLF file with LF
+- on Windows, the research tools no longer fail on saved text outside the system code page (`≈`, `…`): the helper process that reads and checks quotes now runs in UTF-8
+- on Windows, re-indexing notes waits up to two seconds for an index file that another program still has open, instead of stopping with "file in use"
+- on Linux under a locale that can't encode a character (a C locale with Python's UTF-8 mode switched off, or an older non-UTF-8 one), the memory server no longer stops on a tool argument that has such a character, and the launcher no longer stops on a `config.env` value that has one
+- clp-rune keeps a `config.star`'s file mode and line endings when it rewrites its block, and explains reversed markers
+- the Code Mode A/B collector counts a check that hangs as a failed check
 
 Added:
 
@@ -30,6 +52,8 @@ Added:
 - one-command installs: `curl -fsSL https://raw.githubusercontent.com/mahimn01/alnair/main/get.sh | bash` on macOS and Linux, `irm https://raw.githubusercontent.com/mahimn01/alnair/main/get.ps1 | iex` on Windows. Each clones or fast-forwards `~/alnair` and runs the installer, takes its options from `ALNAIR_*` variables, and stops without changes when the checkout is dirty, has moved apart from origin, or isn't Alnair
 - the lab guards on Windows: they read Windows paths (`C:\`, `/c/`, `%USERPROFILE%`, `$env:USERPROFILE`, any case) and PowerShell and cmd text (`pwsh -c`, `-EncodedCommand`, `cmd /c`, `Start-Process`, `Invoke-Expression`, the file cmdlets). The PowerShell tool gets the same session, vault and settings checks as Bash
 - `scripts/test.ps1`, the test runner for Windows, and tests that simulate Windows on macOS and Linux
+- `examples/verify-gate.sh`, which runs the verify gate on two sample notes with no model call: one answer passes and one is refused
+- `docs/` pages for install, everyday use, model routing, Codex, Code Mode and settings, moved out of the README, with removal steps in [docs/install.md](docs/install.md#removing-it)
 
 Changed:
 
@@ -42,6 +66,9 @@ Changed:
 - `lab verify` reports a check that times out (exit 124) or can't start (exit 127) as a failed check. Before, both raised `UnboundLocalError` and left no evidence. On Windows, `env NAME=value` checks, `python3` and `npm` now start there too
 - on Windows, the lab part of `alnair doctor` names `alnair.cmd` as its launcher, and adds `original_files_note` when no installation baseline is recorded, instead of showing two empty checks unexplained
 - on Windows, Codex install and update hints name only npm, and `install.ps1` mentions `alnair --model gpt` only when Codex is installed
+- the verify gate and the research citation gate refuse a quote that is cut inside a number or a word. A quote ending in "at 15" used to pass against a source that says "at 150", because the match was a plain substring. Text in scripts written without spaces between words (Chinese, Japanese, Thai and others) is matched as before
+- session notes use your computer's time zone unless `ALNAIR_TZ` is set. The default used to be `America/Toronto`
+- CI runs every suite on macOS, Ubuntu and Windows, again on Python 3.10 and 3.13, and runs the installer on all three systems
 - the test suites run on Windows: tests set `USERPROFILE` with `HOME`, run scripts under `sys.executable`, use `.cmd` fakes, and skip symlink and file-mode checks there ([docs/windows.md](docs/windows.md) lists them)
 
 ## 0.2.0 (2026-11-17)
