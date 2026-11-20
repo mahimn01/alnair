@@ -58,7 +58,7 @@ if [ ! -x "$HOME/.local/bin/claude" ]; then
   warn "Claude Code isn't at ~/.local/bin/claude. Install it with Anthropic's native installer and sign in once with 'claude' before using alnair (not needed for alnair --model gpt)."
 fi
 command -v codex >/dev/null 2>&1 || say "Codex CLI not found, so GPT models are off. To add them: brew install --cask codex (or npm install -g @openai/codex), codex login, then rerun ./install.sh."
-[ "$OS" = linux ] && warn "Linux hasn't been tested yet. The lab's optional Keychain account switching is macOS only."
+[ "$OS" = linux ] && say "Linux: the tests and this installer run on Ubuntu in CI; it has had less everyday use than macOS. The lab's optional Keychain account switching is macOS only."
 
 # Private state folders. Existing contents are left alone.
 umask 077
