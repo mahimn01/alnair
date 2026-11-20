@@ -149,6 +149,7 @@ def test_a_symlink_keeps_its_own_name(ab):
     assert out == f"{project / 'LINK.md'} is a symlink to {project / 'notes/Plan.md'}"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows folds .. by text before it follows a link, so linkdir/../x.md names no file there")
 def test_a_path_through_a_linked_folder_names_the_file_that_was_found(ab, tmp_path):
     """Second review: .. was folded by text, so linkdir/../x.md was printed as a file that does not exist."""
     project, run = ab

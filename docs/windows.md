@@ -56,7 +56,7 @@ Windows.
 
 These are POSIX-only, so on Windows they skip with the reason, or give more time:
 
-- **Symlink tests.** Windows makes a symlink only with Developer Mode or admin rights (`WinError 1314`). These tests skip without one: `test_protected_writes.py` (a watched symlink) and `test_review_paths.py` (a link's own name, a path through a linked folder). `test_fallback.py` runs without its broken-symlink step. Turn on Developer Mode to run them all.
+- **Symlink tests.** Windows makes a symlink only with Developer Mode or admin rights (`WinError 1314`). These tests skip without one: `test_protected_writes.py` (a watched symlink) and `test_review_paths.py` (a link's own name). `test_fallback.py` runs without its broken-symlink step. Turn on Developer Mode to run them. One more test in `test_review_paths.py` (a path through a linked folder, `linkdir/../x.md`) always skips on Windows, which folds `..` by text before it follows a link, so that path names no file there.
 - **File modes.** The `0600`/`0700` checks on `accounts.json`, `settings.json` and run folders: Windows has no POSIX modes. Those files sit in your profile folder, which by default only you, SYSTEM and administrators can read.
 - **The Code Mode A/B kit** (`claude-mem/bench/code_mode_ab`). Its tests skip, because the `bash` a Windows program finds first is often WSL's.
 - **Timing bounds** in `lab/plugin/tests/runtime.test.ts`, which catch a guard that grows exponentially, get five times as long. `test_revamp.py` checks that batch jobs overlap rather than timing them.

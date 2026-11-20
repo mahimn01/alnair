@@ -162,7 +162,8 @@ def test_session_env_drops_api_keys():
 def test_missing_codex_says_how_to_install(monkeypatch, tmp_path):
     monkeypatch.setenv("PATH", "/nonexistent")
     monkeypatch.setattr(CB.Path, "home", lambda: tmp_path)
-    with pytest.raises(RuntimeError, match="brew install --cask codex"):
+    hint = "npm install -g @openai/codex" if os.name == "nt" else "brew install --cask codex"  # Windows has no Homebrew
+    with pytest.raises(RuntimeError, match=hint):
         CB.codex_binary()
 
 
