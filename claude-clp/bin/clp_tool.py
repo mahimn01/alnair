@@ -116,7 +116,7 @@ def ticks(values) -> str:
 
 def tool_python() -> str:
     """The interpreter for `ask`: the repo's virtualenv (it has the anthropic SDK), else this one."""
-    venv = REPO / ".venv" / "bin" / "python"
+    venv = REPO / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     return str(venv) if venv.exists() else sys.executable
 
 

@@ -811,6 +811,25 @@ def check_refusals(run: Path) -> list[dict]:
     return refusals(checks if isinstance(checks, list) else [])
 
 
+def windows_check(argv: list[str]) -> tuple[list[str], dict[str, str] | None]:
+    """How a check starts on Windows, and the environment it gets (None: this one). There is no env program, so
+    `env NAME=value ... program` sets those variables for the program (check_problem allows only plain
+    assignments). python3, often only the Microsoft Store stub there, and python become a real Python. Other
+    programs are found through PATHEXT, since npm, npx and pytest are .cmd or .exe files a bare name doesn't start."""
+    words, extra = list(argv), {}
+    if words[0] == 'env':
+        words.pop(0)
+        while words and '=' in words[0]:
+            name, _, value = words.pop(0).partition('=')
+            extra[name] = value
+    if words[0] in ('python3', 'python'):
+        found = [p for p in (shutil.which(words[0]), shutil.which('python')) if p and '\\windowsapps\\' not in p.lower()]
+        program = found[0] if found else sys.executable
+    else:
+        program = shutil.which(words[0]) or words[0]
+    return [program, *words[1:]], ({**os.environ, **extra} if extra else None)
+
+
 def verify(run: Path) -> dict:
     # Drop the previous evidence first, so a verify that refuses or breaks never leaves an older pass behind.
     (run / 'verified-checks.json').unlink(missing_ok=True)
@@ -832,17 +851,17 @@ def verify(run: Path) -> dict:
     for index, check in enumerate(checks if error is None else []):
         argv = check['argv']
         timeout = min(60, max(1, int(check.get('timeoutSeconds', 60))))
-        # On Windows npm, npx and pytest are .cmd or .exe files, which a bare name doesn't start there.
-        command = [shutil.which(argv[0]) or argv[0], *argv[1:]] if native.WINDOWS else argv
+        command, env = windows_check(argv) if native.WINDOWS else (argv, None)
         try:
-            result = subprocess.run(command, cwd=project, text=True, stdout=subprocess.PIPE,
+            result = subprocess.run(command, cwd=project, env=env, text=True, stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, timeout=timeout, check=False)
             code, output = result.returncode, result.stdout
-        except subprocess.TimeoutExpired as error:
+        # Not `as error`: Python deletes that name when the handler ends, and the report below reads error.
+        except subprocess.TimeoutExpired as exc:
             code = 124
-            output = str(error.stdout or '') + '\nCheck timed out.'
-        except OSError as error:
-            code, output = 127, str(error)
+            output = str(exc.stdout or '') + '\nCheck timed out.'
+        except OSError as exc:
+            code, output = 127, str(exc)
         clean = scrub(output)
         log = run / f'check-{index}.log'
         log.write_text(clean)
@@ -876,10 +895,12 @@ def doctor() -> dict:
     return {'claude': subprocess.check_output([str(CLAUDE), '--version'], text=True).strip(),
             'original_files_unchanged': {p: current.get(p) == value for p, value in before.items()},
             'original_main_config_sections_unchanged': stable_check,
+            **({} if before or stable else {'original_files_note': 'Not compared: no installation baseline is recorded on this '
+                                            f'machine ({baseline}, {scope_file}), so the two checks above are empty.'}),
             'lab_plugin': str(ROOT / 'plugin'), 'runtime_root': str(STATE),
             'modelCatalog': sync_models(),
             'fable': {**fable_status(), 'flag':str(FABLE_FLAG), 'check':'claude-lab-clp fable-check (local evidence only)'},
-            'launcher': str(USER / '.local/bin/claude-lab'),
+            'launcher': str(USER / ('.local/bin/alnair.cmd' if native.WINDOWS else '.local/bin/claude-lab')),
             'lsp': {p: (USER / '.local/share/claude-lab/lsp/node_modules/.bin' / p).exists()
                     for p in ['typescript-language-server', 'pyright-langserver']},
             'note': 'Ordinary Claude runtime metadata may change when you use Claude. No original configuration is rewritten by the lab.'}

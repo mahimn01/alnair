@@ -268,4 +268,4 @@ if (-not $SkipCodex -and (Find-Program 'codex')) {
   elseif (($setup.Output -join "`n") -match '"changed": true') { Say "Added Alnair's MCP servers to $codexHome\config.toml (backup saved next to it)." }
   else { Say "Codex config already has Alnair's MCP servers." }
 }
-Say 'Done. Try: alnair doctor, then alnair in a project folder (or alnair --model gpt for GPT through Codex).'
+if (Find-Program 'codex') { Say 'Done. Try: alnair doctor, then alnair in a project folder (or alnair --model gpt for GPT through Codex).' } else { Say 'Done. Try: alnair doctor, then alnair in a project folder.' }

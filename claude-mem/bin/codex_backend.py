@@ -66,8 +66,8 @@ def codex_binary() -> str:
     local = Path.home() / (".local/bin/codex.exe" if os.name == "nt" else ".local/bin/codex")
     if local.exists():
         return str(local)
-    raise RuntimeError("Codex CLI isn't installed. Install it with `brew install --cask codex` or "
-                       "`npm install -g @openai/codex`, then run `codex login` and pick ChatGPT.")
+    install = "`npm install -g @openai/codex`" if os.name == "nt" else "`brew install --cask codex` or `npm install -g @openai/codex`"
+    raise RuntimeError(f"Codex CLI isn't installed. Install it with {install}, then run `codex login` and pick ChatGPT.")
 
 
 def _version(text: str | None) -> tuple[int, ...]:
@@ -126,8 +126,9 @@ def resolve_model(requested: str | None, effort: str | None = None, home: Path |
             # the desktop app) can rewrite the shared cache. Its list says nothing about this CLI.
             return model, effort, f"not checked: Codex's model list was written by an older Codex ({cached}) than this CLI ({installed})"
         shown = ", ".join(m["slug"] for m in models if m["visible"])
+        upgrade = "`npm install -g @openai/codex@latest`" if os.name == "nt" else "`brew upgrade --cask codex`"
         raise ValueError(f"Codex doesn't list {model!r}. Models it lists: {shown}. Update Codex (`codex update` or "
-                         f"`brew upgrade --cask codex`) if a new model is missing.")
+                         f"{upgrade}) if a new model is missing.")
     if effort and by_slug[model]["efforts"] and effort not in by_slug[model]["efforts"]:
         raise ValueError(f"{model} supports effort {', '.join(by_slug[model]['efforts'])}, not {effort!r}")
     return model, effort, "listed by Codex"

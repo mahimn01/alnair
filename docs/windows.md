@@ -39,11 +39,13 @@ Windows.
 | Symlinks | `lab/bin/review_paths.py` was a symlink, which Git for Windows checks out as a text file holding its target | A plain file that runs `claude-mem/bin/review_paths.py` as itself; a test keeps the checkout free of symlinks |
 | Lab folders | `CLAUDE_LAB_RUN_DIR` and `CLAUDE_LAB_ROOT` start with `/` | `C:\...` is accepted and kept with forward slashes; folders compare without case |
 | lab verify | Check programs matched by exact name | On Windows without case or `.exe` (`Python.EXE` is `python`) |
+| lab verify checks | `env NAME=value ...`, `python3` and bare `npm` start as on macOS | On Windows a leading `env NAME=value` sets those variables for the program (there is no `env` program). `python3` and `python` become a real Python, not the Microsoft Store stub. Other programs are found through `PATHEXT`, so `npm` runs `npm.cmd` |
+| lab doctor | `launcher` is `~/.local/bin/claude-lab` | `%USERPROFILE%\.local\bin\alnair.cmd` on Windows |
 | Code Mode | Assumed a current Claude Code | The launchers ask the installed Claude Code its version. Below 2.1.323 (2.1.321, for one) Code Mode is turned off with one line saying why |
 | Keychain | macOS `security` for saved lab accounts | macOS only. Elsewhere the lab says saved accounts need the macOS Keychain; signing in with `claude` works everywhere |
 | bili, the auth fallback supervisor, clp-rune | `setsid`, `killpg`, `termios` | macOS only, unchanged. bili is off by default |
 | Session notes | `start_new_session=True` detaches the note writer | Python ignores it on Windows: the note is still written, but closing the console window right away can cut it short |
-| Codex | `codex` on PATH | `shutil.which` finds npm's `codex.cmd`. `install.ps1 -SkipCodex` leaves `~\.codex\config.toml` alone |
+| Codex | `codex` on PATH, installed with Homebrew | `shutil.which` finds npm's `codex.cmd`. The install and update hints name only npm. `install.ps1 -SkipCodex` leaves `~\.codex\config.toml` alone, and its last line mentions `--model gpt` only when Codex is installed |
 | Test suites | `os.execve` was blocked so no test could start a session | `subprocess.call` of claude or codex is blocked too, which is how a session starts on Windows |
 
 ## The guards on Windows
@@ -78,3 +80,5 @@ Two guards live outside this repository:
 `goto #_undefined_# 2>NUL || title %COMSPEC% & "<checkout>\.venv\Scripts\python.exe" -X utf8 "<checkout>\claude-mem\bin\claude-lab-clp" %*`.
 A `%` in a path is doubled, and the file carries an `alnair-shim` marker. Rerunning the installer rewrites only files with that marker; anything else needs `-Force`, which keeps a `.bak` copy.
 Like every batch file, it hands `%*` to Python as cmd parsed it. A prompt that itself contains double quotes is safer typed inside the session.
+
+Task Manager shows two `python.exe` processes for one `alnair`. A venv's `python.exe` is a small launcher: it starts the base Python with the venv's settings and waits for it. It leaves Ctrl+C to that child and exits with the child's exit code. Claude Code is the child of the base Python.

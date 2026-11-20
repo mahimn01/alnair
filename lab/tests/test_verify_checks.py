@@ -57,6 +57,40 @@ class VerifyChecksTest(unittest.TestCase):
         self.assertEqual(report["checks"][0]["exitCode"], 0)
         self.assertEqual(report["rejected"], [])
 
+    def test_a_check_that_times_out_or_cannot_start_fails_with_its_reason(self):
+        # verify raised UnboundLocalError on both: `except ... as error` deleted the refusal message it reports.
+        lab.dump(self.run_dir / "acceptance.json", {"criteria": [], "checks": [
+            {"argv": ["python3", "-c", "import time; time.sleep(5)"], "timeoutSeconds": 1}]})
+        report = lab.verify(self.run_dir)
+        self.assertFalse(report["passed"])
+        self.assertEqual(report["checks"][0]["exitCode"], 124)
+        self.assertIn("Check timed out.", report["checks"][0]["tail"])
+        self.checks(["cargo", "test"])
+        real_run = lab.subprocess.run
+
+        def run(argv, *args, **kwargs):  # cargo is missing; git, for the fingerprint, still runs
+            if argv[:1] == ["cargo"]:
+                raise FileNotFoundError(2, "No such file or directory", "cargo")
+            return real_run(argv, *args, **kwargs)
+        with patch.object(lab.subprocess, "run", run):
+            report = lab.verify(self.run_dir)
+        self.assertFalse(report["passed"])
+        self.assertEqual(report["checks"][0]["exitCode"], 127)
+
+    def test_on_windows_env_assignments_become_the_environment_and_python3_a_real_python(self):
+        found = {"python3": r"C:\Users\u\AppData\Local\Microsoft\WindowsApps\python3.EXE",
+                 "python": r"C:\Python312\python.EXE", "npm": r"C:\nodejs\npm.CMD"}
+        with patch.object(lab.shutil, "which", lambda name: found.get(name)):
+            command, env = lab.windows_check(ENV_CHECK)
+            self.assertEqual(command[:2], [r"C:\Python312\python.EXE", "-c"])  # not the Microsoft Store stub
+            self.assertEqual(env["PYTHONDONTWRITEBYTECODE"], "1")
+            self.assertEqual(lab.windows_check(["npm", "test"]), ([r"C:\nodejs\npm.CMD", "test"], None))
+        with patch.object(lab.shutil, "which", lambda name: None):
+            self.assertEqual(lab.windows_check(["python3", "-V"]), ([lab.sys.executable, "-V"], None))
+        with patch.object(lab.native, "WINDOWS", True):  # the whole check, as Windows runs it, on this machine
+            self.checks(ENV_CHECK)
+            self.assertTrue(lab.verify(self.run_dir)["passed"])
+
     def test_env_tricks_and_disallowed_programs_are_refused_with_the_reason(self):
         cases = {
             ("env", "-S", "python3 -c 0"): "env option -S",
