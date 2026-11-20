@@ -111,6 +111,26 @@ def test_users_inline_hooks_are_kept(tmp_path):
     assert [g["hooks"][0]["command"] for g in stop][1] == "my-own-hook"
 
 
+def test_python_310_finds_another_toml_parser_and_keeps_the_users_hooks(tmp_path, monkeypatch):
+    """Python 3.10 has no tomllib. Without a parser the user's own hooks were dropped from the session."""
+    real = CB.importlib.import_module
+
+    def no_tomllib(name: str):
+        if name == "tomllib":
+            raise ModuleNotFoundError(name)
+        return tomllib if name == "tomli" else real(name)  # the parser this test file loaded stands in for tomli
+
+    monkeypatch.setattr(CB.importlib, "import_module", no_tomllib)
+    (tmp_path / "config.toml").write_text('[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = "command"\ncommand = "my-own-hook"\n')
+    assert CB.user_hooks(tmp_path)["Stop"][0]["hooks"][0]["command"] == "my-own-hook"
+
+    def nothing(name: str):
+        raise ModuleNotFoundError(name)
+
+    monkeypatch.setattr(CB.importlib, "import_module", nothing)  # no parser at all: no crash, no hooks read
+    assert CB.user_hooks(tmp_path) == {}
+
+
 def test_resume_uses_codex_resume(capsys, tmp_path):
     argv = dry(capsys, "--model", "gpt", "--resume", "--project", str(tmp_path))["argv"]
     assert argv[1:3] == ["resume", "--last"]

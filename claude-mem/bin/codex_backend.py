@@ -13,6 +13,7 @@ CODEX_API_KEY from the session environment so Codex uses the ChatGPT login.
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import re
@@ -156,13 +157,22 @@ def note_command(repo: Path, python: str) -> str:
     return f"{shlex.quote(python)} {shlex.quote(str(repo / 'claude-clp/bin/vault_session_note.py'))} --stdin-payload --codex"
 
 
+def _toml():
+    """A TOML parser: tomllib on Python 3.11+; on 3.10 the tomli package or the copy pip carries; None when there is none."""
+    for name in ("tomllib", "tomli", "pip._vendor.tomli"):
+        try:
+            return importlib.import_module(name)
+        except ImportError:
+            continue
+    return None
+
+
 def _user_config(home: Path | None = None) -> dict:
-    try:
-        import tomllib
-    except ModuleNotFoundError:  # Python 3.10
+    toml = _toml()
+    if toml is None:
         return {}
     try:
-        return tomllib.loads(((home or codex_home()) / "config.toml").read_text(encoding="utf-8"))
+        return toml.loads(((home or codex_home()) / "config.toml").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
 
@@ -297,17 +307,15 @@ def setup_config(repo: Path, python: str, home: Path | None = None, dry_run: boo
     path = home / "config.toml"
     old = path.read_text(encoding="utf-8") if path.exists() else ""
     base = _strip_block(old)
-    try:
-        import tomllib
-        parsed = tomllib.loads(base) if base.strip() else {}
+    toml = _toml()
+    if toml is not None:
+        parsed = toml.loads(base) if base.strip() else {}
         clash = [n for n in SERVER_NAMES if n in (parsed.get("mcp_servers") or {})]
         if clash:
             raise ValueError(f"config.toml already defines {', '.join(clash)} outside Alnair's block; rename or remove them first")
-    except ModuleNotFoundError:
-        tomllib = None
     new = (base.rstrip("\n") + "\n\n" if base.strip() else "") + config_block(repo, python)
-    if tomllib is not None:
-        tomllib.loads(new)  # never write a file Codex can't parse
+    if toml is not None:
+        toml.loads(new)  # never write a file Codex can't parse
     if new == old:
         return {"path": str(path), "changed": False, "backup": None}
     if dry_run:
