@@ -8,6 +8,7 @@ inside the chosen project and records real exit codes, without a shell.
 from __future__ import annotations
 
 import argparse
+import atexit
 import hashlib
 import getpass
 import importlib.util
@@ -1018,7 +1019,9 @@ def main() -> int:
             dump(run / 'metrics.json',state)
         os.chdir(cfg.get('launchCwd', cfg['project']))
     elif opt.dry_run:
-        run, cfg = prepare(opt.project, opt.mode, opt.model, Path(tempfile.mkdtemp(prefix='claude-lab-preview-')), opt.full_tools)
+        preview_dir = Path(tempfile.mkdtemp(prefix='claude-lab-preview-'))
+        atexit.register(shutil.rmtree, preview_dir, True)  # a dry run leaves nothing behind when the process ends
+        run, cfg = prepare(opt.project, opt.mode, opt.model, preview_dir, opt.full_tools)
     else:
         run, cfg = prepare(opt.project, opt.mode, opt.model, opt.run, opt.full_tools)
         os.chdir(cfg.get('launchCwd', cfg['project']))

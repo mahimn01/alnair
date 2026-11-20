@@ -103,6 +103,16 @@ class LauncherTest(unittest.TestCase):
         self.assertIsNone(data['limits'])
         self.assertEqual(data['argv'][data['argv'].index('--autocompact')+1],'300k')
 
+    def test_a_dry_run_removes_the_preview_folder_it_made(self):
+        home=tempfile.TemporaryDirectory();self.addCleanup(home.cleanup)
+        scratch=Path(home.name)/'tmp';scratch.mkdir()
+        env={**__import__('os').environ,'HOME':home.name,'USERPROFILE':home.name,'TMPDIR':str(scratch),'TEMP':str(scratch),'TMP':str(scratch)}
+        result=subprocess.run([sys.executable,str(ROOT/'bin/lab.py'),'--dry-run','--project',str(self.project),'task'],text=True,capture_output=True,env=env)
+        self.assertEqual(result.returncode,0,result.stderr)
+        shown=Path(json.loads(result.stdout)['run'])
+        self.assertEqual(shown.parent,scratch.resolve())
+        self.assertEqual(list(scratch.iterdir()),[])
+
     def test_existing_run_and_original_config_cannot_be_overwritten(self):
         with self.assertRaises(ValueError):lab.prepare(self.project,'balanced','auto',self.run)
         with self.assertRaises(ValueError):lab.prepare(self.project,'balanced','auto',Path.home() / '.claude')
