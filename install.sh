@@ -32,6 +32,12 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# A relative --vault is made absolute now: the launcher would otherwise resolve it against each session's folder.
+case "$VAULT" in
+  ""|/*|"~"|"~/"*) ;;
+  *) VAULT="$(pwd -P)/$VAULT" ;;
+esac
+
 say() { printf '%s\n' "$*"; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
 
@@ -82,7 +88,14 @@ fi
 
 # Virtual environment for the CLP and research tools (the launcher uses it when present).
 if [ ! -x "$REPO/.venv/bin/python" ]; then
-  "$PY" -m venv "$REPO/.venv"
+  venv_new=1
+  [ -e "$REPO/.venv" ] && venv_new=0
+  if ! "$PY" -m venv "$REPO/.venv"; then
+    # Only a folder this run made is removed; one that was already there is left alone.
+    [ "$venv_new" = 1 ] && rm -rf "$REPO/.venv"
+    echo "install.sh: python3 can't create a virtual environment. On Debian or Ubuntu install it with: sudo apt install python3-venv" >&2
+    exit 1
+  fi
   say "Created $REPO/.venv"
 fi
 if [ "$PY_DEPS" = 1 ]; then
