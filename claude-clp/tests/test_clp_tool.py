@@ -200,3 +200,19 @@ def test_the_scrubbed_environment_passes_the_live_gate_in_a_real_child(clp, monk
     assert tool.cmd_ask(clp.store, "demo", "q", None, None, False) == 0  # the child's gate accepted the scrubbed environment
     raw = subprocess.run([sys.executable, "-c", script], env={**os.environ, "PYTHONPATH": str(tool.REPO / "src")}, check=False)
     assert raw.returncode == 9  # and refuses the unscrubbed one
+
+
+@pytest.mark.parametrize("bad", ["../escape", "a/b", "..", ".", "a b", "x\\y"])
+def test_init_refuses_a_corpus_name_that_is_not_a_plain_name(clp, tmp_path, bad):
+    code, _, err = clp.run("init", str(clp.folder), "--name", bad)
+    assert code == 2 and "corpus name" in err
+    assert not (tmp_path / "escape").exists() and not (clp.store / "a").exists()
+    assert sorted(p.name for p in clp.store.iterdir() if p.is_dir()) == ["demo"]
+
+
+def test_verify_refuses_a_cited_range_past_the_end_of_the_file(clp):
+    code, out = verify(clp, "What is the exit plan in [[AMZN]]?", "Sell on a daily close 25% below the highest close",
+                       [claim("The exit plan sells on a daily close 25% below the highest close", "notes/AMZN.md:1-99", EXIT)])  # fmt: skip
+    assert code == 1 and "bad_lines" in out, out
+    code, out, _ = clp.run("read", "notes/AMZN.md:1-99")
+    assert code == 0 and "lines 1-5 of 5" in out

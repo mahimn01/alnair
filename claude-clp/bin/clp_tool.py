@@ -164,9 +164,10 @@ def stored_path(corpus: DailyCorpus, path: str) -> str | None:
     return find_note(note_name(path) or path, corpus.paths)
 
 
-def resolve(corpus: DailyCorpus, ref: str) -> tuple[str, int, int] | str:
+def resolve(corpus: DailyCorpus, ref: str, strict: bool = False) -> tuple[str, int, int] | str:
     """(stored path, start, end) of a ref, or an error line. A ref is path:start-end#sha,
-    path:start-end, path:line, a file path (all its lines) or [[Note]]; a #sha must still match."""
+    path:start-end, path:line, a file path (all its lines) or [[Note]]; a #sha must still match. A range past the end of
+    the file is cut to it, unless `strict` (a citation): then it is an error."""
     ref = ref.strip().strip("`").strip()
     m = _REF.match(ref)
     path, start, end, sha = (m["path"], int(m["start"]), int(m["end"] or m["start"]), m["sha"]) if m else (ref, None, None, None)
@@ -176,7 +177,7 @@ def resolve(corpus: DailyCorpus, ref: str) -> tuple[str, int, int] | str:
     text = corpus.index.text(stored)
     n = n_lines(text)
     start, end = (1, n) if start is None else (start, end)
-    if start < 1 or end < start or start > n:
+    if start < 1 or end < start or start > n or (strict and end > n):
         return f"error: bad_lines `{ref}` ({display_path(stored)} has lines 1-{n})"
     end = min(end, n)
     if sha is not None and not span_sha(text, start, end).startswith(sha.lower()):
@@ -287,7 +288,7 @@ def anchored_paths(stored: str, text: str, start: int, end: int, quote: str) -> 
 def check_citation(corpus: DailyCorpus, citation: Citation) -> Passing | str:
     """A passing citation (tier1's rule: the quote, normalized, is inside the cited lines and at
     least min(20, their length) characters), or why it fails."""
-    where = resolve(corpus, citation.ref)
+    where = resolve(corpus, citation.ref, strict=True)
     if isinstance(where, str):
         return where.removeprefix("error: ") + " Cite an address that lookup or read printed."
     stored, start, end = where
@@ -440,7 +441,7 @@ def folder_drift(corpus: DailyCorpus) -> str:
     folder = Path(corpus.manifest["folder"])
     if not folder.is_dir():
         return f"folder   {folder} is missing"
-    texts, _ = scan(folder)
+    texts, _ = scan(folder, corpus.store)
     files = corpus.manifest["files"]
     shas = {p: hashlib.sha256(t.encode("utf-8")).hexdigest() for p, t in texts.items()}
     changed = sum(1 for p in shas if p in files and files[p]["sha256"] != shas[p])

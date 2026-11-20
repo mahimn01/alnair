@@ -112,6 +112,8 @@ def cmd_init(args, config: dict, home: Path) -> int:
         _out(f"Using your Obsidian vault at {vault} (pass a folder to index another one).")
     folder = (Path(args.folder).expanduser() if args.folder else vault).resolve()
     name = args.name or ("vault" if folder == vault.resolve() else re.sub(r"[^A-Za-z0-9_-]+", "-", folder.name).strip("-").lower() or "corpus")
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", name) or name in {".", ".."}:
+        raise CorpusMissing(f"a corpus name is letters, digits, dot, underscore or hyphen, not {name!r}")
     known = config["corpora"].get(name)
     if known is not None and Path(known["folder"]) != folder:
         raise CorpusMissing(f"a corpus named {name!r} already indexes {known['folder']}; pick another --name")
