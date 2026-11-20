@@ -146,12 +146,12 @@ def session_env(run: Path, store: Path | None) -> dict[str, str]:
 
 def session_settings(run: Path, home: bool, store: Path | None) -> dict:
     """The session layer: your copied settings, the CLP tool permissions, the plugin set and env."""
-    original = json.loads(SOURCE.read_text()) if SOURCE.exists() else {}
+    original = json.loads(SOURCE.read_text(encoding="utf-8")) if SOURCE.exists() else {}
     out = {key: json.loads(json.dumps(original[key])) for key in COPIED if key in original}
     perms = out.get("permissions", {})
     # A home launch loads no settings files, so it keeps the home folder's own local rules,
     # which ordinary claude applies to sessions started in ~ (as claude-lab does).
-    extra = json.loads(LOCAL.read_text()).get("permissions", {}) if home and LOCAL.exists() else {}
+    extra = json.loads(LOCAL.read_text(encoding="utf-8")).get("permissions", {}) if home and LOCAL.exists() else {}
     for key, rules in [*extra.items(), ("allow", ALLOW), ("ask", ASK)]:
         if isinstance(rules, list):
             perms[key] = perms.get(key, []) + [rule for rule in rules if rule not in perms.get(key, [])]
@@ -181,7 +181,7 @@ def code_mode_blockers(project: Path, layer: dict, env: dict) -> list[str]:
     if project != HOME.resolve():
         for path in (project / ".claude/settings.json", project / ".claude/settings.local.json"):
             try:
-                value = json.loads(path.read_text())
+                value = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 continue
             if isinstance(value, dict):
@@ -232,7 +232,7 @@ def build_demo(run: Path) -> tuple[Path, Path]:
 
 def launch_command(run: Path, prompt: str = "") -> tuple[list[str], dict[str, str]]:
     """The claude argv and environment for a prepared run."""
-    cfg = json.loads((run / "runtime.json").read_text())
+    cfg = json.loads((run / "runtime.json").read_text(encoding="utf-8"))
     store = Path(cfg["store"]) if cfg.get("store") else None
     # In ~ the "project" settings file IS ~/.claude/settings.json, which would bring back every plugin
     # the session layer leaves out, so a home launch loads no settings files besides the layer.
@@ -260,7 +260,7 @@ def doctor() -> dict:
         report["claude"] = {"path": claude, "version": version.stdout.strip() or version.stderr.strip()}
     except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
         report["claude"] = {"error": str(exc)}
-    manifest = json.loads((PLUGIN / ".claude-plugin/plugin.json").read_text())
+    manifest = json.loads((PLUGIN / ".claude-plugin/plugin.json").read_text(encoding="utf-8"))
     report["plugin"] = {"dir": str(PLUGIN), "name": manifest.get("name"), "version": manifest.get("version"),
                         "skills": sorted(p.parent.name for p in (PLUGIN / "skills").glob("*/SKILL.md"))}  # fmt: skip
     python = tool_python()
