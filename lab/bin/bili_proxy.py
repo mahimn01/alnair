@@ -100,7 +100,8 @@ def stop() -> bool:
     except (OSError, ValueError):
         return False
     try:
-        os.killpg(pid, signal.SIGTERM)
+        # Windows has no process groups: stop the supervisor itself.
+        (os.killpg if hasattr(os, 'killpg') else os.kill)(pid, signal.SIGTERM)
     except ProcessLookupError:
         PIDFILE.unlink(missing_ok=True)
         return False

@@ -111,6 +111,20 @@ def test_on_windows_the_session_is_a_child_whose_exit_code_is_passed_on(windows,
     assert signal.getsignal(signal.SIGINT) is before  # ...and comes back to Python afterwards
 
 
+def test_stopping_bili_does_not_need_os_killpg(monkeypatch, tmp_path):
+    bili = load('win_bili', ROOT / 'lab/bin/bili_proxy.py')
+    pidfile = tmp_path / 'supervisor.pid'
+    pidfile.write_text('4242', encoding='utf-8')
+    killed = []
+    monkeypatch.setattr(bili, 'PIDFILE', pidfile)
+    monkeypatch.setattr(bili, 'health', lambda timeout=1.0: False)
+    monkeypatch.delattr(os, 'killpg', raising=False)  # Windows has no process groups
+    monkeypatch.setattr(os, 'kill', lambda pid, sig: killed.append((pid, sig)))
+    assert bili.stop() is True
+    assert killed == [(4242, signal.SIGTERM)]
+    assert not pidfile.exists()
+
+
 def test_a_session_that_cannot_start_still_gives_ctrl_c_back(windows, monkeypatch):
     def missing(argv, env):
         raise FileNotFoundError(argv[0])
