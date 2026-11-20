@@ -21,12 +21,19 @@ Added:
 - a tool section in session notes: direct calls, Code Mode scripts, calls made inside them, and commands run. The parser handles the transcript shapes it can't be sure of without failing
 - `ALNAIR_LAB_LEGACY_ROOTS`: lets this checkout resume runs made by an earlier lab copy, without changing the root a run recorded
 - `claude-mem/bench/code_mode_ab/`, a task, setup script and collector for comparing a session with Code Mode off and on
+- native Windows support: `alnair` and `claude-lab-clp` run from PowerShell and cmd with no WSL. On Windows the launchers start Claude Code as a child process, hand Ctrl+C to it and pass its exit code on (macOS and Linux still exec). `install.ps1` writes `.cmd` commands and adds `%USERPROFILE%\.local\bin` to the user PATH only when missing. [docs/windows.md](docs/windows.md) has the full list of changes
+- one-command installs: `curl -fsSL https://raw.githubusercontent.com/mahimn01/alnair/main/get.sh | bash` on macOS and Linux, `irm https://raw.githubusercontent.com/mahimn01/alnair/main/get.ps1 | iex` on Windows. Each clones or fast-forwards `~/alnair` and runs the installer, takes its options from `ALNAIR_*` variables, and stops without changes when the checkout is dirty, has moved apart from origin, or isn't Alnair
+- the lab guards on Windows: they read Windows paths (`C:\`, `/c/`, `%USERPROFILE%`, `$env:USERPROFILE`, any case) and PowerShell and cmd text (`pwsh -c`, `-EncodedCommand`, `cmd /c`, `Start-Process`, `Invoke-Expression`, the file cmdlets). The PowerShell tool gets the same session, vault and settings checks as Bash
+- `scripts/test.ps1`, the test runner for Windows, and tests that simulate Windows on macOS and Linux
 
 Changed:
 
 - prompts the person didn't type (Code Mode script results, task notifications, other machine-made turns) skip lab routing and the readiness check, so they're never held back
 - `alnair --resume latest` skips a run whose launch was refused before a session started (only earlier builds of this release refused Code Mode launches)
-- the launcher tests can no longer start a real Claude session: `os.execve` is blocked in every launcher suite (lab, claude-mem, claude-clp), and the claude-clp suite now records writes to the real Claude files as the lab and claude-mem suites do
+- the launcher tests can no longer start a real Claude session: `os.execve` is blocked in every launcher suite (lab, claude-mem, claude-clp), and the claude-clp suite now records writes to the real Claude files as the lab and claude-mem suites do. `subprocess.call` of claude or codex is blocked too, since that is how a session starts on Windows
+- the guards match program names without case or a `.exe`, `.cmd`, `.bat` or `.ps1` ending on every system, so `CLAUDE -p` and `claude.exe -p` are refused like `claude -p`
+- Code Mode is turned off, with a one-line note, when the installed Claude Code is older than 2.1.323
+- `lab/bin/review_paths.py` is a plain file that runs `claude-mem/bin/review_paths.py`, not a symlink, which Git for Windows would check out as a text file. `.gitattributes` keeps LF line endings in every checkout
 
 ## 0.2.0 (2026-11-17)
 

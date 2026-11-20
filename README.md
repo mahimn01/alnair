@@ -26,14 +26,23 @@ The memory layer comes from my research on CLP. The protocol, its paper experime
 
 ## Quickstart
 
-You need macOS or Linux, Python 3.10+, Node 20+ and git. For Claude models, install Claude Code with Anthropic's native installer (it lands at `~/.local/bin/claude`) and sign in once. For GPT models, install the Codex CLI and sign in with ChatGPT:
+You need macOS, Linux or Windows, Python 3.10+, Node 20+ and git. For Claude models, install Claude Code with Anthropic's native installer (it lands at `~/.local/bin/claude`) and sign in once. For GPT models, install the Codex CLI and sign in with ChatGPT:
 
 ```sh
 brew install --cask codex      # or: npm install -g @openai/codex
 codex login                    # choose "Sign in with ChatGPT"
 ```
 
-Then:
+Then install with one command:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mahimn01/alnair/main/get.sh | bash
+alnair doctor
+```
+
+`get.sh` clones Alnair into `~/alnair` (or fast-forwards a clean checkout already there) and runs `install.sh`. It stops without changing anything if that folder has uncommitted changes or isn't Alnair. A piped script can't take options, so set them on the bash side of the pipe: `ALNAIR_HOME` (the folder), `ALNAIR_REF` (a branch, tag or commit), `ALNAIR_VAULT`, `ALNAIR_BIN`, and `ALNAIR_SKIP_CODEX=1`, `ALNAIR_SKIP_PYTHON_DEPS=1` or `ALNAIR_FORCE=1`. For example, `curl -fsSL .../get.sh | ALNAIR_VAULT=~/Notes bash`.
+
+Or by hand:
 
 ```sh
 git clone https://github.com/mahimn01/alnair.git ~/alnair
@@ -53,9 +62,26 @@ alnair --model gpt      # GPT-6.2-Astra through Codex
 ./install.sh --skip-codex             # leave ~/.codex/config.toml alone
 ```
 
-To update, `git pull` and run `./install.sh` again. The lab rewrites `lab/plugin/hooks/model-catalog.js` when Claude Code advertises a new model alias, so if git refuses to pull, run `git checkout lab/plugin/hooks/model-catalog.js` first.
+To update, run the `get.sh` line again, or `git pull` and run `./install.sh` again. The lab rewrites `lab/plugin/hooks/model-catalog.js` when Claude Code advertises a new model alias, so if git refuses to pull, run `git checkout lab/plugin/hooks/model-catalog.js` first.
 
-macOS is what I use every day. Linux should work but hasn't been tested yet. Windows isn't supported: the launcher assumes POSIX paths, so use WSL.
+macOS is what I use every day. Linux should work but hasn't been tested yet. Windows runs natively, as below.
+
+### Windows
+
+Alnair runs natively on Windows 10 and 11, from PowerShell or cmd, with no WSL. Install Git for Windows (Claude Code runs its Bash tool in Git Bash), Python 3.10+, Node 20+ and Claude Code, then in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/mahimn01/alnair/main/get.ps1 | iex
+alnair doctor
+```
+
+`get.ps1` clones Alnair into `%USERPROFILE%\alnair` (or fast-forwards a clean checkout there) and runs `install.ps1`. That writes `alnair.cmd` and `claude-lab-clp.cmd` into `%USERPROFILE%\.local\bin` and adds that folder to your user PATH if it isn't on it; open a new window afterwards. To change what it does, set the same variables first, for example `$env:ALNAIR_VAULT = 'D:\Notes'` or `$env:ALNAIR_SKIP_CODEX = '1'`. From a checkout:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Vault D:\Notes -SkipCodex
+```
+
+`install.ps1` takes `-Vault`, `-Bin`, `-SkipPythonDeps`, `-Force` and `-SkipCodex`. Like `install.sh`, it writes `config.env` once and never writes `~\.claude\settings.json` or `~\.claude.json`. It leaves an older `claude-lab.cmd` that runs WSL alone. Code Mode needs Claude Code 2.1.323 or newer; with an older one, alnair starts with Code Mode off and says so. Run the tests with `.\scripts\test.ps1`. [docs/windows.md](docs/windows.md) lists what changed for Windows and how the guards read PowerShell and cmd.
 
 ## Using it
 
