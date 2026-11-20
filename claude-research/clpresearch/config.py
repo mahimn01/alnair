@@ -60,6 +60,18 @@ WINDOWS_ENV = ("SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "USERPROFILE", "APPDATA", 
                "PATHEXT", "COMSPEC")
 CHILD_ENV = ("PATH", "HOME", "LANG", "TMPDIR", *WINDOWS_ENV)
 
+
+def child_env() -> dict[str, str]:
+    """The scrubbed environment for a clp_tool.py child, which reads and prints UTF-8 whatever the system's code page.
+    Without this a Windows child printed in cp1252: a character outside it failed, and the rest was misread here."""
+    return {**{k: v for k, v in os.environ.items() if k in CHILD_ENV}, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
+
+
+def child_argv(cmd: list[str]) -> list:
+    """The command for that child. On macOS and Linux its words go as UTF-8 bytes, which the child (in UTF-8 mode)
+    reads back exactly; under a locale that can't encode a word, text arguments would stop the call."""
+    return cmd if os.name == "nt" else [word.encode("utf-8", "surrogateescape") for word in cmd]
+
 SEC_SUFFIXES = ("sec.gov",)
 WAYBACK_SUFFIXES = ("archive.org",)
 

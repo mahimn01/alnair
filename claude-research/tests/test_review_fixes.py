@@ -189,3 +189,13 @@ def test_doi_in_parentheses_loses_the_closing_bracket():
 def test_crossref_organisation_author_keeps_its_name():
     got = scholar.crossref_norm({"DOI": "10.1/x", "title": ["T"], "author": [{"name": "WHO Consortium"}, {"given": "Ada", "family": "One"}]})
     assert got["authors"] == ["WHO Consortium", "Ada One"]
+
+
+def test_the_clp_child_runs_in_utf8_with_utf8_arguments():
+    """The gate's helper printed in the Windows code page: a character outside it failed, and the rest was misread."""
+    import os
+    from clpresearch import config
+    env = config.child_env()
+    assert env["PYTHONUTF8"] == "1" and env["PYTHONIOENCODING"] == "utf-8"
+    words = ["py", "caf\u00e9 \u2248"]
+    assert config.child_argv(words) == (words if os.name == "nt" else [w.encode("utf-8") for w in words])

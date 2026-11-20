@@ -11,7 +11,6 @@ from __future__ import annotations
 import hashlib
 import html
 import json
-import os
 import re
 import subprocess
 
@@ -30,13 +29,14 @@ VERIFY_NOTE = ("NOTE: PASS checks text integrity only — each quote is word for
 
 def _env() -> dict[str, str]:
     # A scrubbed environment for the gate, plus the operator's minimum quote length (default 20, never below 12).
-    return {**{k: v for k, v in os.environ.items() if k in config.CHILD_ENV}, "CLP_MIN_QUOTE": str(config.min_quote())}
+    return {**config.child_env(), "CLP_MIN_QUOTE": str(config.min_quote())}
 
 
 def run_clp(store: Store, argv: list[str], stdin: str | None = None, timeout: int = 120) -> tuple[int, str]:
     cmd = [config.clp_python(), str(config.clp_tool_path()), argv[0], "--store", str(store.clp), "--name", "research", *argv[1:]]
     try:
-        p = subprocess.run(cmd, input=stdin, capture_output=True, text=True, timeout=timeout, env=_env(), check=False)
+        p = subprocess.run(config.child_argv(cmd), input=stdin, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=timeout, env=_env(), check=False)
     except subprocess.TimeoutExpired:
         raise StoreError(f"CLP {argv[0]} exceeded {timeout}s") from None
     return p.returncode, "\n".join(s.strip() for s in (p.stdout, p.stderr) if s.strip())
