@@ -18,7 +18,7 @@ from tests_data import ATOM, CDX, EFTS, FILING, OA_WORK, PATENT, S2_PAPER, SUBMI
 from test_part1_fixes import court_routes, ppubs_routes  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-PY = str(ROOT.parent / ".venv" / "bin" / "python")
+PY = str(ROOT.parent / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python"))
 SENTINEL = "ZXQ-quote-sentinel-9981"
 
 

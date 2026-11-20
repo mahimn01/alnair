@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import unicodedata
 from pathlib import Path
 
@@ -16,6 +17,16 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
+
+
+def symlink(link: Path, target: Path) -> None:
+    """link -> target, or a skip on Windows, which makes symlinks only with Developer Mode or admin rights."""
+    try:
+        link.symlink_to(target)
+    except OSError as error:
+        if os.name != "nt":
+            raise
+        pytest.skip(f"Windows refused the symlink ({error}); turn on Developer Mode to run this test")
 
 
 def load():
@@ -29,6 +40,7 @@ def load():
 def ab(tmp_path, monkeypatch):
     """A task folder laid out like the A/B one, and a lab run folder with its policies and artifacts."""
     monkeypatch.setenv("HOME", str(tmp_path))   # keeps the real ~/.clp/research/docs out of the lookup
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # the home Python uses on Windows
     project = tmp_path / "alnair-ab-on"
     for name in ["notes/00 Index.md", "notes/AMZN.md", "notes/Plan.md", "notes/Review.md", "code/limits.py",
                  "code/check_limits.py", "broken-links.txt", "ideas.txt", ".alnair-ab"]:
@@ -132,7 +144,7 @@ def test_a_symlink_keeps_its_own_name(ab):
     """First review: a prompt about a link was rewritten to name its target twice."""
     project, run = ab
     m = load()
-    (project / "LINK.md").symlink_to(project / "notes/Plan.md")
+    symlink(project / "LINK.md", project / "notes/Plan.md")
     out = m.resolve_prompt("LINK.md is a symlink to notes/Plan.md", project, run)
     assert out == f"{project / 'LINK.md'} is a symlink to {project / 'notes/Plan.md'}"
 
@@ -143,6 +155,6 @@ def test_a_path_through_a_linked_folder_names_the_file_that_was_found(ab, tmp_pa
     m = load()
     (tmp_path / "other/sub").mkdir(parents=True)
     (tmp_path / "other/x.md").write_text("x\n")
-    (project / "linkdir").symlink_to(tmp_path / "other/sub")
+    symlink(project / "linkdir", tmp_path / "other/sub")
     out = m.resolve_prompt("Read linkdir/../x.md", project, run)
     assert out == f"Read {(tmp_path / 'other/x.md').resolve()}"

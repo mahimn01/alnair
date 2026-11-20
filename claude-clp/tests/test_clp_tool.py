@@ -146,7 +146,8 @@ def test_verify_refuses_a_note_edited_after_indexing_until_refresh(clp):
     question, old = "What is the exit plan in [[AMZN]]?", [claim("The exit is 25% below the highest close", "notes/AMZN.md:3", EXIT)]
     code, out = verify(clp, question, "Sell 25% below the highest close", old)
     assert code == 1 and "changed after it was indexed" in out
-    assert clp.run("refresh")[0] == 0
+    code, _, err = clp.run("refresh")
+    assert code == 0, err
     code, out = verify(clp, question, "Sell 25% below the highest close", old)
     assert code == 1 and "word for word" in out
     new = EXIT.replace("25%", "20%")

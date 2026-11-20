@@ -2,6 +2,9 @@ import {expect, mock, test} from 'claude-code/testing';
 import {route, evidenceComplete, redact, exhaustedWindows, spawnModel, usageSummary, budgetWarnings, mcporterDenial,
   nestedSessionDenial, settingsWriteDenial, scriptDenial, splitShell, isUserPrompt, isCodeCall, codeUsage,reviewVerdict} from '../hooks/register.js';
 
+// The timing bounds catch a check that grows exponentially; Windows (a /C:/ file URL) gets five times as long.
+const SLOW = /^\/[A-Za-z]:\//.test(new URL(import.meta.url).pathname) ? 5 : 1;
+
 function fixture(on, overrides = {}, config = {}, env = {}) {
   const f = {files:new Map(), models:[], efforts:[], calls:[], hash:'source-a', spawns:0, spawnModels:[], spawnPrompts:[], processArgv:[]};
   const state = {schema:1,workers:0,steps:0,mainSteps:0,agents:{},models:{},revision:0,
@@ -11,8 +14,10 @@ function fixture(on, overrides = {}, config = {}, env = {}) {
   f.files.set('/lab/run/metrics.json',JSON.stringify(state));
   f.files.set('/lab/run/trading-policy.md','Use the actual current financial policy; memory is not trade authorization.');
   mock.env(on,{CLAUDE_LAB_ROOT:'/lab/root',CLAUDE_LAB_RUN_DIR:'/lab/run',...env});
-  on('fs.read',($,e) => ({value:f.files.get(e.path) || ''}));
-  on('fs.write',($,e) => {f.files.set(e.path,e.text); return {value:undefined};});
+  // The test runner hands fs handlers the path as it resolved it: on Windows /lab/run/x arrives as C:\lab\run\x.
+  const key = p => f.files.has(p) ? p : (/\/lab\/run\/.*$/.exec(String(p).replace(/\\/g, '/'))?.[0] ?? p);
+  on('fs.read',($,e) => ({value:f.files.get(key(e.path)) || ''}));
+  on('fs.write',($,e) => {f.files.set(key(e.path),e.text); return {value:undefined};});
   on('command.register',() => ({value:undefined}));
   on('tool.register',() => ({value:undefined}));
   on('ui.log',() => ({value:undefined}));
@@ -797,7 +802,7 @@ test('the review verdict is read tolerantly but fails closed', async ($,on) => {
   const started = Date.now();
   expect(reviewVerdict('{'.repeat(100000))).toBe(null);
   expect(reviewVerdict('{"a": '.repeat(16000))).toBe(null);
-  expect(Date.now() - started < 1000).toBe(true);
+  expect(Date.now() - started < 1000 * SLOW).toBe(true);
   // Third review: a disagreeing verdict nested in another object cancels the placed one.
   expect(reviewVerdict(verdict(true,[]) + '\n{"review": {"approved": false, "findings": [{"severity": "high"}]}}')).toBe(null);
   expect(reviewVerdict('{"approved": true, "findings": [], "notes": {"approved": true}}')).toEqual({approved:true, findings:[]});
@@ -956,7 +961,7 @@ test('a here-string is judged by the command that reads it', async () => {
   const begun = Date.now();
   for (const c of ['cat <<< a |\n'.repeat(8000) + 'sh', 'cat <<< a | '.repeat(8000) + 'cat', 'true <<< a; '.repeat(8000)]) nestedSessionDenial(c);
   settingsWriteDenial('cat <<< a |\n'.repeat(8000) + 'sh', HOME);
-  expect(Date.now() - begun < 2000).toBe(true);
+  expect(Date.now() - begun < 2000 * SLOW).toBe(true);
 });
 
 test('a shell -c hands its $0 and $@ words on, and they are checked as a command', async () => {
@@ -977,7 +982,7 @@ test('a shell -c hands its $0 and $@ words on, and they are checked as a command
   const begun = Date.now();
   expect(settingsWriteDenial("bash -c '\"$@\"' _ ".repeat(200) + 'rm ~/.claude.json', HOME)).toBeTruthy();
   expect(nestedSessionDenial("bash -c 'x' _ ".repeat(200) + 'claude -p x')).toBeTruthy();
-  expect(Date.now() - begun < 1000).toBe(true);
+  expect(Date.now() - begun < 1000 * SLOW).toBe(true);
 });
 
 test('a shell -c text is read with its $0 and $@ words put back, and so is what xargs builds from input on the line', async () => {
@@ -1019,12 +1024,12 @@ test('a long run of cd commands is read in linear time and still finds the folde
   const cds = (n: number) => Array.from({length:n}, (_, k) => 'cd d' + k + '; ').join('');
   let begun = Date.now();
   expect(Boolean(settingsWriteDenial('cd ~/.claude; ' + cds(16) + 'rm settings.json', HOME))).toBe(true);
-  expect(Date.now() - begun < 1000).toBe(true);
+  expect(Date.now() - begun < 1000 * SLOW).toBe(true);
   begun = Date.now();
   expect(Boolean(settingsWriteDenial('cd ~/.claude; ' + cds(24) + 'rm settings.json', HOME))).toBe(true);
   expect(settingsWriteDenial('cd ~/.claude; ' + cds(200) + 'rm x', HOME)).toBe(null);
   expect(settingsWriteDenial(Array.from({length:2000}, (_, k) => 'cd /tmp/d' + k + '; ').join('') + 'rm x', HOME)).toBe(null);
-  expect(Date.now() - begun < 2000).toBe(true);
+  expect(Date.now() - begun < 2000 * SLOW).toBe(true);
 });
 
 test('groups are matched opener to closer, so a here-string inside nested compound commands still reaches its shell', async () => {
@@ -1062,7 +1067,7 @@ test('a wrapper does not hide the shell or interpreter it runs', async () => {
   // The scan stays linear: a long run of interpreter words neither hangs the guards nor overflows the stack.
   const long = 'env ' + 'python3 '.repeat(20000) + '-c "print(1)"', begun = Date.now();
   expect([nestedSessionDenial(long), settingsWriteDenial(long, HOME)]).toEqual([null, null]);
-  expect(Date.now() - begun < 2000).toBe(true);
+  expect(Date.now() - begun < 2000 * SLOW).toBe(true);
   // Final probe: a shell between the wrapper and the interpreter (bash -c 'exec "$@"' _ python3 ...) hid it.
   expect(nestedSessionDenial(`env bash -c 'exec "$@"' _ python3 -c "import subprocess; subprocess.run(['claude','-p','x'])"`)).toBeTruthy();
   expect(settingsWriteDenial(`env bash -c 'exec "$@"' _ python3 -c "open('/home/u/.claude/settings.json','w').write('{}')"`, HOME)).toBeTruthy();
@@ -1087,9 +1092,6 @@ test('on Windows the PowerShell tool is guarded like Bash, and lab folders given
   const env = {CLAUDE_LAB_ROOT:'C:\\lab\\root',CLAUDE_LAB_RUN_DIR:'C:\\lab\\run',HOME:'',USERPROFILE:'C:\\Users\\yatin',
     CLAUDE_LAB_PYTHON:'C:\\Users\\yatin\\alnair\\.venv\\Scripts\\python.exe'};
   const f=fixture(on,{},{},env);
-  // Windows reads C:/lab/run as absolute; on macOS and Linux the test harness resolves it against the plugin folder.
-  const plugin = decodeURIComponent(new URL('../', import.meta.url).pathname);
-  for (const [k,v] of [...f.files]) for (const to of ['C:/lab/run/', 'C:\\lab\\run\\', plugin + 'C:/lab/run/']) f.files.set(k.replace('/lab/run/', to),v);
   await start($);
   for (const command of ['claude.exe -p hi','& claude -p hi','cmd /c claude -p','Start-Process claude -ArgumentList "-p"',
     "Set-Content $env:USERPROFILE\\.claude.json '{}'",'Remove-Item -Recurse ~\\.claude','mcporter call obsidian-staging.write_note path=a'])

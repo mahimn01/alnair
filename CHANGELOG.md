@@ -37,6 +37,7 @@ Changed:
 - `lab verify` reports a check that times out (exit 124) or can't start (exit 127) as a failed check. Before, both raised `UnboundLocalError` and left no evidence. On Windows, `env NAME=value` checks, `python3` and `npm` now start there too
 - the lab part of `alnair doctor` adds `original_files_note` when no installation baseline is recorded, instead of showing two empty checks unexplained. On Windows its `launcher` is `alnair.cmd`
 - on Windows, Codex install and update hints name only npm, and `install.ps1` mentions `alnair --model gpt` only when Codex is installed
+- the test suites run on Windows: tests set `USERPROFILE` with `HOME`, run scripts under `sys.executable`, use `.cmd` fakes, and skip symlink and file-mode checks there ([docs/windows.md](docs/windows.md) lists them)
 
 ## 0.2.0 (2026-11-17)
 

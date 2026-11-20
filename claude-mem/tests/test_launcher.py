@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -38,7 +39,7 @@ def test_dry_run_dual_plugins_300k_bili_off(project, capsys):
         plugin_dirs = [argv[i + 1] for i, v in enumerate(argv) if v == "--plugin-dir"]
         assert len(plugin_dirs) == 3
         assert any(p == str(L.LAB_ROOT / "plugin") for p in plugin_dirs)
-        assert any(p.endswith("claude-clp/plugin") for p in plugin_dirs)
+        assert any(Path(p).parts[-2:] == ("claude-clp", "plugin") for p in plugin_dirs)
         assert argv[argv.index("--autocompact") + 1] == "300k"
         assert shown["bili"] == {"requested": False, "active": False}
         assert argv[argv.index("--name") + 1] == "Alnair"
@@ -116,7 +117,7 @@ def test_dry_run_demo_prepares_then_indexes(capsys, tmp_path, monkeypatch):
         plugin_dirs = shown["pluginDirs"]
         assert len(plugin_dirs) == 3
         assert any(p == str(L.LAB_ROOT / "plugin") for p in plugin_dirs)
-        assert any(p.endswith("claude-clp/plugin") for p in plugin_dirs)
+        assert any(Path(p).parts[-2:] == ("claude-clp", "plugin") for p in plugin_dirs)
         # Starting prompt is the dual lab+CLP demo brief
         argv = shown["argv"]
         assert any("exit plan" in x or "AMZN" in x for x in argv)
@@ -230,7 +231,7 @@ def test_alnair_branding_doctor(capsys):
     assert L.main(["doctor"]) == 0
     report=json.loads(capsys.readouterr().out)
     assert report["name"] == "Alnair"
-    assert report["launcher_on_path"]["link"].endswith("/alnair")
+    assert Path(report["launcher_on_path"]["link"]).name == ("alnair.cmd" if os.name == "nt" else "alnair")
     assert {"claude-lab-clp","claude-mem-lab"} <= set(report["aliases"])
 
 

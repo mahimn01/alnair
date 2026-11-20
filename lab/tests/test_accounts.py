@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -16,7 +17,8 @@ class AccountsTest(unittest.TestCase):
             self.assertEqual(set(data['accounts']),{'primary','token'})
             self.assertEqual(data['accounts']['primary']['label'],'mine')
             self.assertEqual(data['accounts']['token']['label'],'backup')
-            self.assertTrue(data['auto_return']);self.assertEqual(path.stat().st_mode & 0o777,0o600)
+            self.assertTrue(data['auto_return'])
+            if os.name!='nt':self.assertEqual(path.stat().st_mode & 0o777,0o600)  # Windows has no POSIX file modes
             data['accounts']['token']['label']='secondary';accounts.save(data,path)
             self.assertEqual(accounts.ensure(path)['accounts']['token']['label'],'secondary')
 

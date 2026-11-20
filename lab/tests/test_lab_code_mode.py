@@ -36,7 +36,7 @@ class ChoiceTest(unittest.TestCase):
     def setUp(self):
         self.home = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.home)
-        self.env = patch.dict(os.environ, environ(HOME=str(self.home)), clear=True)
+        self.env = patch.dict(os.environ, environ(HOME=str(self.home), USERPROFILE=str(self.home)), clear=True)
         self.env.start()
         self.addCleanup(self.env.stop)
 
@@ -177,7 +177,7 @@ class RunTest(unittest.TestCase):
             p = patch.object(lab, name, value)
             p.start()
             self.addCleanup(p.stop)
-        self.env = patch.dict(os.environ, environ(HOME=str(base)), clear=True)
+        self.env = patch.dict(os.environ, environ(HOME=str(base), USERPROFILE=str(base)), clear=True)
         self.env.start()
         self.addCleanup(self.env.stop)
         self.addCleanup(os.chdir, os.getcwd())
@@ -335,7 +335,7 @@ class RunTest(unittest.TestCase):
         seen, err = {}, io.StringIO()
         state = Path(self.temp.name) / 'runs'
         with patch.object(lab, 'bili', Proxy), patch.object(lab, 'STATE', state), \
-                patch.object(lab.os, 'execve', lambda path, argv, env: seen.update(argv=argv, env=env)), \
+                patch.object(lab.native, 'run_session', lambda argv, env: seen.update(argv=argv, env=env) or 0), \
                 patch('sys.argv', ['claude-lab', '--project', str(self.project), *args]), \
                 redirect_stdout(io.StringIO()), redirect_stderr(err):
             self.assertEqual(lab.main(), 0)

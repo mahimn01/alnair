@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
@@ -71,16 +72,16 @@ class LauncherTest(unittest.TestCase):
     def test_readiness_blocks_inactive_plugin_without_running_a_model(self):
         import os
         env={**os.environ,'CLAUDE_LAB_RUN_DIR':str(self.run)}
-        result=subprocess.check_output(['python3',str(ROOT/'bin/ready_guard.py')],env=env,text=True,input='')
+        result=subprocess.check_output([lab.HOOK_PYTHON,str(ROOT/'bin/ready_guard.py')],env=env,text=True,input='')
         self.assertEqual(json.loads(result)['decision'],'block')
         state=json.loads((self.run/'metrics.json').read_text());state['runtimeReady']=True;lab.dump(self.run/'metrics.json',state)
-        result=subprocess.check_output(['python3',str(ROOT/'bin/ready_guard.py')],env=env,text=True,input='')
+        result=subprocess.check_output([lab.HOOK_PYTHON,str(ROOT/'bin/ready_guard.py')],env=env,text=True,input='')
         self.assertEqual(json.loads(result),{})
 
     def test_readiness_never_withholds_prompts_the_person_did_not_type(self):
         import os
         env={**os.environ,'CLAUDE_LAB_RUN_DIR':str(self.run)}
-        guard=['/usr/bin/python3',str(ROOT/'bin/ready_guard.py')]
+        guard=[lab.HOOK_PYTHON,str(ROOT/'bin/ready_guard.py')]
         for source in ('poll_event','system','loop_wakeup'):
             result=subprocess.check_output(guard,env=env,text=True,input=json.dumps({'prompt':'x','source':source}))
             self.assertEqual(json.loads(result),{},source)
@@ -93,8 +94,8 @@ class LauncherTest(unittest.TestCase):
         import os
         # A temporary HOME: the write recorder sees only this process, so the child must not reach the real files.
         home=tempfile.TemporaryDirectory();self.addCleanup(home.cleanup)
-        env={**{k:v for k,v in os.environ.items() if k!='CLAUDE_CODE_AUTO_COMPACT_WINDOW'},'HOME':home.name}
-        result=subprocess.run(['python3',str(ROOT/'bin/lab.py'),'--dry-run','--mode','deep','Implement pagination','--project',str(self.project)],text=True,capture_output=True,env=env)
+        env={**{k:v for k,v in os.environ.items() if k!='CLAUDE_CODE_AUTO_COMPACT_WINDOW'},'HOME':home.name,'USERPROFILE':home.name}
+        result=subprocess.run([sys.executable,str(ROOT/'bin/lab.py'),'--dry-run','--mode','deep','Implement pagination','--project',str(self.project)],text=True,capture_output=True,env=env)
         self.assertEqual(result.returncode,0,result.stderr)
         data=json.loads(result.stdout)
         import uuid

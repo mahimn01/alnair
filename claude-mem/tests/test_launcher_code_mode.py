@@ -33,6 +33,7 @@ def temp_home(tmp_path, monkeypatch) -> Iterator[Path]:
     home = tmp_path / "home"
     (home / ".config/alnair").mkdir(parents=True)
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))  # the home Python uses on Windows
     for name in SHELL:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(L, "load_lab", lambda: LAB)
@@ -288,7 +289,7 @@ def test_a_real_launch_that_cant_use_code_mode_starts_without_it_and_records_why
     ledgers: list[str] = []
     monkeypatch.setattr(L, "ensure_session_ledger", lambda session_id, *a, **k: ledgers.append(session_id))
     launched: list[dict] = []
-    monkeypatch.setattr(L.os, "execve", lambda path, argv, env: launched.append(env))
+    monkeypatch.setattr(L.NATIVE, "run_session", lambda argv, env: launched.append(env) or 0)
     monkeypatch.setattr(LAB, "auth_environment", lambda env, source=None, token=True: dict(env))  # no Keychain read
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv(CM.ENV, "1")

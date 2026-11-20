@@ -1,6 +1,7 @@
 """Offline native-UI failover: real filesystem evidence, mocked child processes."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
 import sys
@@ -47,7 +48,9 @@ class FallbackTest(unittest.TestCase):
 
     def test_broken_or_unreadable_history_and_disappearing_files_do_not_abort_startup(self):
         broken=self.transcript.parent/'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.jsonl'
-        broken.symlink_to(self.base/'missing-target')
+        try:broken.symlink_to(self.base/'missing-target')
+        except OSError:  # Windows makes symlinks only with Developer Mode or admin rights; the rest still runs
+            if os.name!='nt':raise
         self.transcript.write_text(json.dumps(self.error())+'\n')
         watch=fallback.TranscriptWatch(self.config)
         self.assertNotIn(broken,watch.offsets)

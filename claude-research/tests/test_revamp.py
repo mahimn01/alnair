@@ -401,8 +401,12 @@ def test_get_fetches_in_parallel_keeps_partial_results_and_reuses_saved_sources(
 
 
 def test_batch_runs_side_by_side_and_one_failure_does_not_stop_the_rest(ctx):
+    spans = []
+
     def slow(c):
+        begun = time.monotonic()
         time.sleep(0.4)
+        spans.append((begun, time.monotonic()))
         return saver(f"line from {threading.current_thread().name}", url=f"https://www.federalreserve.gov/{threading.current_thread().name}")(c)
 
     def unavailable(c):
@@ -412,9 +416,9 @@ def test_batch_runs_side_by_side_and_one_failure_does_not_stop_the_rest(ctx):
         raise RuntimeError("kaput")
 
     items = [acquire.Item(n, f"s{n}", job=job(f"s{n}", fn)) for n, fn in enumerate([slow, slow, slow, slow, unavailable, boom], 1)]
-    started = time.monotonic()
     done = acquire.run_batch(ctx, items, deadline=10)
-    assert time.monotonic() - started < 1.2                      # four 0.4 s jobs together, not 1.6 s in a row
+    # The four 0.4 s jobs ran together: each started before any had finished (no clock limit a slow machine misses).
+    assert len(spans) == 4 and max(b for b, _ in spans) < min(e for _, e in spans)
     assert [it.status for it in done] == ["ok"] * 4 + ["unavailable", "error"]
     assert "UNAVAILABLE[semanticscholar]" in done[4].message and "unexpected RuntimeError" in done[5].message
     assert len({it.ids[0] for it in done[:4]}) == 4 and ctx.store.check_integrity() == []

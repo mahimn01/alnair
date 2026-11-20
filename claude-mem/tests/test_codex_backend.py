@@ -36,7 +36,7 @@ def test_gpt_defaults_to_gpt_6_2_astra_from_codex_model_list(capsys, tmp_path):
     out = dry(capsys, "--model", "gpt", "--project", str(tmp_path), "fix the failing test")
     argv = out["argv"]
     assert out["backend"] == "codex" and out["model"] == "gpt-6.2-astra" and out["modelCheck"] == "listed by Codex"
-    assert Path(argv[0]).name == "codex"
+    assert Path(argv[0]).stem.lower() == "codex"  # codex.cmd or codex.exe on Windows
     assert argv[argv.index("-m") + 1] == "gpt-6.2-astra"
     assert argv[argv.index("-C") + 1] == str(tmp_path.resolve())
     assert argv[-1] == "fix the failing test"
@@ -166,7 +166,8 @@ def test_setup_config_backs_up_appends_once_and_round_trips(tmp_path):
     assert again == {"path": str(cfg), "changed": False, "backup": None}
     assert len(list(tmp_path.glob("config.toml.alnair-backup-*"))) == 1
     moved = CB.setup_config(Path("/elsewhere/alnair"), "/py", home=tmp_path)
-    assert moved["changed"] and cfg.read_text().count(CB.BEGIN) == 1 and "/elsewhere/alnair" in cfg.read_text()
+    assert moved["changed"] and cfg.read_text().count(CB.BEGIN) == 1 and tomllib.loads(cfg.read_text())["mcp_servers"]["alnair_clp"]["args"] == [
+        str(Path("/elsewhere/alnair") / "claude-clp/bin/clp_mcp.py")]
     removed = CB.remove_config(home=tmp_path)
     assert removed["changed"] and cfg.read_text().rstrip("\n") == ORIGINAL.rstrip("\n")
 

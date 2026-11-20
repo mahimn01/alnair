@@ -84,7 +84,7 @@ def test_the_session_layer_copies_rules_and_hooks_but_not_mcp_server_keys(settin
     assert perms["deny"] == ["mcp__obsidian-staging__delete_note"]
     assert s["enabledPlugins"] == {"pyright-lsp@claude-plugins-official": True, "claude-mem@thedotmack": False}
     assert s["env"]["CLAUDE_CLP_ROOT"] == str(L.ROOT) and s["env"]["CLAUDE_CLP_PYTHON"] == L.tool_python() and "CLP_STORE" not in s["env"]
-    assert stat.S_IMODE((run / "settings.json").stat().st_mode) == 0o600 and stat.S_IMODE(run.stat().st_mode) == 0o700
+    assert os.name == "nt" or (stat.S_IMODE((run / "settings.json").stat().st_mode) == 0o600 and stat.S_IMODE(run.stat().st_mode) == 0o700)  # no POSIX modes on Windows
     assert set(json.loads((run / "source-hashes.json").read_text())) <= {str(p) for p in L.PROTECTED}
 
 
@@ -138,8 +138,8 @@ def test_demo_dry_run_indexes_the_fixture_inside_its_run_folder(settings_files, 
 
 
 def test_doctor_reports_without_starting_a_session(tmp_path, monkeypatch, capsys):
-    fake = tmp_path / "claude"
-    fake.write_text("#!/bin/sh\necho '9.9.9 (Claude Code)'\n")
+    fake = tmp_path / ("claude.cmd" if os.name == "nt" else "claude")  # Windows runs a batch file, not a #! script
+    fake.write_text("@echo 9.9.9 (Claude Code)\n" if os.name == "nt" else "#!/bin/sh\necho '9.9.9 (Claude Code)'\n")
     fake.chmod(0o755)
     monkeypatch.setattr(L, "CLAUDE", fake)
     monkeypatch.setenv("CLP_STORE", str(tmp_path / "no-store-yet"))
@@ -161,6 +161,7 @@ def code_mode_home(tmp_path, monkeypatch) -> Path:
     home = tmp_path / "home"
     (home / ".config/alnair").mkdir(parents=True)
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))  # the home Python uses on Windows
     for name in CODE_MODE_SHELL:
         monkeypatch.delenv(name, raising=False)
     return home

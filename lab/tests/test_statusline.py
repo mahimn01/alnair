@@ -1,12 +1,15 @@
 """Lab status line and bili switch on synthetic inputs; no model, no real transcripts, no proxy."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+HOOK_PYTHON = sys.executable if os.name == 'nt' else '/usr/bin/python3'  # what the status line runs with (lab.HOOK_PYTHON)
 
 
 def load(name, path):
@@ -117,7 +120,7 @@ class StatusLineTest(unittest.TestCase):
         self.assertIn('/400k', status.render(self.data(), {'CLAUDE_LAB_COMPACT_AT': '400000'}, NOW)[0])
 
     def test_script_never_fails_on_bad_input(self):
-        result = subprocess.run(['/usr/bin/python3', str(ROOT / 'bin/lab_statusline.py')], input='not json',
+        result = subprocess.run([HOOK_PYTHON, str(ROOT / 'bin/lab_statusline.py')], input='not json',
                                 text=True, capture_output=True)
         self.assertEqual(result.returncode, 0)
         self.assertIn('Lab status unavailable', result.stdout)

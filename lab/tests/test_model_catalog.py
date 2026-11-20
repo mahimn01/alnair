@@ -1,4 +1,4 @@
-import importlib.util,json,tempfile,unittest
+import importlib.util,json,os,sys,tempfile,unittest
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 class CatalogTests(unittest.TestCase):
@@ -9,10 +9,12 @@ class CatalogTests(unittest.TestCase):
  def test_version_bump_and_new_alias_are_discovered_and_cached(self):
   m=self.module()
   with tempfile.TemporaryDirectory() as d:
-   p=Path(d);versions=p/'versions';versions.mkdir();link=p/'claude';catalog=p/'catalog.json';state=p/'sync.json'
+   p=Path(d);versions=p/'versions';versions.mkdir();link=p/('claude.cmd' if os.name=='nt' else 'claude');catalog=p/'catalog.json';state=p/'sync.json'
    catalog.write_text(json.dumps({'schema':1,'models':{'sonnet':{'id':'claude-sonnet-5-5','alias':'sonnet','effort':'medium','advisor':'opus'}}}))
    def install(version,alias):
     target=versions/version;payload = repr(version+' (Claude Code)')+' if sys.argv[1] == "--version" else '+repr("  --model <model> Model alias (e.g. 'sonnet', '"+alias+"') or full name.");target.write_text('#!/usr/bin/env python3\nimport sys\nprint('+payload+')\n');target.chmod(0o755)
+    if os.name=='nt':  # Windows runs neither a #! script nor, without Developer Mode, a symlink: a .cmd stands in
+     link.write_text(f'@"{sys.executable}" "{target}" %*\n');return
     if link.is_symlink():link.unlink()
     link.symlink_to(target)
    install('2.1.321','fable');one=m.sync_catalog(link,catalog,state)

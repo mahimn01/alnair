@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -52,7 +53,7 @@ class UsageScanTest(unittest.TestCase):
     def tearDown(self):self.temp.cleanup()
 
     def run_scan(self,*args):
-        out=subprocess.run(['python3',str(SCAN),'--projects',str(self.projects),'--runs',str(self.runs),'--since','2026-10-13',*args],
+        out=subprocess.run([sys.executable,str(SCAN),'--projects',str(self.projects),'--runs',str(self.runs),'--since','2026-10-13',*args],
                            text=True,capture_output=True,check=True)
         return out.stdout
 

@@ -22,11 +22,11 @@ ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
 sys.path.insert(0, str(ROOT))
 
-from clpresearch import config, http, netsafe  # noqa: E402
+from clpresearch import config, http, netsafe, primary  # noqa: E402
 from clpresearch.common import Ctx  # noqa: E402
 from clpresearch.store import Store  # noqa: E402
 
-VENV_PY = REPO / ".venv" / "bin" / "python"
+VENV_PY = REPO / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
 
 class Mock:
@@ -192,7 +192,14 @@ if isinstance(r, dict) and "error" in r:
 print(json.dumps(r))
 """)
     script.chmod(script.stat().st_mode | stat.S_IEXEC)
-    monkeypatch.setenv("PATH", f"{d}:{os.environ['PATH']}")
+    monkeypatch.setenv("PATH", f"{d}{os.pathsep}{os.environ['PATH']}")
+    if os.name == "nt":
+        # Windows runs neither a #! script nor an extensionless file, and a gh.cmd would let cmd re-read the
+        # arguments (an & in a query). So gh resolves to this script, and a call to it runs under this Python.
+        real_which, real_run = primary.shutil.which, primary.subprocess.run
+        monkeypatch.setattr(primary.shutil, "which", lambda name, *a, **k: str(script) if name == "gh" else real_which(name, *a, **k))
+        monkeypatch.setattr(primary.subprocess, "run", lambda cmd, *a, **k: real_run(
+            [sys.executable, *cmd] if isinstance(cmd, list) and cmd[:1] == [str(script)] else cmd, *a, **k))
 
     class G:
         dir = state

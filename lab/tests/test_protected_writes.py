@@ -7,6 +7,8 @@ import os
 import shutil
 from pathlib import Path
 
+import pytest
+
 import protected_writes as pw
 
 
@@ -57,7 +59,12 @@ def test_each_kind_of_write_to_a_watched_file_is_recorded(tmp_path: Path) -> Non
 def test_a_symlinked_path_is_watched_through_its_target(tmp_path: Path) -> None:
     real, link = tmp_path / "real.json", tmp_path / "link.json"
     real.write_text("{}")
-    link.symlink_to(real)
+    try:
+        link.symlink_to(real)
+    except OSError as error:
+        if os.name != "nt":
+            raise
+        pytest.skip(f"Windows makes symlinks only with Developer Mode or admin rights ({error})")
     with pw.recording([link]) as writes:
         real.write_text("[]")
     assert writes

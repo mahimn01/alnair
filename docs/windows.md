@@ -46,7 +46,20 @@ Windows.
 | bili, the auth fallback supervisor, clp-rune | `setsid`, `killpg`, `termios` | macOS only, unchanged. bili is off by default |
 | Session notes | `start_new_session=True` detaches the note writer | Python ignores it on Windows: the note is still written, but closing the console window right away can cut it short |
 | Codex | `codex` on PATH, installed with Homebrew | `shutil.which` finds npm's `codex.cmd`. The install and update hints name only npm. `install.ps1 -SkipCodex` leaves `~\.codex\config.toml` alone, and its last line mentions `--model gpt` only when Codex is installed |
-| Test suites | `os.execve` was blocked so no test could start a session | `subprocess.call` of claude or codex is blocked too, which is how a session starts on Windows |
+| Test suites | `os.execve` was blocked so no test could start a session | `subprocess.call` of claude or codex is blocked too, which is how a session starts on Windows. A test that stubs the exec stubs `native.run_session` instead |
+| Test homes | A temporary `HOME` keeps the real `config.env` and `~/.clp` out | Tests set `USERPROFILE` as well, since `Path.home()` reads only that on Windows |
+| Test programs | `python3`, `/usr/bin/python3`, `.venv/bin/python`, `#!` fakes and a `gh` script on PATH | Scripts run under `sys.executable` (or the lab's `HOOK_PYTHON`); the venv Python is `Scripts\python.exe`. Fake `claude` commands are `.cmd` files. The fake `gh` runs under the test's Python, because a `gh.cmd` would let cmd re-read an `&` in a query |
+| Plugin test paths | `claude plugin test` hands `/lab/run/x` to the fs handlers as written | On Windows it arrives as `C:\lab\run\x`; the fixture maps it back |
+
+
+## Tests that skip or relax on Windows
+
+These are POSIX-only, so on Windows they skip with the reason, or give more time:
+
+- **Symlink tests.** Windows makes a symlink only with Developer Mode or admin rights (`WinError 1314`). These tests skip without one: `test_protected_writes.py` (a watched symlink) and `test_review_paths.py` (a link's own name, a path through a linked folder). `test_fallback.py` runs without its broken-symlink step. Turn on Developer Mode to run them all.
+- **File modes.** The `0600`/`0700` checks on `accounts.json`, `settings.json` and run folders: Windows has no POSIX modes. Those files sit in your profile folder, which by default only you, SYSTEM and administrators can read.
+- **The Code Mode A/B kit** (`claude-mem/bench/code_mode_ab`). Its tests skip, because the `bash` a Windows program finds first is often WSL's.
+- **Timing bounds** in `lab/plugin/tests/runtime.test.ts`, which catch a guard that grows exponentially, get five times as long. `test_revamp.py` checks that batch jobs overlap rather than timing them.
 
 ## The guards on Windows
 
