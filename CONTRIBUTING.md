@@ -25,7 +25,17 @@ done
 
 None of the tests start a Claude or Codex session or make a paid call. A stub `codex` stands in for the real one. The research tests run against a local mock HTTP server. If you run them from inside an Alnair session, clear the session variables first with `env -u CLAUDE_CLP_ROOT -u CLAUDE_CLP_PYTHON -u CLAUDE_MEM_SESSION_ID -u CLAUDE_CLP_RUN_DIR -u CLAUDE_MEM_ROOT -u CLP_STORE`.
 
-CI runs the same tests plus `ruff check --select E9,F63,F7,F82` and `bash -n install.sh`.
+The three plugins have tests of their own, which Claude Code's plugin test runner runs without a model call. They need Claude Code installed, so CI doesn't run them:
+
+```sh
+claude plugin test lab/plugin
+claude plugin test claude-clp/plugin
+claude plugin test claude-research/plugin
+```
+
+`examples/verify-gate.sh` is a quick end-to-end check of the memory tools: it should print one PASS and one REFUSED.
+
+CI runs the five suites on macOS, Ubuntu and Windows with Python 3.12, and again on Ubuntu with Python 3.10 and 3.13. It also runs the installer on all three systems, the example above, `node --test lab/tests/node/windows-guards.test.mjs`, `ruff check --select E9,F63,F7,F82`, and a syntax check of the shell and PowerShell scripts.
 
 ## Rules the code keeps
 

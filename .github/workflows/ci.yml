@@ -20,15 +20,34 @@ jobs:
       - run: pip install ruff
       - name: ruff (syntax errors and undefined names)
         run: ruff check --select E9,F63,F7,F82 --target-version py310 . claude-mem/bin/claude-lab-clp claude-clp/bin/claude-clp claude-mem/rune/bin/clp-rune
-      - name: install.sh and get.sh syntax
-        run: bash -n install.sh && bash -n get.sh
+      - name: shell script syntax
+        run: bash -n install.sh && bash -n get.sh && bash -n examples/verify-gate.sh
+      - name: PowerShell script syntax
+        shell: pwsh
+        run: |
+          $bad = 0
+          foreach ($file in 'install.ps1', 'get.ps1', 'scripts/test.ps1') {
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file).Path, [ref]$null, [ref]$errors)
+            foreach ($e in $errors) { Write-Host "$($file):$($e.Extent.StartLineNumber): $($e.Message)"; $bad = 1 }
+          }
+          exit $bad
 
-  python:
-    runs-on: macos-latest
+  # Every suite on macOS, Ubuntu and Windows. clp-rune (claude-mem/rune) is not supported on Windows.
+  test:
+    name: ${{ matrix.suite }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
         suite: [claude-clp/tests, claude-mem/tests, claude-mem/rune/tests, lab/tests, claude-research/tests]
+        exclude:
+          - os: windows-latest
+            suite: claude-mem/rune/tests
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -37,11 +56,83 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: poppler (pdftotext for the research tests)
+      - name: pdftotext for the research tests (macOS)
+        if: runner.os == 'macOS'
         run: brew install poppler
+      - name: pdftotext for the research tests (Ubuntu)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+      - name: pdftotext (the copy Git for Windows carries) and UTF-8 Python on Windows
+        if: runner.os == 'Windows'
+        run: |
+          command -v pdftotext || echo 'C:\Program Files\Git\mingw64\bin' >> "$GITHUB_PATH"
+          echo "PYTHONUTF8=1" >> "$GITHUB_ENV"  # what scripts/test.ps1 and a session set on Windows
       - name: venv inside the checkout, where the launcher and tools look for it
         run: |
           python -m venv .venv
-          .venv/bin/python -m pip install pytest hypothesis -r claude-research/requirements.txt
-      - run: .venv/bin/python -m pytest -q ${{ matrix.suite }}
+          if [ -x .venv/Scripts/python.exe ]; then PY=.venv/Scripts/python.exe; else PY=.venv/bin/python; fi
+          echo "PY=$PY" >> "$GITHUB_ENV"
+          "$PY" -m pip install pytest hypothesis -r claude-research/requirements.txt
+      - run: '"$PY" -m pytest -q ${{ matrix.suite }}'
 
+  # The oldest Python the README promises and the newest one, on Ubuntu.
+  python-versions:
+    name: all suites (ubuntu-latest, Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: sudo apt-get update && sudo apt-get install -y poppler-utils
+      - name: venv inside the checkout
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install pytest hypothesis -r claude-research/requirements.txt
+      - run: .venv/bin/python -m pytest -q claude-clp/tests
+      - run: .venv/bin/python -m pytest -q claude-mem/tests
+      - run: .venv/bin/python -m pytest -q claude-mem/rune/tests
+      - run: .venv/bin/python -m pytest -q lab/tests
+      - run: .venv/bin/python -m pytest -q claude-research/tests
+
+  # Run the real installer on each system, then the command it installs, the example and the guard tests.
+  install:
+    name: install and smoke test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: install.sh (macOS and Linux)
+        if: runner.os != 'Windows'
+        run: |
+          ./install.sh
+          "$HOME/.local/bin/alnair" --version
+      - name: install.ps1 (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$env:USERPROFILE\.local\bin\alnair.cmd" --version
+          exit $LASTEXITCODE
+      - name: the verify gate example
+        shell: bash
+        run: ./examples/verify-gate.sh
+      - name: lab guards on Windows command lines (Node)
+        run: node --test lab/tests/node/windows-guards.test.mjs

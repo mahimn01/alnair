@@ -9,4 +9,6 @@ Things I especially want to hear about:
 - fetched web content being able to steer the research tools or the session
 - the verify gate or the research report gate passing a quote that isn't in the cited source
 
-Only the latest commit on `main` is supported.
+## Supported versions
+
+Fixes go to `main` and into the next release. Older releases don't get patches, so update first (`alnair update`) and check that the problem is still there.
