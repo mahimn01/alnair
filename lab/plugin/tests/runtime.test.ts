@@ -1,6 +1,6 @@
 import {expect, mock, test} from 'claude-code/testing';
 import {route, evidenceComplete, redact, exhaustedWindows, spawnModel, usageSummary, budgetWarnings, mcporterDenial,
-  nestedSessionDenial, settingsWriteDenial, scriptDenial, splitShell, isUserPrompt, isCodeCall, codeUsage,reviewVerdict} from '../hooks/register.js';
+  nestedSessionDenial, settingsWriteDenial, scriptDenial, splitShell, isUserPrompt, isCodeCall, codeUsage,reviewVerdict,useCatalog} from '../hooks/register.js';
 
 // The timing bounds catch a check that grows exponentially; Windows (a /C:/ file URL) gets five times as long.
 const SLOW = /^\/[A-Za-z]:\//.test(new URL(import.meta.url).pathname) ? 5 : 1;
@@ -146,6 +146,24 @@ test('a lab-model choice waits for the next task unless "now" is given',async ($
   await step($,undefined,3);
   expect(f.models).toEqual([SONNET,SONNET,OPUS,SONNET]);
   expect(f.efforts[2]).toBe('xhigh');
+});
+
+test('the launch catalog in runtime.json replaces the shipped one, with new aliases; a broken one is ignored',async ($,on) => {
+  const entry = (alias,id) => ({id,alias,effort:'medium',advisor:'opus',rates:null});
+  const learned = {schema:1,revision:99,models:{sonnet:entry('sonnet','claude-sonnet-9-9'),opus:entry('opus','claude-opus-9-9'),
+    fable:entry('fable','claude-fable-9-9'),future:{...entry('future','claude-future-1'),discoveredOnly:true}}};
+  try {
+    const f=fixture(on,{},{modelCatalog:learned});await start($);
+    await prompt($,'Implement pagination');await step($);
+    await $.command.run({command:'lab-model',args:'future now'});
+    await step($,undefined,1);
+    expect(f.models).toEqual(['claude-sonnet-9-9','claude-future-1']);
+    // The hooks above run in the session's own copy of the module; this one is switched directly.
+    useCatalog(learned);
+    expect(route('Find the race condition between the workers').model).toBe('claude-opus-9-9');
+    expect(useCatalog({schema:1,models:{sonnet:{}}}).models.sonnet.id).toBe(SONNET);
+    expect(route('Find the race condition between the workers').model).toBe(OPUS);
+  } finally { useCatalog(undefined); }
 });
 
 test('/lab-model gpt explains the Codex backend and changes nothing',async ($,on) => {

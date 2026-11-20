@@ -20,15 +20,16 @@ def _blocked(self, address):  # noqa: ANN001
 
 
 @pytest.fixture(autouse=True)
-def _keep_model_catalog():
-    """Dry runs through the real launcher run the lab's model sync, which copies the newest served-model
-    times from real lab runs into the tracked lab/plugin/hooks/model-catalog.js. Put the file back so a
-    test run leaves the repo as it found it."""
+def _keep_model_catalog(tmp_path, monkeypatch):
+    """The lab's model sync writes what it learns to the runtime catalog (CLAUDE_LAB_MODEL_CATALOG), never to
+    the tracked lab/plugin/hooks/model-catalog.js. Point it at a temporary file, so a test run neither writes
+    the real ~/.clp/model-catalog.json nor reads one, and check the tracked catalog is left as it was."""
     path = Path(__file__).resolve().parents[3] / "lab" / "plugin" / "hooks" / "model-catalog.js"
+    monkeypatch.setenv("CLAUDE_LAB_MODEL_CATALOG", str(tmp_path / "runtime-model-catalog.json"))
     before = path.read_bytes() if path.is_file() else None
     yield
-    if before is not None and path.read_bytes() != before:
-        path.write_bytes(before)
+    after = path.read_bytes() if path.is_file() else None
+    assert after == before, "a test rewrote the tracked lab/plugin/hooks/model-catalog.js"
 
 
 @pytest.fixture(autouse=True)

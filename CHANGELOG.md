@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+Fixed:
+
+- running Alnair no longer leaves the checkout dirty, so `get.sh` and `get.ps1` can update it. The lab used to write what it learned about models (new aliases from `claude --help`, served model ids) into the tracked `lab/plugin/hooks/model-catalog.js`. That file is now the shipped default and is never written; what the lab learns goes to `~/.clp/model-catalog.json` (or `CLAUDE_LAB_MODEL_CATALOG`), merged over the default when the lab reads it and handed to the plugin in each run's `runtime.json`. `get.sh` and `get.ps1` move a catalog an older Alnair wrote into the checkout to `~/.clp/model-catalog.json` (keeping one already there) and restore the tracked file, instead of stopping
+- the `tsconfig.json` Claude Code writes next to each plugin for its type definitions is ignored by git instead of showing up as untracked (and `lab/plugin/tsconfig.json` is no longer tracked)
+
 Added:
 
 - Claude Code's experimental Code Mode, **on by default** for every new Claude session from `alnair`, `claude-lab` and `claude-clp`. In Code Mode the model writes JavaScript that makes many tool calls in one step. Turn it off:

@@ -62,10 +62,22 @@ function Install-AlnairFromGit {
       if (-not $isAlnair) { Stop-Install "$dest isn't an Alnair checkout, so it was left alone. Set ALNAIR_HOME to another folder, or move it aside."; return }
       $dirty = @(& $git -C $dest status --porcelain --untracked-files=no 2>$null)
       if ($LASTEXITCODE -ne 0) { Stop-Install "git status failed in $dest."; return }
-      if ($dirty.Count -gt 0) {
-        if ($dirty.Count -eq 1 -and $dirty[0] -eq ' M lab/plugin/hooks/model-catalog.js') {
-          Stop-Install "the lab updated lab/plugin/hooks/model-catalog.js in $dest. Undo that with: git -C '$dest' checkout lab/plugin/hooks/model-catalog.js, then run this again."; return
+      if ($dirty.Count -eq 1 -and $dirty[0] -eq ' M lab/plugin/hooks/model-catalog.js') {
+        # Alnair 0.2.0 and older wrote what the lab learned about models into this tracked file. Keep it as the
+        # runtime catalog (unless there already is one) and put the tracked file back, so the update goes ahead.
+        $learned = if ($env:CLAUDE_LAB_MODEL_CATALOG) { $env:CLAUDE_LAB_MODEL_CATALOG } else { Join-Path (Join-Path $HOME '.clp') 'model-catalog.json' }
+        if (-not (Test-Path -LiteralPath $learned)) {
+          try {
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $learned) | Out-Null
+            Copy-Item -LiteralPath (Join-Path $dest 'lab\plugin\hooks\model-catalog.js') -Destination $learned -ErrorAction Stop
+          } catch { Stop-Install "couldn't save the lab's model catalog to $learned."; return }
         }
+        & $git -C $dest checkout --quiet -- lab/plugin/hooks/model-catalog.js
+        if ($LASTEXITCODE -ne 0) { Stop-Install "couldn't restore lab/plugin/hooks/model-catalog.js in $dest."; return }
+        Write-Host "Moved the lab's model catalog out of the checkout, to $learned"
+        $dirty = @()
+      }
+      if ($dirty.Count -gt 0) {
         Stop-Install ("$dest has uncommitted changes, so it was left alone. Commit or stash them, then run this again:`n" + ($dirty -join "`n")); return
       }
       Write-Host "Updating $dest"

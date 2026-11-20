@@ -68,11 +68,13 @@ def _current_claude_version(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _keep_model_catalog() -> Iterator[None]:
-    """lab.prepare() and the lab commands run sync_models, which copies the newest served-model times from
-    real lab runs into the tracked plugin/hooks/model-catalog.js whenever a run has a newer one. Put the file
-    back so a test run leaves the repo as it found it."""
-    before = CATALOG.read_bytes() if CATALOG.is_file() else None
+def _keep_model_catalog(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """The lab's model sync writes what it learns to the runtime catalog (CLAUDE_LAB_MODEL_CATALOG), never to
+    the tracked lab/plugin/hooks/model-catalog.js. Point it at a temporary file, so a test run neither writes
+    the real ~/.clp/model-catalog.json nor reads one, and check the tracked catalog is left as it was."""
+    path = CATALOG
+    monkeypatch.setenv("CLAUDE_LAB_MODEL_CATALOG", str(tmp_path / "runtime-model-catalog.json"))
+    before = path.read_bytes() if path.is_file() else None
     yield
-    if before is not None and CATALOG.read_bytes() != before:
-        CATALOG.write_bytes(before)
+    after = path.read_bytes() if path.is_file() else None
+    assert after == before, "a test rewrote the tracked lab/plugin/hooks/model-catalog.js"

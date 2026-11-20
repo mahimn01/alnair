@@ -113,12 +113,39 @@ class GetShTest(unittest.TestCase):
         self.assertEqual((self.dest / 'lab/bin/lab.py').read_text(), '# my edit\n')
         self.assertIsNone(self.installed_with())
 
-    def test_the_lab_catalog_update_gets_its_own_way_out(self) -> None:
+    def test_a_catalog_an_older_lab_wrote_into_the_checkout_moves_out_and_the_update_goes_ahead(self) -> None:
+        self.assertEqual(self.run_get().returncode, 0)
+        (self.home / 'install-args.txt').unlink()
+        (self.dest / 'lab/plugin/hooks/model-catalog.js').write_text('// updated by the lab\n')
+        (self.origin / 'lab/bin/lab.py').write_text('# newer\n')
+        self.commit(self.origin, 'newer')
+        result = self.run_get()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.home / '.clp/model-catalog.json').read_text(), '// updated by the lab\n')
+        self.assertEqual(self.git(self.dest, 'status', '--porcelain'), '')
+        self.assertEqual((self.dest / 'lab/bin/lab.py').read_text(), '# newer\n')
+        self.assertIsNotNone(self.installed_with())
+
+    def test_an_existing_runtime_catalog_is_kept_when_an_old_checkout_catalog_is_put_back(self) -> None:
+        self.assertEqual(self.run_get().returncode, 0)
+        learned = self.tmp / 'elsewhere/catalog.json'
+        learned.parent.mkdir()
+        learned.write_text('{"schema": 1, "models": {}}\n')
+        (self.dest / 'lab/plugin/hooks/model-catalog.js').write_text('// updated by the lab\n')
+        result = self.run_get(CLAUDE_LAB_MODEL_CATALOG=str(learned))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(learned.read_text(), '{"schema": 1, "models": {}}\n')
+        self.assertFalse((self.home / '.clp/model-catalog.json').exists())
+        self.assertEqual((self.dest / 'lab/plugin/hooks/model-catalog.js').read_text(), '// catalog\n')
+
+    def test_the_catalog_with_other_changes_still_stops_it(self) -> None:
         self.assertEqual(self.run_get().returncode, 0)
         (self.dest / 'lab/plugin/hooks/model-catalog.js').write_text('// updated by the lab\n')
+        (self.dest / 'lab/bin/lab.py').write_text('# my edit\n')
         result = self.run_get()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('checkout lab/plugin/hooks/model-catalog.js', result.stderr)
+        self.assertIn('uncommitted changes', result.stderr)
+        self.assertEqual((self.dest / 'lab/plugin/hooks/model-catalog.js').read_text(), '// updated by the lab\n')
 
     def test_a_folder_that_is_not_alnair_is_left_alone(self) -> None:
         self.dest.mkdir()
@@ -204,10 +231,29 @@ class PowerShellScriptsTest(unittest.TestCase):
             code = [line for line in (ROOT / name).read_text().splitlines() if not line.lstrip().startswith('#')]
             self.assertFalse([line for line in code if re.search(r'\.claude(\.json|[\\/]settings\.json)', line)], name)
 
+    def test_both_get_scripts_move_an_old_checkout_catalog_out_instead_of_stopping(self) -> None:
+        for name in ('get.sh', 'get.ps1'):
+            text = (ROOT / name).read_text()
+            self.assertNotIn('Undo that with', text, name)
+            self.assertIn('CLAUDE_LAB_MODEL_CATALOG', text, name)
+            self.assertIn("'.clp'" if name == 'get.ps1' else '/.clp/model-catalog.json', text, name)
+            self.assertIn('checkout --quiet -- lab/plugin/hooks/model-catalog.js', text, name)
+
     def test_the_cmd_shim_ends_the_batch_file_before_the_program_starts(self) -> None:
         text = (ROOT / 'install.ps1').read_text()
         self.assertIn('goto #_undefined_# 2>NUL || title %COMSPEC% & ', text)
         self.assertIn("-replace '%', '%%'", text)
+
+
+class GeneratedFilesTest(unittest.TestCase):
+    def test_the_plugin_tsconfig_files_claude_code_writes_are_ignored_and_untracked(self) -> None:
+        if not (ROOT / '.git').exists():
+            self.skipTest('not a git checkout')
+        tracked = subprocess.run(['git', '-C', str(ROOT), 'ls-files', '--', '*tsconfig.json'], capture_output=True, text=True, check=True).stdout.split()
+        self.assertEqual([p for p in tracked if '.claude-plugin/types/' not in p], [])
+        for plugin in ('lab', 'claude-clp', 'claude-research'):
+            ignored = subprocess.run(['git', '-C', str(ROOT), 'check-ignore', '-q', '--no-index', plugin + '/plugin/tsconfig.json'])
+            self.assertEqual(ignored.returncode, 0, plugin)
 
 
 if __name__ == '__main__':

@@ -2,11 +2,22 @@
 // It routes at task/worker boundaries, never approves permissions, and keeps
 // compact task state outside the user's repositories and memory vault.
 // Budgets are soft: counters feed status warnings and guidance; they never stop work.
-import CATALOG from './model-catalog.js';
+import SHIPPED_CATALOG from './model-catalog.js';
 import {windowsPath, splitPowerShell, hostCommand, startProcessWords, PS_HOSTS, PS_DATA} from './windows-shell.js';
-const SONNET = CATALOG.models.sonnet.id;
-const OPUS = CATALOG.models.opus.id;
-const FABLE = CATALOG.models.fable.id;
+// model-catalog.js is the shipped default and is never rewritten. A launch puts the catalog it resolved (the
+// default merged with what the lab learned from the installed CLI and served models) in runtime.json; init()
+// switches to it, so new Claude Code aliases and model ids reach the session without touching the checkout.
+let CATALOG = SHIPPED_CATALOG;
+let SONNET, OPUS, FABLE;
+export function useCatalog(catalog) {
+  const usable = c => c?.schema === 1 && ['sonnet','opus','fable'].every(a => typeof c.models?.[a]?.id === 'string');
+  CATALOG = usable(catalog) ? catalog : SHIPPED_CATALOG;
+  SONNET = CATALOG.models.sonnet.id;
+  OPUS = CATALOG.models.opus.id;
+  FABLE = CATALOG.models.fable.id;
+  return CATALOG;
+}
+useCatalog(SHIPPED_CATALOG);
 const isFable = model => model === FABLE || /^claude-fable-/.test(model) || model === 'fable';
 const EXTREME = /\b(long[- ]horizon|multi[- ](?:month|year)|deeply complex|exceptionally difficult|extremely difficult|unsolved research|open problem|novel theorem|new cryptographic protocol|formally verified|machine[- ]checkable|Byzantine faults|dozens of services|many repositories)\b/i;
 // Broker and order-execution terms only: "trading" or "portfolio" also name ordinary repositories.
@@ -1168,6 +1179,7 @@ let lock = Promise.resolve();
     cfg = JSON.parse(await $.fs.read(run + '/runtime.json'));
     state = JSON.parse(await $.fs.read(run + '/metrics.json'));
     if (!cfg.project || !state.agents) throw new Error('Invalid lab state');
+    useCatalog(cfg.modelCatalog);
     authSource = await $.env.get('CLAUDE_LAB_AUTH_SOURCE');
     authEnabled = await $.env.get('CLAUDE_LAB_AUTH_FALLBACK') === '1';
     authGeneration = await $.env.get('CLAUDE_LAB_AUTH_GENERATION');

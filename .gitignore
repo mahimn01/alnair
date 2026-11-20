@@ -8,3 +8,5 @@ node_modules/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+# Claude Code writes these next to each plugin for its type definitions (in .claude-plugin/types, ignored there).
+/*/plugin/tsconfig.json

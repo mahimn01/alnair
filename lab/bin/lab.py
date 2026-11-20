@@ -398,10 +398,14 @@ def plan_code_mode(run: Path, env: dict | None, *, request: tuple[bool, str], re
 
 def save_code_mode(run: Path, status: dict) -> dict:
     """Record a launch's Code Mode in runtime.json: codeModeStatus (requested, source, enabled, env, reason) and
-    codeMode, true when the session gets CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1 (the plugin and A/B kit read it)."""
+    codeMode, true when the session gets CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1 (the plugin and A/B kit read it).
+    Every launch that records its choices comes through here (alnair, claude-lab-clp and claude-lab), so this also
+    hands the plugin the model catalog for the session: the shipped default merged with what the lab has learned
+    (~/.clp/model-catalog.json). The tracked plugin/hooks/model-catalog.js is never rewritten."""
     cfg = json.loads((run / 'runtime.json').read_text())
     cfg['codeModeStatus'] = status
     cfg['codeMode'] = status['env'] == '1'
+    cfg['modelCatalog'] = model_catalog()
     dump(run / 'runtime.json', cfg)
     return cfg
 

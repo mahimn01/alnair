@@ -64,10 +64,19 @@ main() {
     fi
     local dirty
     dirty="$(git -C "$dest" status --porcelain --untracked-files=no)"
-    if [ -n "$dirty" ]; then
-      if [ "$dirty" = " M lab/plugin/hooks/model-catalog.js" ]; then
-        die "the lab updated lab/plugin/hooks/model-catalog.js in $dest. Undo that with: git -C \"$dest\" checkout lab/plugin/hooks/model-catalog.js, then run this again."
+    if [ "$dirty" = " M lab/plugin/hooks/model-catalog.js" ]; then
+      # Alnair 0.2.0 and older wrote what the lab learned about models into this tracked file. Keep it as the
+      # runtime catalog (unless there already is one) and put the tracked file back, so the update goes ahead.
+      local learned="${CLAUDE_LAB_MODEL_CATALOG:-$HOME/.clp/model-catalog.json}"
+      if [ ! -e "$learned" ]; then
+        mkdir -p "$(dirname "$learned")" && cp "$dest/lab/plugin/hooks/model-catalog.js" "$learned" && chmod 600 "$learned" \
+          || die "couldn't save the lab's model catalog to $learned."
       fi
+      git -C "$dest" checkout --quiet -- lab/plugin/hooks/model-catalog.js || die "couldn't restore lab/plugin/hooks/model-catalog.js in $dest."
+      say "Moved the lab's model catalog out of the checkout, to $learned"
+      dirty=""
+    fi
+    if [ -n "$dirty" ]; then
       die "$dest has uncommitted changes, so it was left alone. Commit or stash them, then run this again:
 $dirty"
     fi

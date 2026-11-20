@@ -62,7 +62,7 @@ alnair --model gpt      # GPT-6.2-Astra through Codex
 ./install.sh --skip-codex             # leave ~/.codex/config.toml alone
 ```
 
-To update, run the `get.sh` line again, or `git pull` and run `./install.sh` again. The lab rewrites `lab/plugin/hooks/model-catalog.js` when Claude Code advertises a new model alias, so if git refuses to pull, run `git checkout lab/plugin/hooks/model-catalog.js` first.
+To update, run the `get.sh` line again, or `git pull` and run `./install.sh` again. Running Alnair never changes the checkout: what the lab learns about models goes to `~/.clp/model-catalog.json`, outside it. A checkout that an older Alnair left with a changed `lab/plugin/hooks/model-catalog.js` is handled by `get.sh` and `get.ps1`, which move that file's contents to `~/.clp/model-catalog.json` and put the tracked file back before updating.
 
 macOS is what I use every day. Linux should work but hasn't been tested yet. Windows runs natively, as below.
 
@@ -153,7 +153,7 @@ alnair --model opus "..."
 alnair --model fable "..."
 ```
 
-The choices are `auto`, `gpt`, and every alias in `lab/plugin/hooks/model-catalog.js`, which today means `sonnet`, `opus` and `fable`. Full Claude model ids such as `claude-opus-5-5` are rejected, and so is `--model` after `--`, because both would skip the router. For Sonnet and Opus, Alnair hands Claude Code the alias, so `opus` always means the newest Opus your Claude Code ships. Fable is passed as the full id in the catalog (`claude-fable-5-2` right now), and the lab updates that id when a session reports a newer one.
+The choices are `auto`, `gpt`, and every alias in the model catalog, which today means `sonnet`, `opus` and `fable`. The catalog is the shipped `lab/plugin/hooks/model-catalog.js` merged with `~/.clp/model-catalog.json` (or the file `CLAUDE_LAB_MODEL_CATALOG` names), where the lab records aliases a newer Claude Code advertises in `claude --help` and the model ids sessions are served, so a new alias becomes a choice without a code change. Full Claude model ids such as `claude-opus-5-5` are rejected, and so is `--model` after `--`, because both would skip the router. For Sonnet and Opus, Alnair hands Claude Code the alias, so `opus` always means the newest Opus your Claude Code ships. Fable is passed as the full id in the catalog (`claude-fable-5-2` right now), and the lab updates that id when a session reports a newer one.
 
 With `auto`, the router reads your prompt:
 
